@@ -153,7 +153,7 @@ No Rumpty endpoints, credentials, or deployment project were supplied for the in
 | `DOCUMENT_MAX_FILE_MB` | Upload limit in MiB; default 10, integer 1–20 |
 | `S3_FORCE_PATH_STYLE` | `true` by default; change only to match Rumpty endpoint support |
 
-`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` are local Compose inputs only. `NODE_ENV`, `PORT`, and `HOSTNAME` are supplied by the Docker runtime. AI environment variables listed earlier in this document are future requirements and are intentionally not part of current validation.
+`POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` are local Compose inputs only. `NODE_ENV`, `PORT`, and `HOSTNAME` are supplied by the Docker runtime. AI environment variables are optional as a complete group for Milestone 3; leave all three blank to retain manual review without inference.
 
 Local Compose binds PostgreSQL and Redis to loopback only and uses named volumes. It is not a production deployment definition. `docker compose down` preserves data; do not remove volumes unless deliberately discarding local data.
 
@@ -176,3 +176,23 @@ Block public bucket policies/ACLs independently. Verify an unsigned object reque
 Set ingress body limits consistently with `DOCUMENT_MAX_FILE_MB`, bounded request timeouts, per-client request limits, and concurrent upload limits sized for memory (up to the configured bytes per in-flight request plus buffering overhead). PUT aborts after 30 seconds and DELETE after 10 seconds. Redact signed query strings from logs. Validate network timeouts, least privilege, TLS, privacy, and backup restoration on Rumpty before release.
 
 Recovery: monitor stale Uploaded/Processing rows older than 15 minutes, Failed rows, and Deleting rows. Confirm the upload process is no longer running; have the owner retry removal from the detail page, or run an authenticated/operator-controlled reconciliation using the same deletion service. The durable key enables cleanup even after an ambiguous PUT or database commit. Retry after outages; do not delete metadata first, blindly mark Ready, or purge unknown objects by filename. No automatic reconciliation worker is included. Reconcile restored metadata with bucket contents before restoring traffic.
+
+### Milestone 3 inference configuration
+
+Apply `20261003040000_document_intelligence` before rollout. Configure the complete group below using real Rumpty configuration, never build arguments:
+
+| Variable | Purpose |
+| --- | --- |
+| `RUMPTY_AI_BASE_URL` | HTTPS API base; include `/v1` if the provider requires it; adapter appends `/chat/completions` |
+| `RUMPTY_AI_API_KEY` | Environment-only Bearer credential |
+| `RUMPTY_AI_MODEL` | Explicit model identifier; recorded per attempt |
+
+The current adapter assumes OpenAI-compatible chat completions, `response_format: json_object`, system/user messages, `max_tokens`, and `choices[0].message.content` with finish_reason `stop`. This was verified against fixtures, not live Rumpty. Verify the provider contract/context window/JSON support/model availability, then adjust only the adapter if necessary. There is no competing inference provider fallback. Missing AI configuration leaves manual entry usable; core readiness does not invoke paid inference.
+
+Text PDFs use a local parser subprocess included in the standalone image through Next tracing. No extra OS binary or persistent disk is needed. Allow child-process execution and allocate container memory for app plus concurrent parser processes (128 MiB V8 heap limit is not a total RSS cap). Configure a request timeout of at least 90 seconds, bounded concurrency, and per-client ingress limits. Two-minute persisted leases make interrupted attempts retryable; there is no durable background queue. Source content is not sent as a signed storage URL. Bucket credentials now also require server-side GetObject.
+
+Before enabling real-worker inference, test synthetic examples for all four schemas, source grounding, confidence behavior, timeout/invalid-response/manual fallback, and mobile review. Verify Rumpty retention/training/privacy settings and restrict provider logs; do not assume zero retention. Backups containing excerpts/revisions remain sensitive. Live accuracy, capacity, TLS, and inference protocol checks have not been performed by automated fixtures.
+
+### Milestone 4 release notes
+
+Apply `20261003050000_exit_checker` before rolling out the new app. It adds ExitCase and enum types and permits non-document audit actions; existing data is preserved. PostgreSQL 17 was used for migration/drift validation. Exit Checker requires no new secrets, environment variables, provider capabilities, or background process. It works without inference configuration; selecting existing reviewed notice evidence only reads the database. Retain the existing ingress/auth/database protections and verify mobile exit creation/editing plus cross-user isolation on Rumpty before release. No live deployment was performed by repository validation.

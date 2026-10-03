@@ -121,3 +121,13 @@ The five primary destinations remain unchanged. Home stays selected while viewin
 ## Milestone 2 implementation
 
 Documents is now functional: employment filter, document cards, upload form/progress, detail, short-lived download action, and explicit deletion confirmation. Empty states guide users to create employment or upload; failures preserve selection for retry. Pending/failed/deleting states remain visible for recovery. Nested document pages keep Documents selected in the five-section navigation. Screens were tested at 320/375/430px; Exit and Passport remain placeholders. No AI controls are shown.
+
+## Milestone 3 review
+
+Ready documents link to a dedicated mobile review page. The empty state offers AI extraction or manual entry; an optional transcription disclosure handles images/scans. Each field has its original proposal, exact source excerpt where available, textual confidence/review state, editable value, and explicit confirm/correct/reject/unknown actions. Null proposals cannot be confirmed. Failed saves preserve typed corrections for retry. Loading/status messages announce progress; refresh and earlier-attempt selection support interrupted requests. Low-confidence classifications invite an explicit type choice. No legal/readiness decisions appear.
+
+## Milestone 4 Exit flow
+
+Exit is now functional. Select employment, then use four phone-first steps: Exit details; Notice; Money and pension; Records and benefits. Exit type and planned/actual last working date are required; other answers default to unknown. Save and view checklist is available from every step once the required details are valid, allowing save-and-return. Back/Next and Cancel are explicit; failed saves preserve input. Unsaved navigation/reload does not persist drafts.
+
+Nine cards show labelled states, the basis for each check, and a next action. Source links lead to the existing secure document/review pages. Complete is explained as a limited record/answer check, never a legal or payment verdict. The five-section bottom navigation remains unchanged with Exit selected throughout nested pages. Home now links to saved exit checklists without changing employment status.

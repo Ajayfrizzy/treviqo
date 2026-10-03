@@ -1,0 +1,81 @@
+{
+  "type": "employment_contract",
+  "text": "EMPLOYMENT CONTRACT\nEmployer: Harbour Workshop Ltd\nRole: Designer\nStart date: 1 October 2026\nSalary: NGN 250,000 monthly\nNotice period: 30 days\nSynthetic test document only.",
+  "classification": {
+    "type": "employment_contract",
+    "evidence": "EMPLOYMENT CONTRACT",
+    "confidence": "high"
+  },
+  "fields": {
+    "employer": {
+      "value": "Harbour Workshop Ltd",
+      "evidence": "Employer: Harbour Workshop Ltd",
+      "confidence": "high"
+    },
+    "employee": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "role": {
+      "value": "Designer",
+      "evidence": "Role: Designer",
+      "confidence": "high"
+    },
+    "start_date": {
+      "value": "1 October 2026",
+      "evidence": "Start date: 1 October 2026",
+      "confidence": "high"
+    },
+    "employment_type": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "salary": {
+      "value": "NGN 250,000",
+      "evidence": "Salary: NGN 250,000 monthly",
+      "confidence": "high"
+    },
+    "salary_frequency": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "notice_period": {
+      "value": "30 days",
+      "evidence": "Notice period: 30 days",
+      "confidence": "medium"
+    },
+    "annual_leave": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "probation": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "pension_reference": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "hmo_reference": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "group_life_reference": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "exit_clause": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    }
+  }
+}

@@ -77,6 +77,7 @@ export function documentService(db: PrismaClient = getDb(), storage: () => Priva
       await storage().remove(doc.objectKey);
       await db.$transaction(async tx => {
         const removed = await tx.employmentDocument.updateMany({ where: { id, userId, status: "deleting" }, data: { status: "deleted" } });
+        if (removed.count) await tx.documentExtraction.deleteMany({ where: { documentId: id, userId } });
         if (removed.count) await tx.auditEvent.create({ data: { userId, documentId: id, employmentId: doc.employmentId, action: "document_deleted" } });
       });
     },

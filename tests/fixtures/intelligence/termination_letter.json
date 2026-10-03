@@ -1,0 +1,41 @@
+{
+  "type": "termination_letter",
+  "text": "TERMINATION LETTER\nLetter date: 1 October 2026\nEffective date: 31 October 2026\nStated reason: role discontinued\nNotice: one month pay in lieu\nSynthetic test document only.",
+  "classification": {
+    "type": "termination_letter",
+    "evidence": "TERMINATION LETTER",
+    "confidence": "high"
+  },
+  "fields": {
+    "letter_date": {
+      "value": "1 October 2026",
+      "evidence": "Letter date: 1 October 2026",
+      "confidence": "high"
+    },
+    "effective_date": {
+      "value": "31 October 2026",
+      "evidence": "Effective date: 31 October 2026",
+      "confidence": "high"
+    },
+    "reason": {
+      "value": "role discontinued",
+      "evidence": "Stated reason: role discontinued",
+      "confidence": "high"
+    },
+    "notice_wording": {
+      "value": "one month pay in lieu",
+      "evidence": "Notice: one month pay in lieu",
+      "confidence": "high"
+    },
+    "settlement_reference": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "benefit_termination": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    }
+  }
+}

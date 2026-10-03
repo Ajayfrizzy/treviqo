@@ -1,0 +1,66 @@
+{
+  "type": "payslip",
+  "text": "PAYSLIP\nEmployer: Harbour Workshop Ltd\nPay period: October 2026\nGross pay: NGN 250,000\nNet pay: NGN 215,000\nPension deduction: NGN 20,000\nSynthetic test document only.",
+  "classification": {
+    "type": "payslip",
+    "evidence": "PAYSLIP",
+    "confidence": "high"
+  },
+  "fields": {
+    "employer": {
+      "value": "Harbour Workshop Ltd",
+      "evidence": "Employer: Harbour Workshop Ltd",
+      "confidence": "high"
+    },
+    "employee": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "pay_period": {
+      "value": "October 2026",
+      "evidence": "Pay period: October 2026",
+      "confidence": "high"
+    },
+    "gross_pay": {
+      "value": "NGN 250,000",
+      "evidence": "Gross pay: NGN 250,000",
+      "confidence": "high"
+    },
+    "net_pay": {
+      "value": "NGN 215,000",
+      "evidence": "Net pay: NGN 215,000",
+      "confidence": "high"
+    },
+    "basic_salary": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "pension_deduction": {
+      "value": "NGN 20,000",
+      "evidence": "Pension deduction: NGN 20,000",
+      "confidence": "high"
+    },
+    "tax": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "other_deductions": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "reimbursements": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "allowances": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    }
+  }
+}

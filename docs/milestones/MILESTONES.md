@@ -50,6 +50,8 @@ Deliver:
 Success:
 Users can safely manage their own evidence.
 
+Implementation record: [Milestone 2 document vault](DOCUMENT_VAULT.md).
+
 ## Milestone 3 — AI Document Intelligence
 Deliver:
 - Rumpty AI
@@ -68,6 +70,8 @@ Start with:
 
 Success:
 Useful proposed data can be reviewed and confirmed.
+
+Implementation record: [Milestone 3 document intelligence](AI_DOCUMENT_INTELLIGENCE.md).
 
 ## Milestone 4 — Job Exit Checker
 Deliver:
@@ -91,6 +95,8 @@ Rule categories:
 
 Success:
 Worker gets a useful evidence-grounded checklist.
+
+Implementation record: [Milestone 4 Job Exit Checker](JOB_EXIT_CHECKER.md).
 
 ## Milestone 5 — Final Settlement & Pension Verification
 Deliver:

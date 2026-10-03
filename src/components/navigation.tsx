@@ -8,5 +8,5 @@ export const sections = [
 ];
 export function Navigation() {
   const path = usePathname();
-  return <nav className="navigation" aria-label="Primary">{sections.map(section => <Link key={section.href} href={section.href} aria-current={(path === section.href || (section.href === "/documents" && path.startsWith("/documents/")) || (section.href === "/" && path.startsWith("/employments/"))) ? "page" : undefined}><span className="nav-icon" aria-hidden="true">{section.icon}</span><span>{section.label}</span></Link>)}</nav>;
+  return <nav className="navigation" aria-label="Primary">{sections.map(section => <Link key={section.href} href={section.href} aria-current={(path === section.href || (section.href === "/documents" && path.startsWith("/documents/")) || (section.href === "/exit" && path.startsWith("/exit/")) || (section.href === "/" && path.startsWith("/employments/"))) ? "page" : undefined}><span className="nav-icon" aria-hidden="true">{section.icon}</span><span>{section.label}</span></Link>)}</nav>;
 }

@@ -1,6 +1,8 @@
 import type { NextConfig } from "next";
 const config: NextConfig = {
   output: "standalone",
+  serverExternalPackages: ["unpdf"],
+  outputFileTracingIncludes: { "/*": ["./src/server/ai/pdf-worker.mjs", "./node_modules/unpdf/**/*"] },
   devIndicators: false,
   poweredByHeader: false,
   async headers() {

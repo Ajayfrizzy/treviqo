@@ -1,0 +1,36 @@
+{
+  "type": "resignation_letter",
+  "text": "RESIGNATION LETTER\nLetter date: 1 October 2026\nProposed last day: 31 October 2026\nStated notice: 30 days\nSynthetic test document only.",
+  "classification": {
+    "type": "resignation_letter",
+    "evidence": "RESIGNATION LETTER",
+    "confidence": "high"
+  },
+  "fields": {
+    "letter_date": {
+      "value": "1 October 2026",
+      "evidence": "Letter date: 1 October 2026",
+      "confidence": "high"
+    },
+    "notice_date": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "proposed_last_day": {
+      "value": "31 October 2026",
+      "evidence": "Proposed last day: 31 October 2026",
+      "confidence": "high"
+    },
+    "notice_period": {
+      "value": "30 days",
+      "evidence": "Stated notice: 30 days",
+      "confidence": "medium"
+    },
+    "reason": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    }
+  }
+}

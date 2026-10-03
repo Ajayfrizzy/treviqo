@@ -18,6 +18,7 @@ model User {
   employments  Employment[]
   documents    EmploymentDocument[]
   auditEvents  AuditEvent[]
+  exitCases    ExitCase[]
   @@unique([issuer, subject])
 }
 model AuthSession {
@@ -55,6 +56,7 @@ model Employment {
   updatedAt      DateTime         @updatedAt
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   documents      EmploymentDocument[]
+  exitCases      ExitCase[]
   @@unique([id, userId])
   @@index([userId, status, startDate])
 }
@@ -83,6 +85,12 @@ enum AuditAction {
   document_uploaded
   document_access_issued
   document_deleted
+  extraction_started
+  extraction_completed
+  extraction_failed
+  extraction_reviewed
+  exit_created
+  exit_updated
 }
 model EmploymentDocument {
   id                String         @id @default(uuid())
@@ -100,17 +108,146 @@ model EmploymentDocument {
   updatedAt         DateTime       @updatedAt
   user              User           @relation(fields: [userId], references: [id], onDelete: Restrict)
   employment        Employment     @relation(fields: [employmentId, userId], references: [id, userId], onDelete: Restrict)
+  extractions       DocumentExtraction[]
+  @@unique([id, userId])
   @@index([userId, employmentId, createdAt])
   @@index([status, updatedAt])
 }
 model AuditEvent {
   id           String      @id @default(cuid())
   userId       String
-  documentId   String
+  documentId   String?
+  exitCaseId   String?
   employmentId String
   action       AuditAction
   createdAt    DateTime    @default(now())
   user         User        @relation(fields: [userId], references: [id], onDelete: Restrict)
   @@index([userId, createdAt])
   @@index([documentId, action])
+}
+
+enum ExtractionStatus {
+  processing
+  ready
+  failed
+}
+enum ExtractionConfidence {
+  high
+  medium
+  low
+  needs_review
+}
+enum FieldReviewState {
+  proposed
+  confirmed
+  corrected
+  rejected
+  unknown
+}
+model DocumentExtraction {
+  id            String @id @default(uuid())
+  documentId    String
+  userId        String
+  status        ExtractionStatus @default(processing)
+  documentType  DocumentType?
+  sourceKind    String @db.VarChar(32)
+  sourceHash    String? @db.VarChar(64)
+  model         String @db.VarChar(160)
+  promptVersion String @db.VarChar(64)
+  schemaVersion String @db.VarChar(64)
+  errorCode     String? @db.VarChar(32)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  document      EmploymentDocument @relation(fields: [documentId, userId], references: [id, userId], onDelete: Cascade)
+  fields        ExtractedField[]
+  @@index([userId, documentId, createdAt])
+  @@index([status, createdAt])
+}
+model ExtractedField {
+  id            String @id @default(uuid())
+  extractionId  String
+  key           String @db.VarChar(64)
+  proposedValue String? @db.VarChar(1000)
+  value         String? @db.VarChar(1000)
+  evidence      String? @db.VarChar(1600)
+  confidence    ExtractionConfidence
+  reviewState   FieldReviewState @default(proposed)
+  version       Int @default(0)
+  updatedAt     DateTime @updatedAt
+  extraction    DocumentExtraction @relation(fields: [extractionId], references: [id], onDelete: Cascade)
+  revisions     ExtractionFieldRevision[]
+  @@unique([extractionId, key])
+}
+model ExtractionFieldRevision {
+  id        String @id @default(uuid())
+  fieldId   String
+  state     FieldReviewState
+  value     String? @db.VarChar(1000)
+  createdAt DateTime @default(now())
+  field     ExtractedField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  @@index([fieldId, createdAt])
+}
+
+enum ExitType {
+  resignation
+  termination
+  redundancy
+  contract_completion
+  retirement
+}
+enum ExitAnswer {
+  unknown
+  yes
+  no
+}
+enum ExitFollowup {
+  unknown
+  none
+  pending
+  resolved
+}
+enum ExitAssets {
+  unknown
+  none
+  held
+  scheduled
+  returned
+}
+enum ExitReference {
+  unknown
+  not_needed
+  not_requested
+  requested
+  saved
+}
+model ExitCase {
+  id                      String @id @default(uuid())
+  userId                  String
+  employmentId            String @unique
+  exitType                ExitType
+  lastWorkingDate         DateTime @db.Date
+  noticeDate              DateTime? @db.Date
+  noticeApplicable        ExitAnswer @default(unknown)
+  noticeRequirement       String? @db.VarChar(1000)
+  noticeFieldId           String?
+  noticeFieldVersion      Int?
+  finalPayDocumentId      String?
+  finalPayPeriod          String? @db.VarChar(160)
+  leave                   ExitFollowup @default(unknown)
+  reimbursements          ExitFollowup @default(unknown)
+  reimbursementDocumentId String?
+  pension                 ExitAnswer @default(unknown)
+  pensionDetailsSaved     Boolean @default(false)
+  assets                  ExitAssets @default(unknown)
+  assetDocumentId         String?
+  exitDocumentId          String?
+  reference               ExitReference @default(unknown)
+  referenceDocumentId     String?
+  benefits                ExitFollowup @default(unknown)
+  version                 Int @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  user                    User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employment              Employment @relation(fields: [employmentId, userId], references: [id, userId], onDelete: Cascade)
+  @@index([userId, updatedAt])
 }

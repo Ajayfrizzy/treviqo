@@ -124,3 +124,21 @@ Automated tests should not repeatedly consume live inference credits.
 
 ## Versioning
 Record model, prompt/schema version, and extraction timestamp.
+
+## Milestone 3 implementation
+
+Implemented types are limited to employment contracts, payslips, resignation letters, and termination letters. Pension, settlement, benefit, and other extraction schemas above remain future work. Classification returns one supported type or Other; low/needs-review confidence pauses extraction until the worker selects a type. An explicitly selected type bypasses AI classification. It never silently changes the uploaded document category.
+
+The provider contract is `DocumentAI.complete(InferenceTask)` in `src/server/ai/client.ts`. No executable AI adapter existed in Milestones 0–2. The new adapter implements an isolated OpenAI-compatible `POST {RUMPTY_AI_BASE_URL}/chat/completions` transport with explicit configured Rumpty model/key, temperature zero, JSON-object mode, 4096 output tokens, no tools/redirects/streaming, a 25-second deadline per call, and a 64 KiB response limit. This protocol assumption needs live Rumpty verification; there is no fallback provider. Provider error bodies are not logged or persisted.
+
+Classification and extraction are separate narrow calls. `evidence-v1` prompts and `fields-v1` Zod schemas are recorded per attempt together with model and timestamps. Each type has a fixed set of named fields (see `src/modules/extractions/shared.ts`); values are nullable verbatim strings with evidence and confidence. Original date/amount/currency wording is preserved, not normalized or calculated. There are no entitlement/readiness/legal outputs. Prompts treat document text as untrusted content and explicitly ignore instructions embedded in it. No model tools execute document instructions.
+
+Strict schema validation rejects extra/missing keys, invalid enums, wrong types, malformed/truncated responses, and unsupported classifications. Evidence is whitespace-normalized and must occur in prepared source text; each non-null value must occur inside its evidence excerpt. Unsupported field proposals become null/Needs review. This catches unsupported text but cannot prove that the model selected the correct semantic field. Every field, even High confidence, starts Proposed with no trusted value.
+
+PDF text is extracted locally with `unpdf` in a disposable Node subprocess (10-second timeout, 128 MiB V8 heap limit, sanitized environment, no parser logs). Input is bounded to the vault maximum 20 MiB and checked against its stored SHA-256. Preparation accepts up to 30 pages and 18,000 characters, rejecting longer sources without silent truncation. Scanned/encrypted/corrupt/blank PDFs and images fall back to user transcription or manual entry; no OCR/vision provider is assumed. Transcriptions are labelled separately and are not verified against the uploaded bytes. Full prepared text is not persisted; a source hash and selected excerpts retain provenance.
+
+The owner explicitly starts extraction. Attempts persist independently of document Ready state, retain previous attempts/reviews, and never overwrite trusted fields. Synchronous requests have bounded work; a per-document database lock reserves a two-minute processing lease. Concurrent starts reject; stale attempts can be retried after two minutes. Redis allows 10 starts per worker per 10 minutes, including manual attempts, and fails closed. There is no automatic paid retry or new queue/worker service in this milestone.
+
+Review offers Confirm proposal, Save correction, Reject, and Mark unknown. Null proposals cannot be confirmed. Every change preserves the original proposal and adds a revision with an optimistic version check. Confirmed/Corrected alone carry reviewed values. Unknown/Rejected clear them. No reviewed values are copied into employment records or fed into future rules yet. Classification corrections are recorded separately from upload categories; start another attempt with the correct type for a different field schema.
+
+Synthetic JSON and real text-PDF fixtures cover all four types. The local protocol server exercises actual HTTP inference transport in browser and Docker tests; it measures integration behavior, not real model quality. Live model evaluation on synthetic documents is a required deployment check.

@@ -23,6 +23,22 @@ npm run dev
 
 To enable sign-in, configure a **Rumpty-hosted OIDC identity service** and all auth variables from `.env.example`; see [deployment setup](docs/deployment/RUMPTY_DEPLOYMENT.md). No third-party hosted identity service is required. Never point tests at production.
 
+## Document intelligence
+
+From a ready document, choose **Extract and review details**. Contracts, payslips, resignation letters, and termination letters are supported. Text-based PDFs can be read locally before text goes to Rumpty AI; scans/images use pasted transcription or manual field entry. Proposals remain untrusted until individually confirmed or corrected. Reject/unknown states and correction history are preserved; reviews do not update employment records or run exit/benefit rules.
+
+Set all three `RUMPTY_AI_BASE_URL`, `RUMPTY_AI_API_KEY`, and `RUMPTY_AI_MODEL` variables to enable inference. Leave all blank to use manual entry. The isolated adapter uses an OpenAI-compatible chat-completions protocol; confirm the actual Rumpty endpoint contract before deployment. No OpenAI service or SDK is used. Tests run against local synthetic fixtures without live inference.
+
+See [Milestone 3 design, validation, and limits](docs/milestones/AI_DOCUMENT_INTELLIGENCE.md).
+
+## Job Exit Checker
+
+Open **Exit**, choose an employment record, and select resignation, termination, redundancy, contract completion, or retirement. The exit type and planned/actual last working date are required. Save after those details and return to complete notice, money/pension, and records/benefits steps. Unknown answers remain explicit.
+
+Nine deterministic checks show Complete, Pending, Missing, Needs clarification, or Not applicable, with explanations and next actions. Optional notice evidence must be a specifically selected Confirmed/Corrected contract field; AI never chooses checklist states. Deleted evidence and changed reviews are re-evaluated when you open the checklist. Complete means the described record/answer check is satisfied, not legal validity, verified payment, or confirmed contributions.
+
+Each employment has one editable case; creating it does not close employment. No additional environment variables or dependencies are needed. See [Milestone 4 implementation and rule coverage](docs/milestones/JOB_EXIT_CHECKER.md).
+
 ## Commands
 
 | Command | Purpose |
