@@ -1,0 +1,22 @@
+import { authConfigured } from "@/modules/auth/options";
+import { registerUser, RegistrationError } from "@/modules/auth/credentials";
+import { allowAuthRequest } from "@/modules/auth/rate-limit";
+import { readSmallBody, sameOrigin } from "@/modules/auth/request";
+export const runtime = "nodejs";
+export async function POST(request: Request) {
+  const headers = { "Cache-Control": "no-store" };
+  try {
+    if (!authConfigured()) return Response.json({ error: "Registration unavailable" }, { status: 503, headers });
+    if (!sameOrigin(request)) return Response.json({ error: "Request rejected" }, { status: 403, headers });
+    if (request.headers.get("content-type")?.split(";")[0] !== "application/json") return Response.json({ error: "JSON required" }, { status: 415, headers });
+    if (!await allowAuthRequest()) return Response.json({ error: "Please try again shortly" }, { status: 429, headers: { ...headers, "Retry-After": "60" } });
+    let input: unknown;
+    try { input = JSON.parse(await readSmallBody(request)); }
+    catch { return Response.json({ error: "Invalid registration details" }, { status: 400, headers }); }
+    await registerUser(input);
+    return Response.json({ success: true }, { status: 201, headers });
+  } catch (error) {
+    if (error instanceof RegistrationError) return Response.json({ error: error.message }, { status: 400, headers });
+    return Response.json({ error: "Registration unavailable. Please try again." }, { status: 503, headers });
+  }
+}

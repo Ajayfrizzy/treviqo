@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+model User {
+  id           String   @id @default(cuid())
+  // Preserve legacy identities without requiring an external provider.
+  issuer       String?
+  subject      String?
+  email        String?  @unique
+  passwordHash String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  sessions     AuthSession[]
+  employments  Employment[]
+  documents    EmploymentDocument[]
+  auditEvents  AuditEvent[]
+  @@unique([issuer, subject])
+}
+model AuthSession {
+  id        String   @id @default(uuid())
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+enum EmploymentStatus {
+  active
+  exiting
+  closed
+}
+enum EmploymentType {
+  permanent
+  contract
+  temporary
+  internship
+  other
+}
+model Employment {
+  id             String           @id @default(cuid())
+  userId         String
+  employerName   String           @db.VarChar(160)
+  roleTitle      String           @db.VarChar(160)
+  startDate      DateTime         @db.Date
+  endDate        DateTime?        @db.Date
+  employmentType EmploymentType?
+  status         EmploymentStatus @default(active)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  documents      EmploymentDocument[]
+  @@unique([id, userId])
+  @@index([userId, status, startDate])
+}
+
+enum DocumentType {
+  employment_contract
+  payslip
+  resignation_letter
+  termination_letter
+  exit_letter
+  pension_statement
+  final_settlement
+  reimbursement_evidence
+  benefit_document
+  other
+}
+enum DocumentStatus {
+  uploaded
+  processing
+  ready
+  failed
+  deleting
+  deleted
+}
+enum AuditAction {
+  document_uploaded
+  document_access_issued
+  document_deleted
+}
+model EmploymentDocument {
+  id                String         @id @default(uuid())
+  userId            String
+  employmentId      String
+  documentType      DocumentType    @default(other)
+  originalFilename  String         @db.VarChar(255)
+  sanitizedFilename String         @db.VarChar(160)
+  objectKey         String         @unique
+  mimeType          String         @db.VarChar(64)
+  fileSize          Int
+  checksum          String         @db.VarChar(64)
+  status            DocumentStatus @default(uploaded)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  user              User           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  employment        Employment     @relation(fields: [employmentId, userId], references: [id, userId], onDelete: Restrict)
+  @@index([userId, employmentId, createdAt])
+  @@index([status, updatedAt])
+}
+model AuditEvent {
+  id           String      @id @default(cuid())
+  userId       String
+  documentId   String
+  employmentId String
+  action       AuditAction
+  createdAt    DateTime    @default(now())
+  user         User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  @@index([userId, createdAt])
+  @@index([documentId, action])
+}
