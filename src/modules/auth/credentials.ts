@@ -17,12 +17,18 @@ export async function registerUser(input: unknown): Promise<{ id: string }> {
   const parsed = credentialsSchema.safeParse(input);
   if (!parsed.success) throw new RegistrationError();
   const { email, password } = parsed.data;
-  if (!await allowCredentialAttempt(email)) throw new RegistrationError();
-  const passwordHash = await hashPassword(password);
+  let allowed: boolean;
+  try { allowed = await allowCredentialAttempt(email); }
+  catch (error) { console.error("registration_account_limiter_failed"); throw error; }
+  if (!allowed) throw new RegistrationError();
+  let passwordHash: string;
+  try { passwordHash = await hashPassword(password); }
+  catch (error) { console.error("registration_password_hash_failed"); throw error; }
   try {
     return await getDb().user.create({ data: { email, passwordHash }, select: { id: true } });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new RegistrationError();
+    console.error("registration_database_create_failed");
     throw error;
   }
 }
