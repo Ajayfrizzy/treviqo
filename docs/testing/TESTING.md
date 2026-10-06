@@ -117,3 +117,21 @@ The Docker smoke optionally exercises intelligence when RUMPTY_AI_BASE_URL is co
 `tests/exits.integration.test.ts` covers all types, case/audit persistence, unchanged employment, user and same-user/different-employment evidence isolation, PostgreSQL ownership constraints, concurrent duplicate creation, optimistic updates, audit rollback, proposed-vs-confirmed extraction eligibility, review changes/rejection, and deleted evidence. `tests/e2e/exits.spec.ts` covers four-step creation/editing, all five states, save-and-return/cancel, empty/error/retry, all five types, API/page ownership, unauthenticated/Origin/strict-input boundaries, and 320/375/430px layout checks.
 
 The production smoke now also creates an exit case, checks nine rules, updates notice dates, rejects stale edits, verifies audits, and checks logout revocation at the exit API. It needs only disposable PostgreSQL/Redis for this portion; storage and inference smoke remain optional when configured.
+
+## Milestone 5 additions
+
+`tests/finance-rules.test.ts` covers exact minor-unit amounts, currency/precision/period ambiguity, missing/stale/duplicate settlement evidence, pension coverage/completeness, separate employee/employer amounts, late postings, unknown/multiple/partial rows, employer matching and zero contributions. PostgreSQL tests cover all owner boundaries, source eligibility, optimistic conflicts, audit rollback, stale/rejected/deleted evidence, pension confirmation tokens, lifecycle idempotence and follow-up persistence.
+
+`tests/e2e/finance.spec.ts` uses real registration, private PDF upload, fixture HTTP extraction and review routes for payslip/settlement/pension sources. It checks comparison/editing, explicit pension confirmation, stale evidence, error/retry, authentication/Origin/ownership/body limits and 320/375/430px overflow. Fixture JSON/PDFs and the local AI server now support all six extraction types.
+
+The production smoke extends its TLS storage/inference path to settlement comparison, pension matching/confirmation, and invalidation after deleting source documents. See [Milestone 5 validation record](../milestones/SETTLEMENT_PENSION.md) for commands/results and remaining real-provider checks.
+
+## Milestone 6 additions
+
+Passport unit tests cover default Unknown across all categories, evidence/context validity, masking, provider conflicts and date uncertainty. Integration tests cover derived closed entries, ownership/source isolation, composite keys, worker assessment CRUD/audits, concurrent creates, optimistic conflicts, audit rollback, rejected/deleted/changed sources, reopened employment and current finance-derived pension confirmation. Shared-database integration files run sequentially to avoid incidental PostgreSQL Serializable predicate-lock conflicts; explicit concurrency tests remain active.
+
+Passport browser journeys cover real sign-in, private upload/manual field review, timeline/detail, distinct provenance labels, assessment/cancel/error/retry, identifier masking, deletion/reopening and 320/375/430px overflow. Full regression suites retain earlier milestones. Production Docker smoke adds live Passport derivation, current pension confirmation, benefit assessment/audit and stale-evidence invalidation. See [Milestone 6 exact results](../milestones/BENEFIT_PASSPORT.md).
+
+## Milestone 7 implementation
+
+Milestone 7 adds pure reminder/date/fingerprint and rate-limit tests; real PostgreSQL/Redis jobs tests cover retries, leases, concurrent workers, lost queue recovery, batch cursors, atomic audits, ownership, snooze and 501-session cleanup. Browser tests at 320/375/430 pixels invoke the compiled worker and exercise live reminders, failure/retry and source resolution. `npm run validate` now builds the worker; `npm run test:e2e` compiles it before Playwright. Run suites sequentially against a disposable database, then run the production web/worker smoke using TLS fixtures. See [validation report](../milestones/REMINDERS_RELIABILITY_SECURITY.md#validation).

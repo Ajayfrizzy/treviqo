@@ -1,7 +1,10 @@
 import { z } from "zod";
-export const supportedTypes = ["employment_contract", "payslip", "resignation_letter", "termination_letter"] as const;
+export const supportedTypes = ["employment_contract", "payslip", "resignation_letter", "termination_letter", "final_settlement", "pension_statement"] as const;
 export type ExtractionType = typeof supportedTypes[number];
+const pensionRows = Object.fromEntries([1, 2, 3].flatMap(index => Object.entries({ employer: "Employer", period: "Contribution period", date: "Posting date", employee_amount: "Employee contribution", employer_amount: "Employer contribution" }).map(([key, label]) => [`contribution_${index}_${key}`, `Entry ${index}: ${label}`])));
 export const fieldLabels = {
+  final_settlement: { pay_period: "Pay period", final_salary: "Final salary", leave: "Leave settlement", reimbursement: "Reimbursement", bonus: "Bonus / commission", pension_deduction: "Pension deduction", loan_deduction: "Loan deduction", other_deduction: "Other deductions", total: "Total settlement" },
+  pension_statement: { provider: "Pension provider", statement_start: "Statement coverage from (month)", statement_end: "Statement coverage through (month)", entries_complete: "Does this extraction include every contribution entry? (yes/no)", ...pensionRows },
   employment_contract: { employer: "Employer", employee: "Employee", role: "Role", start_date: "Start date", employment_type: "Employment type", salary: "Salary amount and currency", salary_frequency: "Salary frequency", notice_period: "Notice period", annual_leave: "Annual leave", probation: "Probation", pension_reference: "Pension wording", hmo_reference: "HMO wording", group_life_reference: "Group-life wording", exit_clause: "Exit clause" },
   payslip: { employer: "Employer", employee: "Employee", pay_period: "Pay period", gross_pay: "Gross pay", net_pay: "Net pay", basic_salary: "Basic salary", pension_deduction: "Pension deduction", tax: "Tax", other_deductions: "Other deductions", reimbursements: "Explicit reimbursements", allowances: "Allowances" },
   resignation_letter: { letter_date: "Letter date", notice_date: "Notice date", proposed_last_day: "Proposed last day", notice_period: "Stated notice period", reason: "Explicit reason" },

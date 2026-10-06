@@ -15,6 +15,7 @@ export default async function Home() {
       {current.length ? <div className="employment-list">{current.map(record => <EmploymentCard key={record.id} employment={record} />)}</div> : <section className="card"><p>No current employment recorded. Your previous roles are kept below.</p></section>}
       <section aria-labelledby="previous-heading" className="history"><h2 id="previous-heading">Previous employment</h2>{previous.length ? <div className="employment-list">{previous.map(record => <EmploymentCard key={record.id} employment={record} />)}</div> : <p>No previous employment recorded yet.</p>}</section>
     </>}
+    <p className="history"><Link className="button-link" href="/reminders">View reminders</Link></p>
     <section className="card exit-context"><h2>{exits.length ? "Your exit checklists" : "No active exit process"}</h2><p>{exits.length ? `${exits.length} saved checklist${exits.length === 1 ? "" : "s"} to review.` : "Start a checklist when you have a planned or actual last working date."}</p><Link className="touch-link" href="/exit">{exits.length ? "Review exit checklists" : "Open Job Exit Checker"}</Link></section>
   </>;
 }

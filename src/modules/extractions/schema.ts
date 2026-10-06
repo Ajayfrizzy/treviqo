@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { confidenceSchema, fieldLabels, supportedTypes, type ExtractionType } from "./shared";
-export const PROMPT_VERSION = "evidence-v1";
-export const SCHEMA_VERSION = "fields-v1";
+export const PROMPT_VERSION = "evidence-v2";
+export const SCHEMA_VERSION = "fields-v2";
 const cell = z.object({ value: z.string().trim().min(1).max(1000).nullable(), evidence: z.string().trim().min(1).max(1600).nullable(), confidence: confidenceSchema }).strict();
 export const classificationSchema = z.object({ type: z.enum([...supportedTypes, "other"]), evidence: z.string().trim().min(1).max(1600).nullable(), confidence: confidenceSchema }).strict();
 export function fieldsSchema(type: ExtractionType) { return z.object(Object.fromEntries(Object.keys(fieldLabels[type]).map(key => [key, cell]))).strict(); }
@@ -18,5 +18,5 @@ export function parseClassification(raw: string, source: string) {
   return value;
 }
 export function parseFields(raw: string, type: ExtractionType, source: string) {
-  return Object.entries(fieldsSchema(type).parse(JSON.parse(raw))).map(([key, input]) => ({ key, ...groundedCell(input, source) }));
+  return Object.entries(fieldsSchema(type).parse(JSON.parse(raw))).map(([key, input]) => ({ key, ...(key === "entries_complete" ? { value: null, evidence: null, confidence: "needs_review" as const } : groundedCell(input, source)) }));
 }

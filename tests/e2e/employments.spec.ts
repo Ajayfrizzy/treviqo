@@ -16,7 +16,7 @@ async function create(page: Page) {
   await noOverflow(page); await page.getByRole("button", { name: "Save employment" }).click(); await expect(page.getByRole("status")).toHaveText("Employment added.");
   return new URL(page.url()).pathname.split("/").at(-1)!;
 }
-test.afterAll(async () => { await db.user.deleteMany({ where: { email: { in: emails } } }); await db.$disconnect(); });
+test.afterAll(async () => { await db.auditEvent.deleteMany({ where: { user: { email: { in: emails } } } }); await db.user.deleteMany({ where: { email: { in: emails } } }); await db.$disconnect(); });
 for (const width of [320, 375, 430, 1280]) {
   test(`employment creation, editing and history at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 850 }); await account(page); await noOverflow(page);

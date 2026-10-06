@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "incremental": false,
+    "rootDir": "src",
+    "outDir": "dist-worker",
+    "module": "ESNext",
+    "target": "ES2022",
+    "allowImportingTsExtensions": false
+  },
+  "include": [
+    "src/worker/**/*.ts",
+    "src/ops/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

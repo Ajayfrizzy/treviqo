@@ -124,3 +124,19 @@ Every Exit page and API checks the current session and ownership independently. 
 Mutations require exact Origin, JSON, and an actual streamed 8 KiB limit. Responses use private/no-store and select no auth credentials or owner IDs. Optimistic versions prevent stale-tab overwrites; audit failure rolls back the write. Content-free exit_created/exit_updated events identify user, employment, case, and timestamp. No entered answers or excerpts are logged.
 
 Persisted source IDs never authorize access. Each checklist read revalidates Ready documents and Confirmed/Corrected contract fields, including the selected field version. Deleting/Deleted files and revoked/changed reviews cannot continue satisfying a rule on the next read. Already-rendered browser content remains until refresh. Existing stale references can remain during unrelated edits, but new evidence choices must pass ownership checks. Case answers are explicit user data, not AI decisions.
+
+## Milestone 5 finance boundaries
+
+Finance reads/writes constrain exit, employment and evidence ownership. Composite database relations prevent cross-owner finance records; same-owner evidence from another employment is also rejected. Strict JSON commands prohibit ownership reassignment, enforce an 8 KiB body bound, same Origin, session authentication, and private/no-store responses. Serializability, exit locks and optimistic versions prevent lost updates. Audits commit atomically without financial values.
+
+Comparisons bind reviewed field versions. Pension confirmation checks a server-generated current-evidence hash; rejected/deleted/revised fields or changed employment/exit context invalidate it. Rejected contribution entries cannot establish absence, including manually entered entries without AI proposals. No derived financial values are copied into finance rows. Stale opaque source IDs remain to explain invalidated evidence; original documents and extraction data follow existing deletion policy. No public storage or external pension integration is added.
+
+## Milestone 6 Passport boundaries
+
+List/detail/mutations independently require owner authentication and currently closed employment. Source evidence must belong to the same worker and employment; composite ownership keys enforce Benefit persistence. POST requires same-origin JSON, 4 KiB maximum and strict schemas; stale version/context writes fail. Benefit save/removal audits commit with the mutation and contain IDs/actions only.
+
+Minimal DTOs exclude original filenames, snippets, proposals, financial amounts and identifier fields. Generic type/date source labels link to existing authorized document routes. Display names receive server-side masking of common identifier sequences, labelled IDs and emails, with no reveal control; this is defensive pattern masking, not universal redaction. Raw source documents remain sensitive in the vault. Passport APIs use private/no-store and no-referrer; reopened employment is no longer an accessible entry.
+
+## Milestone 7 implementation
+
+Milestone 7 adds per-user Redis limits to uploads, signed links, writes and expensive API reads, failing closed on Redis errors. Employment and reminder transitions have atomic content-free audits. Reminder reads/commands revalidate ownership and current evidence. Queue payloads hold fixed job IDs only; worker logs use generic errors. Expired-session cleanup does not replace request-time expiry enforcement. Ingress must still protect server-rendered reads, request concurrency and aggregate abuse. See [review and operational limits](../milestones/REMINDERS_RELIABILITY_SECURITY.md#security-review-and-fixes).

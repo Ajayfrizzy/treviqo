@@ -19,7 +19,7 @@ afterEach(async () => { vi.restoreAllMocks(); await db.auditEvent.deleteMany({ w
 afterAll(async () => { await db.$disconnect(); });
 it("persists only proposed grounded fields with source/model/version metadata, without changing employment", async () => {
   const { extraction } = await service().start(userId, documentId, { mode: "ai" });
-  expect(extraction).toMatchObject({ status: "ready", documentType: "employment_contract", model: "fixture-model", sourceKind: "pdf_text", promptVersion: "evidence-v1", schemaVersion: "fields-v1" });
+  expect(extraction).toMatchObject({ status: "ready", documentType: "employment_contract", model: "fixture-model", sourceKind: "pdf_text", promptVersion: "evidence-v2", schemaVersion: "fields-v2" });
   expect(extraction!.fields.every(field => field.value === null && field.reviewState === "proposed")).toBe(true);
   expect(await db.employment.findUnique({ where: { id: job } })).toMatchObject({ employerName: "Original employer" });
   expect(await db.auditEvent.count({ where: { documentId, action: "extraction_completed" } })).toBe(1);

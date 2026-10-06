@@ -12,13 +12,17 @@
     "lint": "eslint .",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test",
+    "test:e2e": "npm run worker:build && playwright test",
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "validate": "npm run lint && npm run typecheck && npm test && npm run build",
-    "postinstall": "prisma generate"
+    "validate": "npm run lint && npm run typecheck && npm test && npm run build && npm run worker:build",
+    "postinstall": "prisma generate",
+    "worker:build": "node scripts/build-worker.mjs",
+    "worker": "node --conditions=react-server dist-worker/worker/main.js",
+    "worker:health": "node --conditions=react-server dist-worker/worker/health.js",
+    "deployment:check": "node --conditions=react-server dist-worker/ops/deployment.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1146.0",

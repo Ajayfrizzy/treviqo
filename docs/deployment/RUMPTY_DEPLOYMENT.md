@@ -196,3 +196,53 @@ Before enabling real-worker inference, test synthetic examples for all four sche
 ### Milestone 4 release notes
 
 Apply `20261003050000_exit_checker` before rolling out the new app. It adds ExitCase and enum types and permits non-document audit actions; existing data is preserved. PostgreSQL 17 was used for migration/drift validation. Exit Checker requires no new secrets, environment variables, provider capabilities, or background process. It works without inference configuration; selecting existing reviewed notice evidence only reads the database. Retain the existing ingress/auth/database protections and verify mobile exit creation/editing plus cross-user isolation on Rumpty before release. No live deployment was performed by repository validation.
+
+### Milestone 5 release notes
+
+Apply `20261003060000_settlement_pension` using the migration target before rolling out the new runtime. It adds owned finance records and audit actions without resetting existing data. No new dependencies, secrets, environment variables or background workers are required. Existing optional Rumpty inference variables enable both new schemas; manual entry remains available.
+
+Validate all six extraction types with synthetic evidence on the real Rumpty model, especially separate contribution periods/posting dates, employee/employer amounts, three-entry limits and schema adherence. Confirm private storage, ingress concurrency/body limits, TLS, backup/restore and worker isolation before release. Saved follow-up dates do not schedule jobs or send notifications. Local Docker validation is not a live deployment.
+
+### Milestone 6 release notes
+
+Apply additive migration `20261004000000_benefit_passport` before deploying the runtime. It adds Benefit assessment enums/table and audit metadata; Passport entries themselves derive from original closed employments and need no backfill or generation job. No new environment variables, dependencies, provider services or background processes are introduced.
+
+Validate own/foreign/anonymous Passport access, source deletion/revision, reopened employment, masked identifiers and narrow-screen navigation on Rumpty before release. Existing private storage, TLS, database backups and ingress requirements remain. Benefit assessments are worker judgements against evidence, not provider verification. No reminder scheduler or export job is enabled.
+
+## Milestone 7 worker and recovery runbook
+
+Historical Milestone 5/6 notes above describe saved dates before scheduling existed. Milestone 7 now schedules **in-app** reminders, never external notifications.
+
+### Worker release and monitoring
+
+1. Build explicit targets: `docker build --target runtime -t treviqo-web .`, `docker build --target worker -t treviqo-worker .`, and `docker build --target migrate -t treviqo-migrate .`. Run the migration release job against Rumpty PostgreSQL before starting the new versions. The default Docker target remains web.
+2. Run worker as an always-on, non-public Rumpty process using its image CMD. Configure private PostgreSQL and Redis URLs, a production HTTPS APP_URL, TLS trust and bounded database pools. No S3/AI credentials are needed by the worker itself. Use least privilege, persistent/noeviction Redis settings, a restart policy and at least a 90-second health start grace. Allow shutdown long enough for an in-flight bounded batch (two-minute lease); interrupted work is retried.
+3. Run `npm run worker:health` or the image health command. Alert on missing heartbeat, attempts >=5, oldest due job >5 minutes, no completed sweep within two hours, database/Redis failures and failed container health. Inspect only BackgroundJob IDs, cursor, attempts and generic errorCode; never log document payloads or connection strings. Fix poisoned evidence/code/configuration and allow retry; do not delete domain records to unblock a batch.
+4. Keep production `WORKER_REQUIRED=true` (default); false is only a deliberate degraded/manual operating mode. Configure load balancer readiness at `/api/ready` and process liveness at `/api/health`. A worker outage affects readiness while liveness stays available. Do not restart a healthy web process merely for external dependency failure.
+5. Redis queue loss repairs itself from PostgreSQL, but rate-limit counters do not. Configure ingress rate/concurrency/body limits and Redis persistence. Test restart, network interruption, TLS and realistic job volume on Rumpty before release. No live AI calls are made by readiness or worker ticks.
+
+### Backup/snapshot readiness and restoration
+
+These are required production configuration/acceptance steps, **not a claim that Rumpty backups are already enabled or restored**. Agree RPO/RTO with the selected Rumpty plan; proposed MVP targets are RPO <=24 hours and RTO <=4 hours, to be measured in a drill. Use Rumpty encrypted scheduled PostgreSQL backups (PITR if supported), private object snapshots/versioning and a coordinated retention window (initial proposal: 30 days), limited operator access and restore monitoring. Include structured evidence, review history and audits; store deployment secrets separately in approved secret configuration. Verify what Rumpty actually supports before adopting these targets.
+
+Restore drill:
+
+1. Record backup timestamps, application version and migration version. Restore into isolated Rumpty PostgreSQL and a **private** bucket with separate credentials; do not overwrite production to test recovery. Disable public routing and stop workers/writes during recovery.
+2. Restore database and compatible object snapshot. Apply committed migrations with the release image. Reconcile object metadata against available versions; absent bytes must remain unavailable, never replaced with fabricated evidence. Review retention/deletion implications of restoring previously deleted objects and purge them according to the agreed retention policy.
+3. Revoke restored authentication sessions (`DELETE FROM "AuthSession"`) before serving users. Rotate session secrets where appropriate. Reset the two BackgroundJob rows to pending, clear leaseToken/leaseUntil/cursor, set attempts=0, lastSucceededAt=NULL, createdAt/dueAt/updatedAt to now; this restarts a complete reminder sweep. Preserve Reminder rows so saved snoozes/dismissals survive.
+4. Delete only `treviqo:jobs:due` and `treviqo:worker:heartbeat` in the isolated Redis namespace. Never use FLUSHALL against a shared service. Start worker, verify both completed jobs and health, then start web. Restored reminders independently revalidate current evidence.
+5. Verify migration drift, login/logout/revocation, own/foreign access, private signed document download/anonymous denial, source deletion, reminder reconciliation and readiness. Confirm stale evidence does not retain trusted confirmation. Record measured data loss/recovery duration and operator sign-off before any traffic cutover.
+
+Redis is not the backup of record for reminders. Audit retention and document deletion policy still require product/operator decisions; no automatic audit purge is included. Keep backups containing sensitive evidence private and restrict their lifetime/access.
+
+## First production-like release
+
+Follow [the ordered deployment and live acceptance procedure](FIRST_RUMPTY_DEPLOYMENT.md). It separates configuration, safe migrations, synthetic storage/AI probes and real HTTPS/worker acceptance from fixture-only smoke tests. Live services remain unverified until credentials and target access are supplied.
+
+## First live verification
+
+[Live integration report](LIVE_RUMPTY_VERIFICATION.md): S3 upload/read/signing and AI authentication/model discovery verified; private database/Redis access, S3 deletion/expiry behavior and inference completion remain blockers. No live migration or deployment has occurred.
+
+## Deployment blocker follow-up
+
+See [private-network execution, S3/AI diagnosis and manual backup fallback](RUMPTY_BLOCKERS.md) for current results and operator steps. Internal PostgreSQL/Redis DNS is expected to require a Rumpty-hosted workload; no public access is needed.

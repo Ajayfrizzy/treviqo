@@ -1,0 +1,106 @@
+{
+  "type": "pension_statement",
+  "text": "PENSION STATEMENT\nprovider: Fixture Pensions\nstatement start: 2026-10\nstatement end: 2026-11\ncontribution 1 employer: Harbour Workshop Ltd\ncontribution 1 period: 2026-10\ncontribution 1 date: 2026-11-05\ncontribution 1 employee amount: NGN 20,000\ncontribution 1 employer amount: NGN 25,000\nSynthetic test document only.",
+  "classification": {
+    "type": "pension_statement",
+    "evidence": "PENSION STATEMENT",
+    "confidence": "high"
+  },
+  "fields": {
+    "provider": {
+      "value": "Fixture Pensions",
+      "evidence": "provider: Fixture Pensions",
+      "confidence": "high"
+    },
+    "statement_start": {
+      "value": "2026-10",
+      "evidence": "statement start: 2026-10",
+      "confidence": "high"
+    },
+    "statement_end": {
+      "value": "2026-11",
+      "evidence": "statement end: 2026-11",
+      "confidence": "high"
+    },
+    "entries_complete": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "contribution_1_employer": {
+      "value": "Harbour Workshop Ltd",
+      "evidence": "contribution 1 employer: Harbour Workshop Ltd",
+      "confidence": "high"
+    },
+    "contribution_1_period": {
+      "value": "2026-10",
+      "evidence": "contribution 1 period: 2026-10",
+      "confidence": "high"
+    },
+    "contribution_1_date": {
+      "value": "2026-11-05",
+      "evidence": "contribution 1 date: 2026-11-05",
+      "confidence": "high"
+    },
+    "contribution_1_employee_amount": {
+      "value": "NGN 20,000",
+      "evidence": "contribution 1 employee amount: NGN 20,000",
+      "confidence": "high"
+    },
+    "contribution_1_employer_amount": {
+      "value": "NGN 25,000",
+      "evidence": "contribution 1 employer amount: NGN 25,000",
+      "confidence": "high"
+    },
+    "contribution_2_employer": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "contribution_2_period": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "contribution_2_date": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "contribution_2_employee_amount": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "contribution_2_employer_amount": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "contribution_3_employer": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "contribution_3_period": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "contribution_3_date": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "contribution_3_employee_amount": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "contribution_3_employer_amount": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    }
+  }
+}

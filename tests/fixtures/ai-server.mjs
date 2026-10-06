@@ -2,7 +2,7 @@
 import http from "node:http";
 import https from "node:https";
 import { readFileSync } from "node:fs";
-const types = ["employment_contract", "payslip", "resignation_letter", "termination_letter"];
+const types = ["employment_contract", "payslip", "resignation_letter", "termination_letter", "final_settlement", "pension_statement"];
 const fixtures = types.map(type => JSON.parse(readFileSync(new URL(`./intelligence/${type}.json`, import.meta.url))));
 const handler = async (request, response) => {
   if (request.url === "/health") { response.end("ok"); return; }

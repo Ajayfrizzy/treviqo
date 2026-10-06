@@ -141,4 +141,20 @@ Inference is outside database transactions. Short transactions lock the source d
 
 `GET/POST /api/exits`, `GET/PUT /api/exits/:id`, and `GET /api/exits/evidence?employmentId=...` independently authorize the worker. Documents and reviewed fields must belong to that same worker and employment. Service reads compute nine checklist items under a repeatable-read transaction from current answers/evidence; checklist states are not persisted or client-settable. Evidence IDs are non-authorizing references, deliberately retained after source deletion so the next read can explain missing/changed evidence. No extracted value or filename is copied into case metadata when selecting a reviewed source.
 
-Create/update writes and content-free audit events commit together. AuditEvent now permits a null documentId and an exitCaseId for exit actions, retaining existing audit data. Updates require a matching case version and cannot reassign employment/ownership. Cases do not mutate employment status/end dates. The mobile Exit area provides employment selection, four steps, save-and-return, detail/checklist, editing, loading/error/not-found states. Home links to actual saved cases. There is no persisted checklist history, case closure/archive, or Milestone 5+ service.
+Create/update writes and content-free audit events commit together. AuditEvent now permits a null documentId and an exitCaseId for exit actions, retaining existing audit data. Updates require a matching case version and cannot reassign employment/ownership. Cases do not mutate employment status/end dates. The mobile Exit area provides employment selection, four steps, save-and-return, detail/checklist, editing, loading/error/not-found states. Home links to actual saved cases. Milestone 4 does not add persisted checklist history or case closure/archive. Milestone 5 adds the finance service below.
+
+## Milestone 5 finance module
+
+`src/modules/finance` extends the modular monolith with pure versioned comparison/matching rules, strict transport schemas, transactional owner-scoped services, and an employment-closure lifecycle hook. SettlementItem and PensionVerification reference ExitCase through composite ownership foreign keys. Financial values remain in reviewed extraction evidence rather than duplicated finance snapshots. Reads recompute against current reviewed sources; confirmation hashes bind evidence and employment/exit context. Writes use serializable transactions, exit-row locking, optimistic versions, and atomic audits.
+
+`/exit/[id]/finance` and `/api/exits/[id]/finance` reuse document uploads/reviews, auth, private storage, and the AI adapter. No new service/provider/dependency, background scheduler, or Passport is introduced. See [implementation details](../milestones/SETTLEMENT_PENSION.md).
+
+## Milestone 6 Passport
+
+`src/modules/passport` derives Passport entries from owned closed employments without a duplicated PassportEntry table. Entry IDs are employment IDs. The timeline/detail APIs and mobile pages reuse original facts and the existing exit/finance services inside one repeatable-read snapshot; shared transaction entry points retain their own ownership checks.
+
+Benefit persists only new worker portability assessments, source document/field/version references, context hash and optimistic version, unique per employment/category. Composite ownership relations and atomic content-free audits apply. Serializable writes lock employment and reject stale contexts/versions. Closing/reopening needs no Passport generation job: visibility derives from current status, and source/context edits invalidate assessments on read. See [Milestone 6 report](../milestones/BENEFIT_PASSPORT.md).
+
+## Milestone 7 implementation
+
+The Milestone 7 worker extends this monolith with PostgreSQL durable job/cursor/lease state and a repairable Redis due queue. It invokes the existing exit/finance services to reconcile owned reminders and cleans expired sessions. No microservice API or external notification provider is added. See [Milestone 7](../milestones/REMINDERS_RELIABILITY_SECURITY.md). Earlier milestone descriptions of absent workers/automation describe their historical scope.

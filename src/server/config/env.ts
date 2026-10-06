@@ -7,6 +7,7 @@ const schema = z.object({
   APP_URL: url.default("http://localhost:3000"),
   NEXTAUTH_URL: optional(url),
   SESSION_SECRET: optional(z.string().min(32)),
+  WORKER_REQUIRED: optional(z.enum(["true", "false"])),
   DATABASE_URL: optional(z.string().regex(/^postgres(ql)?:\/\//)),
   REDIS_URL: optional(z.string().regex(/^rediss?:\/\//)),
   RUMPTY_AI_BASE_URL: optional(url),

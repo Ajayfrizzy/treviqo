@@ -101,3 +101,19 @@ input[type=file] { font-size: .9rem; }
 .exit-form input[type=checkbox] { width: 24px; min-height: 24px; flex: 0 0 24px; }
 
 .exit-job, .exit-intro { min-width: 0; overflow-wrap: anywhere; }
+
+.finance-flow { display: grid; gap: 1.25rem; }
+.finance-flow .card, .finance-flow form { min-width: 0; overflow-wrap: anywhere; }
+.finance-flow .touch-link { display: flex; }
+.finance-flow select { text-overflow: ellipsis; }
+.finance-flow fieldset { gap: .75rem; }
+
+.passport-flow, .passport-timeline { display: grid; gap: 1.25rem; }
+.passport-timeline { list-style: none; padding: 0 0 0 .85rem; border-left: 2px solid var(--border); }
+.passport-flow .card, .passport-flow form, .passport-timeline li { min-width: 0; overflow-wrap: anywhere; }
+.passport-flow .touch-link { display: flex; }
+.passport-flow fieldset { gap: .75rem; }
+.passport-flow .passport-checkbox { display: flex; align-items: flex-start; gap: .7rem; }
+.passport-flow input[type=checkbox] { width: 24px; min-height: 24px; flex: 0 0 24px; }
+
+.passport-flow article > button { display: block; margin-top: .75rem; width: 100%; }

@@ -57,6 +57,7 @@ model Employment {
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   documents      EmploymentDocument[]
   exitCases      ExitCase[]
+  benefits       Benefit[]
   @@unique([id, userId])
   @@index([userId, status, startDate])
 }
@@ -91,6 +92,21 @@ enum AuditAction {
   extraction_reviewed
   exit_created
   exit_updated
+  settlement_saved
+  settlement_removed
+  pension_started
+  pension_updated
+  pension_confirmed
+  benefit_saved
+  benefit_removed
+  employment_created
+  employment_updated
+  employment_closed
+  reminder_created
+  reminder_changed
+  reminder_resolved
+  reminder_snoozed
+  reminder_dismissed
 }
 model EmploymentDocument {
   id                String         @id @default(uuid())
@@ -118,6 +134,8 @@ model AuditEvent {
   userId       String
   documentId   String?
   exitCaseId   String?
+  reminderId   String?
+  benefitId    String?
   employmentId String
   action       AuditAction
   createdAt    DateTime    @default(now())
@@ -249,5 +267,134 @@ model ExitCase {
   updatedAt               DateTime @updatedAt
   user                    User @relation(fields: [userId], references: [id], onDelete: Cascade)
   employment              Employment @relation(fields: [employmentId, userId], references: [id, userId], onDelete: Cascade)
+  settlementItems         SettlementItem[]
+  pensionVerification     PensionVerification?
+  reminders               Reminder[]
+  @@unique([id, userId])
   @@index([userId, updatedAt])
+}
+
+enum SettlementCategory {
+  final_salary
+  leave
+  reimbursement
+  bonus
+  pension_deduction
+  loan_deduction
+  other_deduction
+  total
+}
+model SettlementItem {
+  id                   String @id @default(uuid())
+  exitCaseId           String
+  userId               String
+  category             SettlementCategory
+  label                String @db.VarChar(160)
+  documentId           String
+  expectedFieldId      String
+  expectedFieldVersion Int
+  actualFieldId        String?
+  actualFieldVersion   Int?
+  expectedPeriod       String @db.VarChar(7)
+  actualPeriod         String @db.VarChar(7)
+  version              Int @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  exitCase             ExitCase @relation(fields: [exitCaseId, userId], references: [id, userId], onDelete: Cascade)
+  @@index([exitCaseId, userId])
+}
+model PensionVerification {
+  id                   String @id @default(uuid())
+  exitCaseId           String @unique
+  userId               String
+  targetPeriod         String @db.VarChar(7)
+  statementRunId       String?
+  expectedFieldId      String?
+  expectedFieldVersion Int?
+  followUpDate         DateTime? @db.Date
+  confirmedHash        String? @db.VarChar(64)
+  confirmedAt          DateTime?
+  version              Int @default(0)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  exitCase             ExitCase @relation(fields: [exitCaseId, userId], references: [id, userId], onDelete: Cascade)
+  @@unique([exitCaseId, userId])
+  @@index([userId, followUpDate])
+}
+
+
+enum BenefitCategory {
+  pension
+  hmo
+  group_life
+  employer_specific
+  cooperative
+  provident
+}
+enum BenefitPortability {
+  portable
+  employer_linked
+  unknown
+}
+model Benefit {
+  id                      String @id @default(uuid())
+  userId                  String
+  employmentId            String
+  category                BenefitCategory
+  classification          BenefitPortability @default(unknown)
+  sourceDocumentId        String?
+  sourceDocumentUpdatedAt DateTime?
+  sourceFieldId           String?
+  sourceFieldVersion      Int?
+  contextHash             String @db.VarChar(64)
+  version                 Int @default(0)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  employment              Employment @relation(fields: [employmentId, userId], references: [id, userId], onDelete: Cascade)
+  @@unique([employmentId, category])
+  @@index([userId, employmentId])
+}
+
+enum ReminderKind {
+  exit_action
+  pension_followup
+  missing_document
+  stale_action
+}
+enum ReminderState {
+  active
+  snoozed
+  dismissed
+  resolved
+}
+model Reminder {
+  id           String @id @default(uuid())
+  userId       String
+  exitCaseId   String
+  key          String @db.VarChar(64)
+  kind         ReminderKind
+  fingerprint  String @db.VarChar(64)
+  state        ReminderState @default(active)
+  dueAt        DateTime
+  snoozedUntil DateTime?
+  version      Int @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  exitCase     ExitCase @relation(fields: [exitCaseId, userId], references: [id, userId], onDelete: Cascade)
+  @@unique([exitCaseId, key])
+  @@index([userId, state, dueAt])
+}
+model BackgroundJob {
+  id              String @id
+  state           String @default("pending") @db.VarChar(16)
+  dueAt           DateTime @default(now())
+  cursor          String?
+  leaseToken      String?
+  leaseUntil      DateTime?
+  attempts        Int @default(0)
+  createdAt       DateTime @default(now())
+  lastSucceededAt DateTime?
+  errorCode       String? @db.VarChar(32)
+  updatedAt       DateTime @updatedAt
+  @@index([state, dueAt])
 }

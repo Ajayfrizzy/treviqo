@@ -1,4 +1,5 @@
 import "server-only";
+import { ensurePensionFollowup } from "@/modules/finance/lifecycle";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { getDb } from "@/server/db/client";
 import { DocumentError } from "@/modules/documents/validation";
@@ -37,19 +38,20 @@ export function exitService(db: PrismaClient = getDb()) {
     if (!row) throw new DocumentError("Exit case not found.", 404);
     return row;
   }
+  async function detail(tx: Tx, userId: string, id: string): Promise<ExitRecord> {
+    const row = await find(tx, userId, id); const input = answers(row);
+    const context = await evidence(tx, userId, row.employmentId);
+    return { id: row.id, employmentId: row.employmentId, employerName: row.employment.employerName, roleTitle: row.employment.roleTitle, version: row.version, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), answers: input, rulesVersion: RULES_VERSION, checklist: buildChecklist(input, context) };
+  }
   return {
     async evidence(userId: string, employmentId: string) { return db.$transaction(tx => evidence(tx, userId, employmentId), { isolationLevel: "RepeatableRead" }); },
     async list(userId: string) {
       authenticated(userId);
       return (await db.exitCase.findMany({ where: { userId, employment: { userId } }, select: { id: true, employmentId: true, exitType: true, lastWorkingDate: true, updatedAt: true, employment: { select: { employerName: true, roleTitle: true } } }, orderBy: [{ updatedAt: "desc" }, { id: "asc" }] })).map(row => ({ ...row, lastWorkingDate: row.lastWorkingDate.toISOString().slice(0, 10), updatedAt: row.updatedAt.toISOString() }));
     },
+    readInTransaction: detail,
     async detail(userId: string, id: string): Promise<ExitRecord> {
-      // One consistent snapshot; no persisted checklist can outlive its evidence.
-      return db.$transaction(async tx => {
-        const row = await find(tx, userId, id); const input = answers(row);
-        const context = await evidence(tx, userId, row.employmentId);
-        return { id: row.id, employmentId: row.employmentId, employerName: row.employment.employerName, roleTitle: row.employment.roleTitle, version: row.version, createdAt: row.createdAt.toISOString(), updatedAt: row.updatedAt.toISOString(), answers: input, rulesVersion: RULES_VERSION, checklist: buildChecklist(input, context) };
-      }, { isolationLevel: "RepeatableRead" });
+      return db.$transaction(tx => detail(tx, userId, id), { isolationLevel: "RepeatableRead" });
     },
     async create(userId: string, raw: unknown) {
       authenticated(userId); const input = createExitSchema.parse(raw);
@@ -58,6 +60,7 @@ export function exitService(db: PrismaClient = getDb()) {
           await validateEvidence(tx, userId, input.employmentId, input.answers);
           const row = await tx.exitCase.create({ data: { userId, employmentId: input.employmentId, ...stored(input.answers) } });
           await tx.auditEvent.create({ data: { userId, employmentId: row.employmentId, exitCaseId: row.id, action: "exit_created" } });
+          await ensurePensionFollowup(tx, userId, row.employmentId);
           return row.id;
         });
         return this.detail(userId, id);
@@ -71,6 +74,7 @@ export function exitService(db: PrismaClient = getDb()) {
         const changed = await tx.exitCase.updateMany({ where: { id, userId, version: input.version }, data: { ...stored(input.answers), version: { increment: 1 } } });
         if (!changed.count) throw new DocumentError("This exit case changed in another tab. Reload before saving.", 409);
         await tx.auditEvent.create({ data: { userId, employmentId: row.employmentId, exitCaseId: id, action: "exit_updated" } });
+        await ensurePensionFollowup(tx, userId, row.employmentId);
       });
       return this.detail(userId, id);
     },

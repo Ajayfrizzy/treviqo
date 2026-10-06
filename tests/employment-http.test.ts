@@ -2,6 +2,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ user: vi.fn(), list: vi.fn(), get: vi.fn(), create: vi.fn(), update: vi.fn() }));
 vi.mock("@/modules/auth/session", () => ({ getCurrentUser: mocks.user }));
 vi.mock("@/modules/employments/service", () => ({ listEmployments: mocks.list, getEmployment: mocks.get, createEmployment: mocks.create, updateEmployment: mocks.update }));
+vi.mock("@/server/rate-limit", () => ({ limitWorkflow: vi.fn(), limitResponse: () => null }));
 import { employmentRequest } from "@/modules/employments/http";
 import { employmentSchema } from "@/modules/employments/validation";
 const details = { employerName: "Example", roleTitle: "Engineer", startDate: "2024-01-01" };

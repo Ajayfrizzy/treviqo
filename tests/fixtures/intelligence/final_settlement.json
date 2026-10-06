@@ -1,0 +1,56 @@
+{
+  "type": "final_settlement",
+  "text": "FINAL SETTLEMENT\npay period: 2026-10\nfinal salary: NGN 250,000\npension deduction: NGN 20,000\ntotal: NGN 230,000\nSynthetic test document only.",
+  "classification": {
+    "type": "final_settlement",
+    "evidence": "FINAL SETTLEMENT",
+    "confidence": "high"
+  },
+  "fields": {
+    "pay_period": {
+      "value": "2026-10",
+      "evidence": "pay period: 2026-10",
+      "confidence": "high"
+    },
+    "final_salary": {
+      "value": "NGN 250,000",
+      "evidence": "final salary: NGN 250,000",
+      "confidence": "high"
+    },
+    "leave": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "reimbursement": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "bonus": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "pension_deduction": {
+      "value": "NGN 20,000",
+      "evidence": "pension deduction: NGN 20,000",
+      "confidence": "high"
+    },
+    "loan_deduction": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "other_deduction": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "total": {
+      "value": "NGN 230,000",
+      "evidence": "total: NGN 230,000",
+      "confidence": "high"
+    }
+  }
+}

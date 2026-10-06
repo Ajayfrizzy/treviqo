@@ -131,3 +131,19 @@ Ready documents link to a dedicated mobile review page. The empty state offers A
 Exit is now functional. Select employment, then use four phone-first steps: Exit details; Notice; Money and pension; Records and benefits. Exit type and planned/actual last working date are required; other answers default to unknown. Save and view checklist is available from every step once the required details are valid, allowing save-and-return. Back/Next and Cancel are explicit; failed saves preserve input. Unsaved navigation/reload does not persist drafts.
 
 Nine cards show labelled states, the basis for each check, and a next action. Source links lead to the existing secure document/review pages. Complete is explained as a limited record/answer check, never a legal or payment verdict. The five-section bottom navigation remains unchanged with Exit selected throughout nested pages. Home now links to saved exit checklists without changing employment status.
+
+## Milestone 5 settlement and pension review
+
+The Exit checklist links to a phone-first settlement/pension page. Cards show comparison state in text, expected/actual amounts, periods, source-review links, explanation and next action. Native month/date inputs, category-filtered reviewed fields, save/edit/cancel/remove controls, and retained input on failure support review on phones. Refresh rechecks evidence. Pension matching has a separate explicit confirmation button; it never silently marks a match confirmed.
+
+Empty, saving, error/retry and saved states are visible. The five-section navigation remains; no dense financial table is introduced. Follow-up dates explicitly say no automated reminder is sent. Completeness and three-entry statement limits are explained before confirmation. Browser coverage checks 320/375/430px overflow and source changes after confirmation.
+
+## Milestone 6 Passport
+
+Passport now has a semantic closed-employment timeline and detail cards for original employment period, exit follow-up state, pension provider/contribution status, benefit assessments and key document availability. Current/active jobs remain managed from Home. Unknown dates remain explicit; original records are corrected at their existing screens.
+
+Worker-entered facts, confirmed/corrected fields, worker assessments, and unresolved information have distinct text labels. Benefit category alone never produces a portability claim. Assessment forms require supporting evidence/acknowledgment for non-unknown choices and offer save/cancel/remove plus retained input on failure. Refresh rechecks sources; unavailable reopened entries clear from view. Nested pages retain Passport navigation. No tables, download certificates or employer verification controls are introduced.
+
+## Milestone 7 implementation
+
+Milestone 7 adds Home → View reminders with mobile cards, source links, seven-day snooze and dismissal. Home stays selected in the existing five-section bottom navigation. Loading, empty, successful action, retry/error and delayed-worker states are explicit. Current evidence is rechecked on refresh; no email/push delivery or statutory deadline claims are shown.

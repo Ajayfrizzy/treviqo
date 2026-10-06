@@ -32,4 +32,4 @@ it("enforces the user foreign key and rejects missing identities", async () => {
   await expect(createEmployment("", details)).rejects.toThrow("Authentication required");
   await expect(createEmployment("missing-user", details)).rejects.toThrow();
 });
-afterAll(async () => { await db.user.deleteMany({ where: { id: { in: [a, b].filter(Boolean) } } }); await db.$disconnect(); });
+afterAll(async () => { await db.auditEvent.deleteMany({ where: { userId: { in: [a,b].filter(Boolean) } } }); await db.user.deleteMany({ where: { id: { in: [a, b].filter(Boolean) } } }); await db.$disconnect(); });

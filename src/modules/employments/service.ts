@@ -1,4 +1,5 @@
 import "server-only";
+import { ensurePensionFollowup } from "@/modules/finance/lifecycle";
 import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db/client";
 import { employmentSchema, type EmploymentInput, type EmploymentRecord } from "./validation";
@@ -24,14 +25,25 @@ export async function getEmployment(userId: string, id: string) {
 export async function createEmployment(userId: string, input: unknown) {
   requireOwner(userId);
   const parsed = employmentSchema.parse(input);
-  return serialize(await getDb().employment.create({ data: { ...data(parsed), userId }, select }));
+  return getDb().$transaction(async tx => {
+    const row = await tx.employment.create({ data: { ...data(parsed), userId }, select });
+    await tx.auditEvent.create({ data: { userId, employmentId: row.id, action: "employment_created" } });
+    return serialize(row);
+  });
 }
 export async function updateEmployment(userId: string, id: string, input: unknown) {
   requireOwner(userId);
   const parsed = employmentSchema.parse(input);
   try {
     // Ownership is part of the write predicate, not a separate read-before-write check.
-    return serialize(await getDb().employment.update({ where: { id, userId }, data: data(parsed), select }));
+    return await getDb().$transaction(async tx => {
+      await tx.$queryRaw`SELECT "id" FROM "Employment" WHERE "id"=${id} AND "userId"=${userId} FOR UPDATE`;
+      const previous = await tx.employment.findFirst({ where: { id, userId }, select: { status: true } });
+      const row = await tx.employment.update({ where: { id, userId }, data: data(parsed), select });
+      await tx.auditEvent.create({ data: { userId, employmentId: id, action: parsed.status === "closed" && previous?.status !== "closed" ? "employment_closed" : "employment_updated" } });
+      await ensurePensionFollowup(tx, userId, id);
+      return serialize(row);
+    });
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025") return null;
     throw error;

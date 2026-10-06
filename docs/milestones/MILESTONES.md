@@ -112,6 +112,8 @@ Deliver:
 Success:
 Treviqo can highlight missing/unclear items without making legal claims.
 
+Implementation record: [Milestone 5 settlement and pension](SETTLEMENT_PENSION.md). Follow-up dates are saved; broader reminder automation remains Milestone 7.
+
 ## Milestone 6 — Benefit Passport v1
 Deliver:
 - closed-employment summary
@@ -123,6 +125,8 @@ Deliver:
 
 Success:
 Worker retains a useful personal record after exit.
+
+Implementation record: [Milestone 6 Benefit Passport](BENEFIT_PASSPORT.md). Entries derive from current closed employment; no export or reminder automation is included.
 
 ## Milestone 7 — Reminders, Reliability & Security
 Deliver:
@@ -136,6 +140,8 @@ Deliver:
 
 Success:
 Treviqo behaves like a persistent product, not a one-session demo.
+
+Implementation record: [Milestone 7 reminders, reliability and security](REMINDERS_RELIABILITY_SECURITY.md).
 
 ## Milestone 8 — Hackathon Polish
 Deliver:

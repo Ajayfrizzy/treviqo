@@ -7,7 +7,7 @@ const objects = new Map();
 const handler = async (request, response) => {
   const url = new URL(request.url, "http://localhost");
   if (url.pathname === "/health") { response.end("ok"); return; }
-  const signed = url.searchParams.has("X-Amz-Signature");
+  const signed = url.searchParams.has("X-Amz-Signature") && !/^0+$/.test(url.searchParams.get("X-Amz-Signature"));
   const date = url.searchParams.get("X-Amz-Date") ?? "";
   const stamp = Date.parse(date.replace(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/, "$1-$2-$3T$4:$5:$6Z"));
   const ttl = Number(url.searchParams.get("X-Amz-Expires"));

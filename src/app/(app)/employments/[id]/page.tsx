@@ -15,6 +15,7 @@ export default async function EmploymentDetail({ params, searchParams }: { param
       <dt>Start date</dt><dd>{formatEmploymentDate(record.startDate)}</dd><dt>{record.status === "exiting" ? "Expected end date" : "End date"}</dt><dd>{record.endDate ? formatEmploymentDate(record.endDate) : "Not recorded"}</dd>
       <dt>Employment type</dt><dd>{record.employmentType ? typeLabels[record.employmentType] : "Not specified"}</dd>
     </dl><Link className="button-link" href={`/employments/${record.id}/edit`}>Edit employment</Link></section>
+    {record.status === "closed" && <Link className="button-link" href={`/passport/${record.id}`}>View Passport entry</Link>}
     <p className="quiet">These are the details you recorded. An employment status does not start or complete an exit process.</p>
   </>;
 }

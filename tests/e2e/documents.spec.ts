@@ -14,7 +14,10 @@ async function account(page: Page) {
 async function upload(page: Page) {
   await page.goto("/documents"); await page.getByRole("link", { name: "Upload document", exact: true }).click();
   await page.getByLabel("Document category").selectOption("employment_contract"); await page.getByLabel("Choose a file").setInputFiles({ name: "My contract.pdf", mimeType: "application/pdf", buffer: pdf });
-  await page.getByRole("button", { name: "Upload document", exact: true }).click(); await expect(page.getByRole("status").filter({ hasText: "Document uploaded." })).toBeVisible();
+  const response = page.waitForResponse(response => new URL(response.url()).pathname === "/api/documents" && response.request().method() === "POST");
+  await page.getByRole("button", { name: "Upload document", exact: true }).click();
+  expect((await response).status()).toBe(201);
+  await expect(page.getByRole("status").filter({ hasText: "Document uploaded." })).toBeVisible();
   return new URL(page.url()).pathname.split("/").at(-1)!;
 }
 test.afterAll(async () => { const users = await db.user.findMany({ where: { email: { in: emails } }, select: { id: true } }); const ids = users.map(user => user.id); await db.auditEvent.deleteMany({ where: { userId: { in: ids } } }); await db.employmentDocument.deleteMany({ where: { userId: { in: ids } } }); await db.user.deleteMany({ where: { id: { in: ids } } }); await db.$disconnect(); });
@@ -66,4 +69,16 @@ test("requires authentication and rejects cross-origin mutations", async ({ page
   for (const path of ["/documents", "/documents/upload", "/documents/missing"]) { await page.goto(path); await expect(page).toHaveURL(/\/sign-in$/); }
   expect((await request.get("/api/documents")).status()).toBe(401); expect((await request.post("/api/documents")).status()).toBe(401); expect((await request.post("/api/documents/missing/access")).status()).toBe(401); expect((await request.delete("/api/documents/missing")).status()).toBe(401);
   await account(page); expect((await page.request.post("/api/documents", { headers: { origin: "https://attacker.test" } })).status()).toBe(403);
+});
+
+test("expires private links locally and allows explicitly requesting a fresh link", async ({ page }) => {
+  await account(page); await upload(page);
+  await page.clock.install();
+  await page.getByRole("button", { name: "Open / download", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Download document", exact: true })).toBeVisible();
+  await page.clock.fastForward(61000);
+  await expect(page.getByRole("link", { name: "Download document", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("status").filter({hasText:"Your download link expired"})).toBeVisible();
+  await page.getByRole("button", { name: "Open / download", exact: true }).click();
+  await expect(page.getByRole("link", { name: "Download document", exact: true })).toBeVisible();
 });

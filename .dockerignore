@@ -10,3 +10,5 @@ playwright-report
 .codex
 .agents
 *.tsbuildinfo
+
+dist-worker

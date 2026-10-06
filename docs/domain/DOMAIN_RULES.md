@@ -104,7 +104,7 @@ Sensitive identifiers should be masked.
 - Active has no end date. Exiting can record a planned end date. Closed can record an actual end date or leave it unknown. The UI labels these distinctions.
 - Active and Exiting group under Current employment; Closed groups under Previous employment. Sort by latest start date first. Multiple current records are valid.
 - Future dates are permitted as worker-entered facts; there is no automatic status transition, deadline logic, or legal interpretation.
-- Statuses may be corrected in either direction. Changing an employment status does not create an exit case, declare exit completion/readiness, trigger pension/reminder work, or generate a Passport.
+- Statuses may be corrected in either direction. At Milestone 1, changing employment status does not create an exit case, declare readiness, trigger pension/reminder work, or generate a Passport; Milestone 5 adds the narrow pension follow-up hook described below.
 
 ## Milestone 4 implemented rules (`exit-checker-v1`)
 
@@ -126,4 +126,24 @@ Notice calculation is intentionally narrow: exact numeric days (optionally “ca
 
 The last working date is required and cannot precede the employment start at save time. A subsequently changed employment start, or communication date after the final working date, yields Needs clarification. Exit type never determines notice applicability or entitlement. Proposed/high-confidence AI values are not eligible: only an explicitly selected confirmed/corrected contract notice field and its saved review version can supply notice wording. Changed/rejected/deleted evidence is not silently replaced with a newer field or a manual fallback.
 
-Scope boundary: the earlier settlement, pension, benefits, and Passport sections describe later milestones. Milestone 4 does not implement their comparison/verification/reminder workflows.
+Milestone 4 scope boundary: the earlier settlement, pension, benefits, and Passport sections describe later milestones. Milestone 4 does not implement their comparison/verification/reminder workflows.
+
+## Milestone 5 implemented finance rules
+
+`finance-v1` compares explicit currency amounts using integer minor units, selected reviewed field versions, and worker-identified matching periods. Consistent, Not identified, and Needs clarification are finance comparison results, distinct from the nine Exit Checker checklist states. No payment, entitlement, aggregate total, proration or legal conclusion follows from a match. Duplicate field selections, changed evidence, ambiguous values, and mismatches require clarification.
+
+Pension matching requires explicit participation, complete reviewed statement coverage/entries, normalized employer equality and contribution month equality. Posting date is separate and can be later. Optional reviewed payslip employee deductions require a matching reviewed pay month and compare only with the employee component. Multiple/partial rows, zero combined amounts and ambiguous evidence need clarification. Detected contributions require explicit worker confirmation, invalidated by changed evidence/context.
+
+Closing pension-enabled employment now creates one waiting verification when an exit exists; enabling pension on an existing closed employment also initializes it. A changeable follow-up date defaults to end/last-working date plus 30 calendar days, a planning convention only. No background reminder is scheduled. [Full rules and limits](../milestones/SETTLEMENT_PENSION.md).
+
+## Milestone 6 Passport and benefits (`passport-v1`)
+
+Only closed employment appears. Original dates remain worker-entered; unknown end dates are not replaced by exit dates. Closed status does not imply that exit checklist actions are complete. Existing Exit Checker and pension verification states are reused, not recalculated by AI or inferred from a timestamp.
+
+All six benefit categories default to Unknown. Portable and Employer-linked are explicitly labelled worker assessments, requiring current same-employment evidence and acknowledgment. Reviewed mentions/provider names do not prove participation, portability, coverage or transfer. Missing/rejected/revised/deleted evidence, changed metadata, or changed employment/exit context invalidates an assessment to Unknown; the prior choice remains clearly historical until re-reviewed. One current assessment per category provides basic history across employment entries, not a policy ledger.
+
+Pension provider is a current confirmed/corrected field, restricted to the finance-selected statement attempt when one exists. Conflicting available provider values stay unresolved. Participation, provider, portability and contribution verification are separate facts. No reminder automation or legal/employer verification conclusion is introduced.
+
+## Milestone 7 implementation
+
+Milestone 7 derives in-app exit-action, missing-document, pension follow-up and seven-day stale-action prompts from current deterministic checks. Snooze lasts seven days; dismissal applies to the current evidence fingerprint. Completion resolves an action; changed evidence can resurface it. Follow-up dates are planning conventions, not legal deadlines. See [rules and boundaries](../milestones/REMINDERS_RELIABILITY_SECURITY.md#reminder-behavior).

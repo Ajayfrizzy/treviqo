@@ -30,7 +30,7 @@ it("rejects malformed JSON, ungrounded classification, unsupported enums and mis
 });
 it("bounds source/review inputs and rejects ownership injection", () => {
   expect(startSchema.safeParse({ mode: "ai", text: "x".repeat(18001) }).success).toBe(false);
-  expect(startSchema.safeParse({ mode: "manual", type: "pension_statement" }).success).toBe(false);
+  expect(startSchema.safeParse({ mode: "manual", type: "benefit_document" }).success).toBe(false);
   expect(startSchema.safeParse({ mode: "ai", userId: "other" }).success).toBe(false);
   const base = { fieldId: "ba9f1c54-40d9-4878-a3a1-8b35a54185d3", version: 0 };
   expect(reviewSchema.safeParse({ ...base, action: "correct", value: " " }).success).toBe(false);
@@ -40,4 +40,11 @@ it("provides manual fallback for blank PDFs, corrupt PDFs and images", async () 
   await expect(prepareDocument(readFileSync("tests/fixtures/document.pdf"), "application/pdf")).rejects.toMatchObject({ code: "unreadable" });
   await expect(prepareDocument(Buffer.from("bad"), "application/pdf")).rejects.toMatchObject({ code: "unreadable" });
   await expect(prepareDocument(Buffer.from("image"), "image/png")).rejects.toMatchObject({ code: "unreadable" });
+});
+
+it("never accepts AI completeness assertions for pension absence decisions", () => {
+  const fixture = JSON.parse(readFileSync("tests/fixtures/intelligence/pension_statement.json", "utf8"));
+  fixture.fields.entries_complete = { value: "yes", evidence: "All entries: yes", confidence: "high" };
+  const fields = parseFields(JSON.stringify(fixture.fields), "pension_statement", fixture.text + "\nAll entries: yes");
+  expect(fields.find(field => field.key === "entries_complete")).toMatchObject({ value: null, confidence: "needs_review" });
 });
