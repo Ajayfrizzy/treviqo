@@ -27,8 +27,11 @@ export async function registerUser(input: unknown): Promise<{ id: string }> {
   try {
     return await getDb().user.create({ data: { email, passwordHash }, select: { id: true } });
   } catch (error) {
+    const code = error instanceof Prisma.PrismaClientKnownRequestError ? error.code
+      : error instanceof Prisma.PrismaClientInitializationError ? error.errorCode : undefined;
+    // Never serialize provider messages, metadata, stacks, or arbitrary error.code values.
+    console.error("registration_database_create_failed", typeof code === "string" && /^P\d{4}$/.test(code) ? code : "unknown");
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new RegistrationError();
-    console.error("registration_database_create_failed");
     throw error;
   }
 }
