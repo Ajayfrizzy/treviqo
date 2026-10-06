@@ -27,8 +27,8 @@ it.each([
   ["global", "registration_global_limiter_failed", "account"],
   ["account", "registration_account_limiter_failed", "hash"],
   ["hash", "registration_password_hash_failed", "db"],
-  ["db", "registration_database_create_failed", "create"],
-  ["create", "registration_database_create_failed", null],
+  ["db", "registration_database_client_init_failed", "create"],
+  ["create", "registration_database_user_create_failed", null],
 ] as const)("logs only the fixed stage for a %s exception and remains fail-closed", async (source, label, next) => {
   const failure = new Error("password hash session-secret postgresql://private redis://private api-key " + JSON.stringify(input));
   mocks[source].mockImplementation(() => { throw failure; });
@@ -49,18 +49,19 @@ it("keeps success and validation quiet while logging only the duplicate Prisma c
   mocks.create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError("private duplicate", { code: "P2002", clientVersion: "test" }));
   expect((await POST(request())).status).toBe(400);
   const invalid = new Request("http://localhost:3000/api/register", { method: "POST", headers: { origin: "http://localhost:3000", "content-type": "application/json" }, body: "{}" });
-  expect((await POST(invalid)).status).toBe(400); expect(console.error).toHaveBeenCalledExactlyOnceWith("registration_database_create_failed", "P2002");
+  expect((await POST(invalid)).status).toBe(400); expect(console.error).toHaveBeenCalledExactlyOnceWith("registration_database_user_create_failed", "P2002");
 });
 
 it.each(["P1000", "P1001", "P2021", "P2022"])("logs only known Prisma code %s without metadata/messages", async code => {
   mocks.create.mockRejectedValue(new Prisma.PrismaClientKnownRequestError("postgresql://username:password@private-host/database " + input.email, { code, clientVersion: "test", meta: { sql: "private SQL", payload: input } }));
   const response = await POST(request()); expect(response.status).toBe(503); expect(await response.json()).toEqual(generic);
-  expect(console.error).toHaveBeenCalledExactlyOnceWith("registration_database_create_failed", code);
+  expect(console.error).toHaveBeenCalledExactlyOnceWith("registration_database_user_create_failed", code);
 });
 it("recognizes initialization errorCode without logging the connection details", async () => {
   mocks.db.mockImplementation(() => { throw new Prisma.PrismaClientInitializationError("private hostname username password", "test", "P1001"); });
   expect((await POST(request())).status).toBe(503);
-  expect(console.error).toHaveBeenCalledExactlyOnceWith("registration_database_create_failed", "P1001");
+  expect(console.error).toHaveBeenCalledExactlyOnceWith("registration_database_client_init_failed", "P1001");
+  expect(mocks.create).not.toHaveBeenCalled();
 });
 it.each([
   Object.assign(new Error("private"), { code: "P1001" }),
@@ -69,5 +70,19 @@ it.each([
 ])("does not trust arbitrary code properties or malformed Prisma codes", async error => {
   mocks.create.mockRejectedValue(error);
   expect((await POST(request())).status).toBe(503);
-  expect(console.error).toHaveBeenCalledExactlyOnceWith("registration_database_create_failed", "unknown");
+  expect(console.error).toHaveBeenCalledExactlyOnceWith("registration_database_user_create_failed", "unknown");
+});
+
+it("reports lazy connection initialization at the user-create stage", async () => {
+  mocks.create.mockRejectedValue(new Prisma.PrismaClientInitializationError("private connection details", "test", "P1001"));
+  const response = await POST(request()); expect(response.status).toBe(503); expect(await response.json()).toEqual(generic);
+  expect(console.error).toHaveBeenCalledExactlyOnceWith("registration_database_user_create_failed", "P1001");
+});
+it.each([
+  new Prisma.PrismaClientValidationError("private SQL and payload", { clientVersion: "test" }),
+  new Prisma.PrismaClientUnknownRequestError("private provider details", { clientVersion: "test" }),
+])("reports uncoded Prisma query failures as unknown without exposing details", async error => {
+  mocks.create.mockRejectedValue(error);
+  const response = await POST(request()); expect(response.status).toBe(503); expect(await response.json()).toEqual(generic);
+  expect(console.error).toHaveBeenCalledExactlyOnceWith("registration_database_user_create_failed", "unknown");
 });
