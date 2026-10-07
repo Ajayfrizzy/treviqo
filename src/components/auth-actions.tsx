@@ -201,10 +201,8 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
             : "Sign in securely"}
       </Button>
       {busy && (
-        <p role="status">
-          {register
-            ? "Creating your personal space…"
-            : "Checking your details…"}
+        <p role="status" className={register ? undefined : "sr-only"}>
+          {register ? "Creating your personal space…" : "Signing in…"}
         </p>
       )}
       <Link
