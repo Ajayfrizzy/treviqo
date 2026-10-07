@@ -75,23 +75,22 @@ export function DeleteAccount({
       <p className="eyebrow">Danger area</p>
       <h2 id="delete-account-title">Delete account</h2>
       <p>
-        This permanently removes your sign-in account, employment records,
-        uploaded documents and their stored versions, extracted details and
-        review history, exit cases, settlement and pension reviews, benefits,
-        Passport data, reminders, and account activity records from Treviqo’s
-        active systems. All devices will be signed out.
+        Permanently delete your Treviqo account and your active Treviqo data,
+        including employment records, uploaded documents, extracted details,
+        exit cases, settlement and pension reviews, benefits, Passport data,
+        reminders, and account activity.
       </p>
       <p>
-        Deletion cannot be undone. Save any records you need first. Downloaded
-        copies, provider backups and any retained AI processing copies are
-        outside this in-app cleanup and remain subject to their retention
-        policies.
+        This cannot be undone. Save anything you need before continuing. You
+        will be signed out on all devices.
       </p>
       <p>
-        If storage refuses deletion, we will not report success. Some files may
-        already be removed; your account and cleanup records stay available so
-        you can retry from Profile. New uploads are blocked once deletion
-        starts.
+        Some provider backups or retained processing copies may remain
+        temporarily according to their retention policies.
+      </p>
+      <p>
+        If Treviqo cannot remove all required stored files, account deletion
+        will not be marked as complete and you can retry from Profile.
       </p>
       {pending && (
         <p role="status">
