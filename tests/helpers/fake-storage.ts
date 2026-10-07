@@ -23,6 +23,9 @@ export class FakeStorage implements PrivateObjectStorage {
     if (this.failDelete) throw new Error("delete failed");
     this.objects.delete(key);
   }
+  async purge(key: string) {
+    await this.remove(key);
+  }
   async signDownload(
     key: string,
     filename: string,

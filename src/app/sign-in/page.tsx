@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 export default async function SignIn({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; account?: string }>;
 }) {
   let configured = false;
   try {
@@ -12,7 +12,7 @@ export default async function SignIn({
   } catch {
     /* Fail closed; never expose configuration. */
   }
-  const { error } = await searchParams;
+  const { error, account } = await searchParams;
   return (
     <main id="main" className="welcome">
       <div className="wordmark">
@@ -30,6 +30,12 @@ export default async function SignIn({
       </p>
       <section className="card">
         <h2>Welcome to Treviqo</h2>
+        {account === "deleted" && (
+          <p role="status">
+            Your account was deleted from Treviqo’s active systems. All sessions
+            have ended.
+          </p>
+        )}
         {error && (
           <p role="alert">We could not complete sign-in. Please try again.</p>
         )}

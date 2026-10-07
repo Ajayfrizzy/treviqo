@@ -102,11 +102,34 @@ export function documentService(
       const id = randomUUID();
       const key = objectKey(userId, input.employmentId, id, extension);
       const bucket = storage(); // Fail before reservation if storage is not configured.
-      await db.employmentDocument.create({
-        data: { id, userId, ...input, ...file, objectKey: key },
+      async function lockUpload(tx: Prisma.TransactionClient) {
+        await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
+        const user = await tx.user.findUnique({
+          where: { id: userId },
+          select: { deletionStartedAt: true },
+        });
+        if (!user || user.deletionStartedAt)
+          throw new DocumentError(
+            "Account deletion has started. Return to Profile to finish deletion; new uploads are blocked.",
+            409,
+          );
+      }
+      await db.$transaction(async (tx) => {
+        await lockUpload(tx);
+        await tx.employmentDocument.create({
+          data: { id, userId, ...input, ...file, objectKey: key },
+        });
       });
       try {
-        await bucket.put(key, bytes, file.mimeType);
+        // Keep the durable reservation outside this transaction. A process crash
+        // must not lose the object key. The user lock serializes PUT with deletion.
+        await db.$transaction(
+          async (tx) => {
+            await lockUpload(tx);
+            await bucket.put(key, bytes, file.mimeType);
+          },
+          { timeout: 45000 },
+        );
       } catch {
         // The provider may have accepted the bytes even when the request timed out.
         try {

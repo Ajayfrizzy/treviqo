@@ -704,6 +704,24 @@ textarea:read-only {
 input[type="checkbox"] {
   accent-color: var(--accent);
 }
+.account-danger {
+  margin-top: 2rem;
+  border: 1px solid #aa3535;
+  border-top: 4px solid #aa3535;
+}
+.account-danger .danger-button {
+  background: #922b2b;
+  border-color: #922b2b;
+  color: #fff;
+}
+.account-danger .danger-button:hover:not(:disabled) {
+  background: #742020;
+}
+.account-danger-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
 input[type="file"]::file-selector-button {
   border: 0;
   border-radius: 0.35rem;

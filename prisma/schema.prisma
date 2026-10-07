@@ -8,19 +8,20 @@ datasource db {
 }
 
 model User {
-  id           String               @id @default(cuid())
+  id                String               @id @default(cuid())
   // Preserve legacy identities without requiring an external provider.
-  issuer       String?
-  subject      String?
-  email        String?              @unique
-  passwordHash String?
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
-  sessions     AuthSession[]
-  employments  Employment[]
-  documents    EmploymentDocument[]
-  auditEvents  AuditEvent[]
-  exitCases    ExitCase[]
+  issuer            String?
+  subject           String?
+  email             String?              @unique
+  passwordHash      String?
+  deletionStartedAt DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  sessions          AuthSession[]
+  employments       Employment[]
+  documents         EmploymentDocument[]
+  auditEvents       AuditEvent[]
+  exitCases         ExitCase[]
 
   @@unique([issuer, subject])
 }
@@ -130,6 +131,7 @@ model EmploymentDocument {
   mimeType          String               @db.VarChar(64)
   fileSize          Int
   checksum          String               @db.VarChar(64)
+  storagePurgedAt   DateTime?
   status            DocumentStatus       @default(uploaded)
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt

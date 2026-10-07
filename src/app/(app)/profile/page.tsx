@@ -2,11 +2,12 @@ import { SignOutButton } from "@/components/auth-actions";
 import { employmentPageUser } from "@/modules/employments/page-user";
 import { SESSION_SECONDS } from "@/modules/auth/session-store";
 import { getDb } from "@/server/db/client";
+import { DeleteAccount } from "@/components/delete-account";
 export default async function Profile() {
   const user = await employmentPageUser();
   const account = await getDb().user.findUniqueOrThrow({
     where: { id: user.id },
-    select: { email: true },
+    select: { email: true, deletionStartedAt: true },
   });
   return (
     <>
@@ -46,6 +47,7 @@ export default async function Profile() {
           <SignOutButton />
         </section>
       </div>
+      <DeleteAccount pending={Boolean(account.deletionStartedAt)} />
     </>
   );
 }

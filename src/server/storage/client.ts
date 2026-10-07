@@ -4,6 +4,8 @@ import {
   PutObjectCommand,
   DeleteObjectCommand,
   GetObjectCommand,
+  HeadObjectCommand,
+  ListObjectVersionsCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -13,6 +15,7 @@ export interface PrivateObjectStorage {
   read(key: string, maxBytes: number): Promise<Buffer>;
   put(key: string, body: Buffer, mimeType: string): Promise<void>;
   remove(key: string): Promise<void>;
+  purge(key: string): Promise<void>;
   signDownload(
     key: string,
     filename: string,
@@ -96,6 +99,100 @@ export function getObjectStorage(): PrivateObjectStorage {
       } catch (error) {
         if (!(error instanceof Error && error.name === "NoSuchKey"))
           throw error;
+      } finally {
+        client.destroy();
+      }
+    },
+    async purge(key) {
+      // Account erasure requires version cleanup, not just a delete marker.
+      // Fail closed when the provider cannot list versions or verify absence.
+      const abortSignal = AbortSignal.timeout(10000);
+      let currentDeleted = false;
+      const deleteExact = async (VersionId?: string) => {
+        try {
+          await client.send(
+            new DeleteObjectCommand({ Bucket, Key: key, VersionId }),
+            { abortSignal },
+          );
+        } catch (error) {
+          // A concurrent cleanup or a retry may find this version already gone.
+          // Still require the final inventory and HEAD checks; never swallow denial.
+          if (!(
+            error instanceof Error &&
+            ["NoSuchKey", "NoSuchVersion"].includes(error.name)
+          ))
+            throw error;
+        }
+      };
+      try {
+        for (let batch = 0; batch < 20; batch++) {
+          const listed = await client.send(
+            new ListObjectVersionsCommand({
+              Bucket,
+              Prefix: key,
+              MaxKeys: 100,
+            }),
+            { abortSignal },
+          );
+          const entries = [
+            ...(listed.Versions ?? []),
+            ...(listed.DeleteMarkers ?? []),
+          ];
+          if (typeof listed.IsTruncated !== "boolean")
+            throw new Error("Object version inventory unavailable");
+          // Keys are unique application-generated names, not user-supplied prefixes.
+          // Never delete another object merely because its key shares a prefix.
+          const owned = entries.filter((entry) => entry.Key === key);
+          if (owned.some((entry) => !entry.VersionId))
+            throw new Error("Unverifiable object version");
+          if (owned.length) {
+            for (const entry of owned) {
+              await deleteExact(entry.VersionId);
+            }
+            continue; // Re-list from the beginning after removing this bounded page.
+          }
+          if (listed.IsTruncated) throw new Error("Object listing incomplete");
+          // Unversioned providers may return no version entry for a current object.
+          if (!currentDeleted) {
+            await deleteExact();
+            currentDeleted = true;
+          }
+          const remaining = await client.send(
+            new ListObjectVersionsCommand({
+              Bucket,
+              Prefix: key,
+              MaxKeys: 100,
+            }),
+            { abortSignal },
+          );
+          if (typeof remaining.IsTruncated !== "boolean")
+            throw new Error("Object version inventory unavailable");
+          if (
+            remaining.IsTruncated ||
+            [
+              ...(remaining.Versions ?? []),
+              ...(remaining.DeleteMarkers ?? []),
+            ].some((entry) => entry.Key === key)
+          )
+            continue; // A versioned delete creates a marker; remove it on the next pass.
+          try {
+            await client.send(new HeadObjectCommand({ Bucket, Key: key }), {
+              abortSignal,
+            });
+          } catch (error) {
+            if (
+              error instanceof Error &&
+              ((error as { $metadata?: { httpStatusCode?: number } }).$metadata
+                ?.httpStatusCode === 404 ||
+                error.name === "NoSuchKey" ||
+                error.name === "NotFound")
+            )
+              return;
+            throw error;
+          }
+          throw new Error("Object remains accessible");
+        }
+        throw new Error("Object version cleanup incomplete");
       } finally {
         client.destroy();
       }

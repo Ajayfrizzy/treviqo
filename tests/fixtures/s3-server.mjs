@@ -4,9 +4,23 @@ import http from "node:http";
 import https from "node:https";
 import { readFileSync } from "node:fs";
 const objects = new Map();
+const deniedDeletes = new Set();
 const handler = async (request, response) => {
   const url = new URL(request.url, "http://localhost");
   if (url.pathname === "/health") {
+    response.end("ok");
+    return;
+  }
+  if (
+    url.pathname === "/__test/delete-failure" &&
+    request.method === "POST" &&
+    request.headers.authorization === "Bearer fixture-admin"
+  ) {
+    const chunks = [];
+    for await (const chunk of request) chunks.push(chunk);
+    const { path, denied } = JSON.parse(Buffer.concat(chunks).toString());
+    if (denied) deniedDeletes.add(path);
+    else deniedDeletes.delete(path);
     response.end("ok");
     return;
   }
@@ -28,7 +42,20 @@ const handler = async (request, response) => {
     response.end();
     return;
   }
+  if (request.method === "GET" && url.searchParams.has("versions")) {
+    response.setHeader("Content-Type", "application/xml");
+    response.end(
+      '<?xml version="1.0"?><ListVersionsResult><IsTruncated>false</IsTruncated></ListVersionsResult>',
+    );
+    return;
+  }
   if (request.method === "HEAD") {
+    if (
+      url.pathname !== "/private" &&
+      url.pathname !== "/private/" &&
+      !objects.has(url.pathname)
+    )
+      response.writeHead(404);
     response.end();
     return;
   }
@@ -41,6 +68,13 @@ const handler = async (request, response) => {
     return;
   }
   if (request.method === "DELETE") {
+    if (deniedDeletes.has(url.pathname)) {
+      response.writeHead(403, { "Content-Type": "application/xml" });
+      response.end(
+        "<Error><Code>AccessDenied</Code><Message>Synthetic delete denial</Message></Error>",
+      );
+      return;
+    }
     objects.delete(url.pathname);
     response.writeHead(204);
     response.end();

@@ -22,6 +22,12 @@ vi.mock("@aws-sdk/client-s3", () => ({
   DeleteObjectCommand: class {
     constructor(public input: unknown) {}
   },
+  HeadObjectCommand: class {
+    constructor(public input: unknown) {}
+  },
+  ListObjectVersionsCommand: class {
+    constructor(public input: unknown) {}
+  },
   GetObjectCommand: class {
     constructor(public input: unknown) {}
   },
@@ -31,6 +37,7 @@ import { getObjectStorage } from "@/server/storage/client";
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.clearAllMocks();
+  mocks.send.mockReset().mockResolvedValue({});
 });
 function configure() {
   for (const [key, value] of Object.entries({
@@ -87,4 +94,99 @@ it("signs short-lived attachment downloads without caching", async () => {
   await expect(
     getObjectStorage().signDownload("key", "file.pdf", "application/pdf", 1000),
   ).rejects.toThrow();
+});
+
+it("purges only exact owned versions and verifies current-object absence", async () => {
+  configure();
+  const { ListObjectVersionsCommand, DeleteObjectCommand, HeadObjectCommand } =
+    await import("@aws-sdk/client-s3");
+  const versions = new Set(["v1", "v2", "marker"]);
+  mocks.send.mockImplementation(async (command) => {
+    if (command instanceof ListObjectVersionsCommand)
+      return {
+        Versions: [...versions]
+          .map((VersionId) => ({ Key: "owned", VersionId }))
+          .concat([{ Key: "owned-other", VersionId: "foreign" }]),
+        IsTruncated: false,
+      };
+    if (command instanceof DeleteObjectCommand) {
+      expect(command.input.Key).toBe("owned");
+      if (command.input.VersionId) versions.delete(command.input.VersionId);
+      else versions.add("new-marker");
+      return {};
+    }
+    if (command instanceof HeadObjectCommand)
+      throw Object.assign(new Error("not found"), {
+        $metadata: { httpStatusCode: 404 },
+      });
+    throw new Error("unexpected");
+  });
+  await getObjectStorage().purge("owned");
+  expect(versions.size).toBe(0);
+  expect(mocks.destroy).toHaveBeenCalled();
+});
+it.each(["list", "delete", "head"])(
+  "fails closed on denied %s permission during account purge",
+  async (denied) => {
+    configure();
+    const {
+      ListObjectVersionsCommand,
+      DeleteObjectCommand,
+      HeadObjectCommand,
+    } = await import("@aws-sdk/client-s3");
+    mocks.send.mockImplementation(async (command) => {
+      if (
+        (denied === "list" && command instanceof ListObjectVersionsCommand) ||
+        (denied === "delete" && command instanceof DeleteObjectCommand) ||
+        (denied === "head" && command instanceof HeadObjectCommand)
+      )
+        throw Object.assign(new Error("AccessDenied"), {
+          $metadata: { httpStatusCode: 403 },
+        });
+      return { IsTruncated: false };
+    });
+    await expect(getObjectStorage().purge("owned")).rejects.toThrow(
+      "AccessDenied",
+    );
+    expect(mocks.destroy).toHaveBeenCalled();
+  },
+);
+it("accepts an already missing object but not a retained object or incomplete inventory", async () => {
+  configure();
+  const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
+  mocks.send.mockImplementation(async (command) => {
+    if (command instanceof HeadObjectCommand)
+      throw Object.assign(new Error("missing"), {
+        $metadata: { httpStatusCode: 404 },
+      });
+    return { IsTruncated: false };
+  });
+  await getObjectStorage().purge("missing");
+  mocks.send.mockResolvedValue({ IsTruncated: false });
+  await expect(getObjectStorage().purge("retained")).rejects.toThrow(
+    "remains accessible",
+  );
+  mocks.send.mockResolvedValue({ IsTruncated: true });
+  await expect(getObjectStorage().purge("unknown")).rejects.toThrow(
+    "listing incomplete",
+  );
+});
+it("verifies absence after a NoSuchKey retry and rejects unsupported version inventories", async () => {
+  configure();
+  const { HeadObjectCommand, DeleteObjectCommand } =
+    await import("@aws-sdk/client-s3");
+  mocks.send.mockImplementation(async (command) => {
+    if (command instanceof DeleteObjectCommand)
+      throw Object.assign(new Error("gone"), { name: "NoSuchKey" });
+    if (command instanceof HeadObjectCommand)
+      throw Object.assign(new Error("gone"), {
+        $metadata: { httpStatusCode: 404 },
+      });
+    return { IsTruncated: false };
+  });
+  await getObjectStorage().purge("already-gone");
+  mocks.send.mockResolvedValue({});
+  await expect(getObjectStorage().purge("unknown")).rejects.toThrow(
+    "inventory unavailable",
+  );
 });

@@ -117,9 +117,7 @@ it("issues audited expiring access, then deletes and denies future access", asyn
   ]);
 });
 it("does not upload an object when metadata reservation fails", async () => {
-  vi.spyOn(db.employmentDocument, "create").mockRejectedValueOnce(
-    new Error("db offline"),
-  );
+  vi.spyOn(db, "$transaction").mockRejectedValueOnce(new Error("db offline"));
   await expect(upload()).rejects.toThrow();
   expect(store.writes).toBe(0);
 });
@@ -143,9 +141,14 @@ it("retains the object key when both upload and compensation fail, then retries 
   expect(store.objects.size).toBe(0);
 });
 it("retains an inaccessible reservation if finalize/audit fails after upload", async () => {
-  vi.spyOn(db, "$transaction").mockRejectedValueOnce(
-    new Error("commit failed"),
-  );
+  const transaction = db.$transaction.bind(db);
+  let calls = 0;
+  vi.spyOn(db, "$transaction").mockImplementation((async (
+    ...args: Parameters<typeof db.$transaction>
+  ) => {
+    if (++calls === 3) throw new Error("commit failed");
+    return transaction(...args);
+  }) as typeof db.$transaction);
   await expect(upload()).rejects.toThrow();
   const [doc] = await service().list(a);
   expect(doc?.status).toBe("uploaded");
