@@ -173,3 +173,16 @@ proxy on 3443. Only the test browser accepts the generated self-signed certifica
 application TLS validation remains intact. Storage and AI are disabled for this
 navigation-only journey. Use Playwright's JSON reporter to retain timing attachments.
 These local timings do not represent Rumpty network/database latency.
+
+The production prefetch assertion allows 15 seconds independently of tab-switch
+measurements. It reports missing destination paths and attaches request status,
+observed byte counts, stream-observation errors, and request failures. Buffered
+response bytes are assembled before live chunks, with incremental UTF-8 decoding;
+`tests/prefetch-stream.test.ts` covers the arrival-order race and split characters.
+CI uploads `navigation-production` artifacts before the development suite can
+clear the results directory, including failure traces/screenshots and JSON results.
+
+To check reliability, run the production command with `--repeat-each=3`. Repeat
+with `NAVIGATION_SLOW_NETWORK=1` to add 100 ms latency and limit download/upload
+to 200/100 KiB per second during sign-in and prefetch observation. No automatic
+retries are enabled, and all navigation, freshness, and logout assertions remain.

@@ -15,6 +15,7 @@ export default defineConfig({
   testMatch: "navigation.spec.ts",
   outputDir: "test-results/navigation-production",
   workers: 1,
+  timeout: 60_000,
   reporter: [
     ["list"],
     ["json", { outputFile: "test-results/navigation-production/results.json" }],
@@ -23,6 +24,8 @@ export default defineConfig({
     baseURL: "https://127.0.0.1:3443",
     browserName: "chromium",
     ignoreHTTPSErrors: true,
+    trace: "retain-on-failure",
+    screenshot: "only-on-failure",
   },
   webServer: [
     {

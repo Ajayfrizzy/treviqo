@@ -50,4 +50,12 @@ jobs:
             -keyout "$NAVIGATION_TLS_KEY" -out "$NAVIGATION_TLS_CERT" \
             -days 1 -subj /CN=127.0.0.1 -addext 'subjectAltName=IP:127.0.0.1'
           npx playwright test --config playwright.navigation.config.ts
+      - name: Upload production navigation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: navigation-production
+          path: test-results/navigation-production/
+          if-no-files-found: ignore
+          retention-days: 7
       - run: npm run test:e2e

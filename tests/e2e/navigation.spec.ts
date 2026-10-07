@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
+import { observePrefetch } from "../helpers/prefetch-observer";
 
 const db = new PrismaClient();
 const emails: string[] = [];
@@ -17,43 +18,16 @@ for (const width of [375, 1440]) {
     page,
   }, testInfo) => {
     await page.setViewportSize({ width, height: 850 });
-    const prefetched = new Set<string>();
     const content: Record<string, string> = {
       "/exit": "No exit cases yet",
       "/passport": "No closed employments yet",
       "/documents": "Add an employment first",
       "/profile": "Email verification is not available yet",
     };
-    if (process.env.NAVIGATION_PRODUCTION === "1") {
-      // Flight streams may be cancelled after Next consumes them, making
-      // Playwright response.text() unavailable. Observe incoming bytes instead.
-      const network = await page.context().newCDPSession(page);
-      await network.send("Network.enable");
-      const streams = new Map<string, { path: string; text: string }>();
-      function receive(id: string, data: string) {
-        const stream = streams.get(id);
-        if (!stream) return;
-        stream.text += Buffer.from(data, "base64").toString("utf8");
-        if (stream.text.includes(content[stream.path]!))
-          prefetched.add(stream.path);
-      }
-      network.on("Network.dataReceived", (event) => {
-        if (event.data) receive(event.requestId, event.data);
-      });
-      network.on("Network.responseReceived", async (event) => {
-        const url = new URL(event.response.url);
-        if (!content[url.pathname] || !url.searchParams.has("_rsc")) return;
-        streams.set(event.requestId, { path: url.pathname, text: "" });
-        try {
-          const result = await network.send("Network.streamResourceContent", {
-            requestId: event.requestId,
-          });
-          receive(event.requestId, result.bufferedData);
-        } catch {
-          // A superseded prefetch can be cancelled before observation starts.
-        }
-      });
-    }
+    const prefetch =
+      process.env.NAVIGATION_PRODUCTION === "1"
+        ? await observePrefetch(page, content)
+        : undefined;
     const email = `navigation-${randomUUID()}@example.test`;
     emails.push(email);
     await page.goto("/register");
@@ -74,14 +48,21 @@ for (const width of [375, 1440]) {
       .fill("Synthetic test password 7!");
     await page.getByRole("button", { name: "Sign in securely" }).click();
     await expect(page).toHaveURL("/");
-    if (process.env.NAVIGATION_PRODUCTION === "1") {
-      await expect
-        .poll(() =>
-          ["/exit", "/passport", "/documents", "/profile"].every((path) =>
-            prefetched.has(path),
-          ),
-        )
-        .toBe(true);
+    if (prefetch) {
+      try {
+        await expect
+          .poll(prefetch.missing, {
+            timeout: 15_000,
+            message: "Destinations still missing fully prefetched page content",
+          })
+          .toEqual([]);
+      } finally {
+        await testInfo.attach("prefetch-diagnostics", {
+          body: JSON.stringify(prefetch.diagnostics(), null, 2),
+          contentType: "application/json",
+        });
+        await prefetch.dispose();
+      }
     }
     const nav = page.getByRole("navigation", { name: "Primary" });
     const timings: Record<string, number> = {};
