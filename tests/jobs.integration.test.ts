@@ -15,6 +15,10 @@ const now = () => new Date();
 beforeEach(async () => {
   await db.backgroundJob.deleteMany();
   await redis.del(QUEUE, HEARTBEAT);
+  // These scenarios target reminder/session jobs, independently of cleanup order.
+  await db.backgroundJob.create({
+    data: { id: "account_cleanup", dueAt: new Date(Date.now() + 3600000) },
+  });
   a = (await db.user.create({ data: {} })).id;
   b = (await db.user.create({ data: {} })).id;
   job = (
@@ -129,6 +133,7 @@ it("dispatches durable jobs through Redis and recovers queue loss without duplic
   const runner = jobRunner(db, redis);
   await runner.tick();
   await runner.tick();
+  await runner.tick();
   expect(await workerHealthy()).toBe(true);
   expect(
     await db.reminder.count({ where: { exitCaseId: id } }),
@@ -138,6 +143,7 @@ it("dispatches durable jobs through Redis and recovers queue loss without duplic
   const count = await db.auditEvent.count({
     where: { exitCaseId: id, action: "reminder_created" },
   });
+  await runner.tick();
   await runner.tick();
   await runner.tick();
   expect(
@@ -227,7 +233,11 @@ it("rejects Redis failure without falsely marking jobs complete; health detects 
   failed.on("error", () => {});
   try {
     await expect(jobRunner(db, failed).tick()).rejects.toThrow();
-    expect(await db.backgroundJob.count()).toBe(0);
+    expect(
+      await db.backgroundJob.count({
+        where: { id: { not: "account_cleanup" } },
+      }),
+    ).toBe(0);
   } finally {
     failed.disconnect();
   }
@@ -273,6 +283,7 @@ it("checkpoints bounded scans and eventually reaches later exit cases", async ()
     (await db.backgroundJob.findUniqueOrThrow({ where: { id: "reminders" } }))
       .cursor,
   ).not.toBeNull();
+  await runner.tick();
   await runner.tick();
   await runner.tick();
   expect(

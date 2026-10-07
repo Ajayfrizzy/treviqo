@@ -2,16 +2,10 @@
 import { useRef, useState, type FormEvent } from "react";
 import { Button } from "./button";
 import { uiRequest } from "./ui-request";
-export function DeleteAccount({
-  pending: initialPending,
-}: {
-  pending: boolean;
-}) {
-  const [open, setOpen] = useState(initialPending);
-  const [pending, setPending] = useState(initialPending);
+export function DeleteAccount() {
+  const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [message, setMessage] = useState("");
   const inFlight = useRef(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -21,7 +15,6 @@ export function DeleteAccount({
     inFlight.current = true;
     setBusy(true);
     setError("");
-    setMessage("");
     try {
       const response = await uiRequest(
         "/api/account",
@@ -39,27 +32,21 @@ export function DeleteAccount({
       if (!response.ok)
         throw new Error(
           result.error ||
-            "Deletion could not finish. Return to Profile and retry.",
+            "Deletion could not be scheduled. Please try again shortly.",
         );
-      if (result.status === "deleted") {
-        // Full navigation discards private React/router state; server already revoked
-        // every session and cleared auth cookies in the successful response.
-        window.location.replace("/sign-in?account=deleted");
-        return;
-      }
-      if (result.status !== "pending")
+      if (result.status !== "scheduled" || !result.deletionScheduledFor)
         throw new Error(
-          "Deletion status is uncertain. Refresh Profile before retrying.",
+          "Deletion status is uncertain. Sign in again to check its status.",
         );
-      setPending(true);
-      setMessage(
-        "Some files have been removed. Re-enter your password and DELETE, then continue to finish deleting the remaining files and account.",
+      // Discard private client/router state after server-side session revocation.
+      window.location.replace(
+        `/sign-in?account=scheduled&scheduledFor=${encodeURIComponent(result.deletionScheduledFor)}`,
       );
     } catch (error) {
       setError(
         error instanceof Error
           ? error.message
-          : "Deletion could not finish. Refresh Profile to check its status before retrying.",
+          : "Deletion could not be scheduled. Sign in again to check its status before retrying.",
       );
     } finally {
       form.reset();
@@ -75,29 +62,18 @@ export function DeleteAccount({
       <p className="eyebrow">Danger area</p>
       <h2 id="delete-account-title">Delete account</h2>
       <p>
-        Permanently delete your Treviqo account and your active Treviqo data,
-        including employment records, uploaded documents, extracted details,
-        exit cases, settlement and pension reviews, benefits, Passport data,
-        reminders, and account activity.
+        Your Treviqo account will be disabled immediately and scheduled for
+        permanent deletion in 7 days. You can cancel before the scheduled
+        deletion date.
       </p>
       <p>
-        This cannot be undone. Save anything you need before continuing. You
-        will be signed out on all devices.
+        Sign in with your email and password before that date to cancel. All
+        sessions will end when you confirm.
       </p>
       <p>
-        Some provider backups or retained processing copies may remain
-        temporarily according to their retention policies.
+        Provider backups or retained processing copies may remain temporarily
+        under their retention policies.
       </p>
-      <p>
-        If Treviqo cannot remove all required stored files, account deletion
-        will not be marked as complete and you can retry from Profile.
-      </p>
-      {pending && (
-        <p role="status">
-          Account deletion has started but has not finished. Continue below to
-          retry cleanup. Removed files cannot be restored.
-        </p>
-      )}
       {!open ? (
         <Button className="danger-button" onClick={() => setOpen(true)}>
           Delete my account
@@ -118,7 +94,7 @@ export function DeleteAccount({
           </div>
           <div className="form-field">
             <label htmlFor="delete-confirmation">
-              Type DELETE to confirm permanent deletion
+              Type DELETE to schedule account deletion
             </label>
             <input
               id="delete-confirmation"
@@ -135,11 +111,9 @@ export function DeleteAccount({
               {error}
             </p>
           )}
-          {message && <p role="status">{message}</p>}
           {busy && (
             <p role="status">
-              Removing your files and account. This may take up to a minute. Do
-              not start another request.
+              Scheduling account deletion and ending all sessions…
             </p>
           )}
           <div className="account-danger-actions">
@@ -149,11 +123,7 @@ export function DeleteAccount({
               disabled={busy}
               aria-busy={busy}
             >
-              {busy
-                ? "Deleting…"
-                : pending
-                  ? "Continue account deletion"
-                  : "Permanently delete account"}
+              {busy ? "Scheduling…" : "Schedule account deletion"}
             </Button>
             <Button
               type="button"
@@ -162,10 +132,9 @@ export function DeleteAccount({
               onClick={() => {
                 setOpen(false);
                 setError("");
-                setMessage("");
               }}
             >
-              {pending ? "Close form" : "Cancel"}
+              Cancel
             </Button>
           </div>
         </form>

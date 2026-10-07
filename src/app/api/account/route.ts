@@ -35,12 +35,12 @@ export async function DELETE(request: NextRequest) {
     } catch {
       throw new AccountDeletionError("Invalid or oversized request.", 400);
     }
-    const result = await accountDeletionService().remove(user.id, input);
+    const result = await accountDeletionService().schedule(user.id, input);
     const response = NextResponse.json(result, {
-      status: result.status === "deleted" ? 200 : 202,
+      status: 202,
       headers,
     });
-    if (result.status === "deleted") {
+    {
       // Match NextAuth v4 default names (including chunked session cookies).
       // No domain is configured by auth/options.ts. Clear Secure and local variants.
       const names = new Set([

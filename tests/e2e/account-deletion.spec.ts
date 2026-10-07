@@ -50,7 +50,7 @@ async function account(page: Page) {
 async function fillConfirmation(page: Page, value = password) {
   await page.getByLabel("Current password", { exact: true }).fill(value);
   await page
-    .getByLabel("Type DELETE to confirm permanent deletion")
+    .getByLabel("Type DELETE to schedule account deletion")
     .fill("DELETE");
 }
 test.afterAll(async () => {
@@ -66,7 +66,7 @@ test.afterAll(async () => {
   await db.$disconnect();
 });
 for (const width of [320, 375, 430, 1440])
-  test(`password-confirmed deletion and session clearing at ${width}px`, async ({
+  test(`scheduled deletion, cancellation and session clearing at ${width}px`, async ({
     page,
     browser,
   }) => {
@@ -82,8 +82,8 @@ for (const width of [320, 375, 430, 1440])
       name: "Delete account",
       exact: true,
     });
-    await expect(danger).toContainText("provider backups");
-    await expect(danger).toContainText("cannot be undone");
+    await expect(danger).toContainText("Provider backups");
+    await expect(danger).toContainText("disabled immediately");
     await danger
       .getByRole("button", { name: "Delete my account", exact: true })
       .click();
@@ -96,7 +96,7 @@ for (const width of [320, 375, 430, 1440])
       .click();
     await fillConfirmation(page, "wrong password");
     await page
-      .getByRole("button", { name: "Permanently delete account", exact: true })
+      .getByRole("button", { name: "Schedule account deletion", exact: true })
       .click();
     await expect(danger.getByRole("alert")).toContainText(
       "password could not be verified",
@@ -114,20 +114,24 @@ for (const width of [320, 375, 430, 1440])
     ).toBe(true);
     await fillConfirmation(page);
     await page
-      .getByRole("button", { name: "Permanently delete account", exact: true })
+      .getByRole("button", { name: "Schedule account deletion", exact: true })
       .click();
-    await expect(page).toHaveURL(/\/sign-in\?account=deleted$/);
+    await expect(page).toHaveURL(/\/sign-in\?account=scheduled&scheduledFor=/);
     await expect(page.getByRole("status")).toContainText(
-      "All sessions have ended",
+      "signed out on all devices",
     );
     expect(
       (await page.context().cookies()).filter((c) =>
         c.name.includes("session-token"),
       ),
     ).toHaveLength(0);
-    expect(
-      await db.user.findUnique({ where: { id: owner.userId } }),
-    ).toBeNull();
+    const pending = await db.user.findUniqueOrThrow({
+      where: { id: owner.userId },
+    });
+    expect(pending.deletionScheduledFor!.getTime()).toBeGreaterThan(
+      Date.now() + 6 * 86400000,
+    );
+    expect(pending.deletionStartedAt).toBeNull();
     expect(
       await db.authSession.findUnique({ where: { id: extraSession.id } }),
     ).toBeNull();
@@ -141,8 +145,91 @@ for (const width of [320, 375, 430, 1440])
       ).status(),
     ).toBe(401);
     await copied.close();
+    await page.goto("/sign-in");
+    await page.getByLabel("Email", { exact: true }).fill(owner.email);
+    await page.getByLabel("Password", { exact: true }).fill("wrong password");
+    await page.getByRole("button", { name: "Sign in securely" }).click();
+    await expect(page.locator("#auth-error")).toHaveText(
+      "Email or password is incorrect.",
+    );
+    await expect(
+      page.getByRole("button", {
+        name: "Cancel account deletion",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await page.getByLabel("Password", { exact: true }).fill(password);
+    await page.getByRole("button", { name: "Sign in securely" }).click();
+    await expect(
+      page.getByRole("heading", {
+        name: "Account deletion scheduled",
+        exact: true,
+      }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: `test-results/deletion-pending-${width}.png`,
+      fullPage: true,
+    });
+    await page
+      .getByRole("button", { name: "Cancel account deletion", exact: true })
+      .click();
+    await page.getByLabel("Password", { exact: true }).fill("wrong password");
+    await page
+      .getByRole("button", { name: "Verify and cancel deletion" })
+      .click();
+    await expect(page.locator("#auth-error")).toHaveText(
+      "Email or password is incorrect.",
+    );
+    await page.getByLabel("Password", { exact: true }).fill(password);
+    await page
+      .getByRole("button", { name: "Verify and cancel deletion" })
+      .click();
+    await expect(page).toHaveURL("/");
+    expect(
+      (await db.user.findUniqueOrThrow({ where: { id: owner.userId } }))
+        .deletionScheduledFor,
+    ).toBeNull();
+    expect(
+      await db.authSession.count({ where: { userId: owner.userId } }),
+    ).toBe(1);
   });
-test("real storage AccessDenied retains account and files with clear retry guidance", async ({
+async function workerTick() {
+  await db.backgroundJob.upsert({
+    where: { id: "account_cleanup" },
+    create: { id: "account_cleanup", dueAt: new Date(0) },
+    update: {
+      dueAt: new Date(0),
+      state: "pending",
+      leaseToken: null,
+      leaseUntil: null,
+    },
+  });
+  const { execFileSync } = await import("node:child_process");
+  for (let n = 0; n < 3; n++)
+    execFileSync(
+      process.execPath,
+      ["--conditions=react-server", "dist-worker/worker/main.js", "--once"],
+      {
+        env: {
+          ...process.env,
+          APP_URL: origin,
+          NEXTAUTH_URL: origin,
+          S3_ENDPOINT: "http://127.0.0.1:3197",
+          S3_REGION: "test",
+          S3_BUCKET: "private",
+          S3_ACCESS_KEY_ID: "fixture",
+          S3_SECRET_ACCESS_KEY: "fixture",
+          S3_VERSIONING: "unversioned",
+        },
+      },
+    );
+}
+test("worker waits for deadline, retries real storage failure and completes cleanup", async ({
   page,
 }) => {
   const owner = await account(page);
@@ -150,50 +237,58 @@ test("real storage AccessDenied retains account and files with clear retry guida
     where: { id: owner.documentId },
   });
   const path = "/private/" + doc.objectKey;
-  const setDenied = (denied: boolean) =>
+  const deny = (denied: boolean) =>
     page.request.post("http://127.0.0.1:3197/__test/delete-failure", {
       headers: { authorization: "Bearer fixture-admin" },
       data: { path, denied },
     });
-  await setDenied(true);
+  await deny(true);
   try {
-    await page.goto("/profile");
-    await page
-      .getByRole("button", { name: "Delete my account", exact: true })
-      .click();
-    await fillConfirmation(page);
-    await page
-      .getByRole("button", { name: "Permanently delete account", exact: true })
-      .click();
+    const scheduled = await page.request.delete("/api/account", {
+      headers: { origin },
+      data: { password, confirmation: "DELETE" },
+    });
+    expect(scheduled.status()).toBe(202);
+    await workerTick();
+    expect(
+      (await db.user.findUniqueOrThrow({ where: { id: owner.userId } }))
+        .deletionStartedAt,
+    ).toBeNull();
+    await db.user.update({
+      where: { id: owner.userId },
+      data: { deletionScheduledFor: new Date(0) },
+    });
+    await workerTick();
+    const failed = await db.user.findUniqueOrThrow({
+      where: { id: owner.userId },
+    });
+    expect(failed.deletionStartedAt).not.toBeNull();
+    expect(failed.deletionAttempts).toBeGreaterThan(0);
+    expect((await page.request.get("/api/me")).status()).toBe(401);
+    await page.goto("/sign-in");
+    await page.getByLabel("Email", { exact: true }).fill(owner.email);
+    await page.getByLabel("Password", { exact: true }).fill(password);
+    await page.getByRole("button", { name: "Sign in securely" }).click();
     await expect(
-      page
-        .getByRole("region", { name: "Delete account", exact: true })
-        .getByRole("alert"),
-    ).toContainText("Your account and cleanup records remain");
+      page.getByRole("heading", {
+        name: "Account deletion is being processed",
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: "Cancel account deletion",
+        exact: true,
+      }),
+    ).toHaveCount(0);
+    await deny(false);
+    await db.user.update({
+      where: { id: owner.userId },
+      data: { deletionRetryAt: new Date(0) },
+    });
+    await workerTick();
     expect(
       await db.user.findUnique({ where: { id: owner.userId } }),
-    ).not.toBeNull();
-    expect((await page.request.get("/api/me")).status()).toBe(200);
-    expect(
-      (
-        await page.request.get("http://127.0.0.1:3197" + path, {
-          headers: { authorization: "Bearer fixture" },
-        })
-      ).status(),
-    ).toBe(200);
-    await page.setViewportSize({ width: 320, height: 900 });
-    await page.screenshot({
-      path: "test-results/account-delete-storage-failure-320.png",
-      fullPage: true,
-    });
-    await page.reload();
-    await expect(page.getByRole("status")).toContainText("has not finished");
-    await setDenied(false);
-    await fillConfirmation(page);
-    await page
-      .getByRole("button", { name: "Continue account deletion", exact: true })
-      .click();
-    await expect(page).toHaveURL(/\/sign-in\?account=deleted$/);
+    ).toBeNull();
     expect(
       (
         await page.request.get("http://127.0.0.1:3197" + path, {
@@ -202,7 +297,7 @@ test("real storage AccessDenied retains account and files with clear retry guida
       ).status(),
     ).toBe(404);
   } finally {
-    await setDenied(false);
+    await deny(false);
   }
 });
 test("rejects cross-origin deletion and target-user injection before cleanup", async ({
@@ -241,4 +336,31 @@ test("rejects cross-origin deletion and target-user injection before cleanup", a
     await db.user.findUnique({ where: { id: owner.userId } }),
   ).not.toBeNull();
   expect(await db.user.findUnique({ where: { id: other.id } })).not.toBeNull();
+});
+
+test("sign-in distinguishes invalid credentials from authentication infrastructure failures", async ({
+  page,
+}) => {
+  await page.goto("/sign-in");
+  await page
+    .getByLabel("Email", { exact: true })
+    .fill(`unknown-${randomUUID()}@example.test`);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Sign in securely" }).click();
+  await expect(page.locator("#auth-error")).toHaveText(
+    "Email or password is incorrect.",
+  );
+  await page.route("**/api/auth/callback/credentials", (route) =>
+    route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({
+        url: origin + "/sign-in?error=SignInUnavailable",
+      }),
+    }),
+  );
+  await page.getByRole("button", { name: "Sign in securely" }).click();
+  await expect(page.locator("#auth-error")).toHaveText(
+    "Sign-in is temporarily unavailable. Please try again shortly.",
+  );
 });

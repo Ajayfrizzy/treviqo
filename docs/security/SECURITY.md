@@ -145,6 +145,19 @@ Milestone 7 adds per-user Redis limits to uploads, signed links, writes and expe
 
 New accounts require 8–128 characters including uppercase A–Z, lowercase a–z, a digit 0–9, and a non-letter/non-number/non-whitespace special character. Client and server import `src/modules/auth/validation.ts`; passwords are never trimmed or truncated. Sign-in uses its shared presence/maximum-length schema to preserve existing passphrase accounts. Argon2id parameters, dummy hashing, revocation, CSRF, encrypted cookies, ownership and throttling remain unchanged. Profile selects only the authenticated owner's email server-side; public session/API serialization remains unchanged.
 
-## Profile account deletion
+## Scheduled deletion and credential errors (7 October 2026)
 
-Profile now provides password re-authentication plus typed DELETE confirmation. The owner-only, same-origin API persists deletion intent, blocks new uploads, and requires verified cleanup of every owned object/version before a Serializable child-first transaction revokes all sessions and removes all account records, with User last. Storage AccessDenied leaves a clearly reported incomplete deletion and durable keys/checkpoints for retry. Successful responses clear NextAuth cookies and return to sign-in. Passwords, object keys and provider errors are never logged. Provider backups/retained AI copies and downloaded copies are explicitly outside active-system cleanup. See [deletion order, concurrency, failure recovery and Rumpty requirements](ACCOUNT_DELETION.md). Earlier document-vault notes describe document-only deletion, not this account flow.
+The earlier immediate Profile erasure flow is superseded by the
+[scheduled deletion lifecycle](ACCOUNT_DELETION.md). Scheduling and cancellation
+require current credentials, are account-locked and audited, and revoke old
+sessions. Pending/deleting accounts cannot create or use application sessions.
+The credentials provider reveals lifecycle state only after verifying the password;
+cancellation is rejected at or after the deadline and once cleanup has started.
+A restricted pending screen never grants an application session. Invalid credentials
+and infrastructure failures have distinct generic messages without provider details.
+
+The worker purges storage and removes children before User, with durable checkpoints
+and bounded per-account backoff. Unversioned Rumpty cleanup uses HEAD/DELETE/HEAD;
+version enumeration is explicitly configured for versioned deployments. Verify
+actual provider versioning and retention before rollout. No credentials or document
+contents are written to deletion audit records or retry metadata.

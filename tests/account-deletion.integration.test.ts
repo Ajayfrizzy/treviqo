@@ -9,6 +9,11 @@ import {
 } from "vitest";
 import { readFileSync } from "node:fs";
 import { getDb } from "@/server/db/client";
+import { authenticateCredentials } from "@/modules/auth/credentials";
+import { DELETION_GRACE_MS } from "@/modules/account/shared";
+vi.mock("@/modules/auth/rate-limit", () => ({
+  allowCredentialAttempt: async () => true,
+}));
 import { hashPassword } from "@/modules/auth/password";
 import { accountDeletionService } from "@/modules/account/service";
 import { documentService } from "@/modules/documents/service";
@@ -26,6 +31,16 @@ let store: FakeStorage;
 const allow = vi.fn(async () => true);
 const service = (client = db) =>
   accountDeletionService(client, { storage: () => store, allow });
+async function cleanupDue(client = db) {
+  const user = await db.user.findUnique({ where: { id: owner } });
+  if (user && !user.deletionScheduledFor)
+    await service().schedule(owner, input);
+  const current = await db.user.findUnique({ where: { id: owner } });
+  return service(client).cleanup(
+    owner,
+    current?.deletionScheduledFor ?? new Date(),
+  );
+}
 async function addDoc(
   userId = owner,
   employmentId = job,
@@ -110,7 +125,7 @@ it("wrong password or confirmation cannot change intent, records, sessions or st
     { ...input, confirmation: "delete" },
     { ...input, userId: other },
   ])
-    await expect(service().remove(owner, raw)).rejects.toThrow();
+    await expect(service().schedule(owner, raw)).rejects.toThrow();
   expect(
     (await db.user.findUniqueOrThrow({ where: { id: owner } }))
       .deletionStartedAt,
@@ -201,7 +216,7 @@ it("reauthenticates with the untrimmed current password, removes every dependent
     },
   });
   await expect(db.user.delete({ where: { id: owner } })).rejects.toThrow(); // Real restrictive FKs.
-  expect(await service().remove(owner, input)).toEqual({ status: "deleted" });
+  expect(await cleanupDue()).toEqual({ status: "deleted" });
   for (const session of sessions)
     expect(await isAuthSessionActive(session.id, owner)).toBe(false);
   expect(await isAuthSessionActive(otherSession.id, other)).toBe(true);
@@ -233,12 +248,12 @@ it("reauthenticates with the untrimmed current password, removes every dependent
     await db.employmentDocument.findUnique({ where: { id: foreign.id } }),
   ).not.toBeNull();
 });
-it("retains a recoverable account on AccessDenied, blocks uploads/access, and permits explicit retry", async () => {
+it("retains a disabled account on AccessDenied, blocks uploads/access, and permits worker retry", async () => {
   const doc = await addDoc();
   const session = await createAuthSession(owner);
   store.failDelete = true;
-  await expect(service().remove(owner, input)).rejects.toThrow();
-  await expect(service().remove(owner, input)).rejects.toThrow();
+  await expect(cleanupDue()).rejects.toThrow();
+  await expect(cleanupDue()).rejects.toThrow();
   expect(store.objects.has(doc.objectKey)).toBe(true);
   expect(
     (await db.user.findUniqueOrThrow({ where: { id: owner } }))
@@ -248,7 +263,7 @@ it("retains a recoverable account on AccessDenied, blocks uploads/access, and pe
     (await db.employmentDocument.findUniqueOrThrow({ where: { id: doc.id } }))
       .storagePurgedAt,
   ).toBeNull();
-  expect(await isAuthSessionActive(session.id, owner)).toBe(true);
+  expect(await isAuthSessionActive(session.id, owner)).toBe(false);
   const documents = documentService(db, () => store);
   await expect(
     documents.upload(
@@ -265,21 +280,21 @@ it("retains a recoverable account on AccessDenied, blocks uploads/access, and pe
   });
   expect(store.writes).toBe(0);
   store.failDelete = false;
-  expect(await service().remove(owner, input)).toEqual({ status: "deleted" });
+  expect(await cleanupDue()).toEqual({ status: "deleted" });
   expect(await isAuthSessionActive(session.id, owner)).toBe(false);
 });
 it("removes failed and historically deleted objects, checkpoints partial cleanup, and resumes in bounded batches", async () => {
   for (const status of ["ready", "failed", "deleted", "ready"] as const)
     await addDoc(owner, job, status);
   const foreign = await addDoc(other, otherJob);
-  expect(await service().remove(owner, input)).toEqual({ status: "pending" });
+  expect(await cleanupDue()).toEqual({ status: "pending" });
   expect(
     await db.employmentDocument.count({
       where: { userId: owner, storagePurgedAt: { not: null } },
     }),
   ).toBe(3);
   const removals = store.removals;
-  expect(await service().remove(owner, input)).toEqual({ status: "deleted" });
+  expect(await cleanupDue()).toEqual({ status: "deleted" });
   expect(store.removals).toBe(removals + 1);
   expect([...store.objects.keys()]).toEqual([foreign.objectKey]);
 });
@@ -296,15 +311,13 @@ it("recovers when object deletion succeeds but its checkpoint fails", async () =
       },
     },
   });
-  await expect(
-    service(guarded as unknown as typeof db).remove(owner, input),
-  ).rejects.toThrow();
+  await expect(cleanupDue(guarded as unknown as typeof db)).rejects.toThrow();
   expect(store.objects.size).toBe(0);
   expect(
     (await db.employmentDocument.findUniqueOrThrow({ where: { id: doc.id } }))
       .storagePurgedAt,
   ).toBeNull();
-  expect(await service().remove(owner, input)).toEqual({ status: "deleted" });
+  expect(await cleanupDue()).toEqual({ status: "deleted" });
 });
 it("rolls back all database/session cleanup when final User deletion fails, then resumes without re-purging", async () => {
   await addDoc();
@@ -318,42 +331,43 @@ it("rolls back all database/session cleanup when final User deletion fails, then
       },
     },
   });
-  await expect(
-    service(guarded as unknown as typeof db).remove(owner, input),
-  ).rejects.toThrow("transaction failure");
+  await expect(cleanupDue(guarded as unknown as typeof db)).rejects.toThrow(
+    "transaction failure",
+  );
   expect(await db.employment.count({ where: { userId: owner } })).toBe(1);
   expect(await db.employmentDocument.count({ where: { userId: owner } })).toBe(
     1,
   );
-  expect(await isAuthSessionActive(session.id, owner)).toBe(true);
+  expect(await isAuthSessionActive(session.id, owner)).toBe(false);
   const count = store.removals;
-  expect(await service().remove(owner, input)).toEqual({ status: "deleted" });
+  expect(await cleanupDue()).toEqual({ status: "deleted" });
   expect(store.removals).toBe(count);
 });
 it("rejects cross-user password use and unauthenticated or repeated stale calls", async () => {
-  await expect(service().remove(other, input)).rejects.toMatchObject({
+  await expect(service().schedule(other, input)).rejects.toMatchObject({
     status: 403,
   });
-  await expect(service().remove("", input)).rejects.toMatchObject({
+  await expect(service().schedule("", input)).rejects.toMatchObject({
     status: 401,
   });
-  expect(await service().remove(owner, input)).toEqual({ status: "deleted" });
-  await expect(service().remove(owner, input)).rejects.toMatchObject({
+  expect(await cleanupDue()).toEqual({ status: "deleted" });
+  await expect(service().schedule(owner, input)).rejects.toMatchObject({
     status: 403,
   });
   expect(await db.user.findUnique({ where: { id: other } })).not.toBeNull();
 });
-it("rejects unfinished upload reservations before irreversible cleanup", async () => {
+it("schedules unfinished reservations without deleting files during the grace period", async () => {
   await addDoc(owner, job, "uploaded");
-  await expect(service().remove(owner, input)).rejects.toMatchObject({
-    status: 409,
-  });
+  await service().schedule(owner, input);
   expect(store.removals).toBe(0);
   expect(
     (await db.user.findUniqueOrThrow({ where: { id: owner } }))
       .deletionStartedAt,
   ).toBeNull();
+  expect(await service().cleanup(owner)).toEqual({ status: "not_due" });
+  expect(await cleanupDue()).toEqual({ status: "deleted" });
 });
+
 it("serializes against an in-flight storage PUT and never deletes its key before the upload finishes", async () => {
   let finish!: () => void, began!: () => void;
   const writing = new Promise<void>((resolve) => {
@@ -377,18 +391,16 @@ it("serializes against an in-flight storage PUT and never deletes its key before
     100000,
   );
   await writing;
-  const deleting = service()
-    .remove(owner, input)
-    .then(
-      (value) => ({ value }),
-      (error) => ({ error }),
-    );
+  const deleting = cleanupDue().then(
+    (value) => ({ value }),
+    (error) => ({ error }),
+  );
   finish();
   await uploading;
   const outcome = await deleting;
   if ("error" in outcome) {
     expect(outcome.error.status).toBe(409);
-    await service().remove(owner, input);
+    await cleanupDue();
   }
   expect(store.objects.size).toBe(0);
   expect(await db.user.findUnique({ where: { id: owner } })).toBeNull();
@@ -396,10 +408,225 @@ it("serializes against an in-flight storage PUT and never deletes its key before
 it("fails closed when password throttling is exhausted or unavailable", async () => {
   await addDoc();
   allow.mockResolvedValueOnce(false);
-  await expect(service().remove(owner, input)).rejects.toMatchObject({
+  await expect(cleanupDue()).rejects.toMatchObject({
     status: 429,
   });
   allow.mockRejectedValueOnce(new Error("cache unavailable"));
-  await expect(service().remove(owner, input)).rejects.toThrow();
+  await expect(cleanupDue()).rejects.toThrow();
+  expect(store.removals).toBe(0);
+});
+
+it("schedules exactly seven days ahead, preserves data, revokes every session and blocks new sessions/uploads", async () => {
+  const doc = await addDoc();
+  await createAuthSession(owner);
+  await createAuthSession(owner);
+  const now = new Date();
+  const scheduling = accountDeletionService(db, {
+    allow,
+    clock: () => now,
+    storage: () => store,
+  });
+  const result = await scheduling.schedule(owner, input);
+  expect(Date.parse(result.deletionScheduledFor) - now.getTime()).toBe(
+    DELETION_GRACE_MS,
+  );
+  expect(await scheduling.schedule(owner, input)).toEqual(result);
+  expect(store.removals).toBe(0);
+  expect(await db.authSession.count({ where: { userId: owner } })).toBe(0);
+  expect(
+    await db.employmentDocument.findUnique({ where: { id: doc.id } }),
+  ).not.toBeNull();
+  await expect(createAuthSession(owner)).rejects.toThrow();
+  await expect(
+    documentService(db, () => store).upload(
+      owner,
+      { employmentId: job },
+      pdf,
+      "fixture.pdf",
+      "application/pdf",
+      100000,
+    ),
+  ).rejects.toMatchObject({ status: 409 });
+  const scheduled = new Date(result.deletionScheduledFor);
+  expect(
+    await scheduling.cleanup(owner, new Date(scheduled.getTime() - 1)),
+  ).toEqual({ status: "not_due" });
+  expect(await scheduling.cleanup(owner, scheduled)).toEqual({
+    status: "deleted",
+  });
+  expect(await scheduling.cleanup(owner, scheduled)).toEqual({
+    status: "deleted",
+  });
+});
+
+it("reveals pending state only after password verification, cancels safely, and creates a fresh session", async () => {
+  const { email } = await db.user.findUniqueOrThrow({ where: { id: owner } });
+  const old = await createAuthSession(owner);
+  const result = await service().schedule(owner, input);
+  expect(
+    await authenticateCredentials({ email, password: "wrong" }),
+  ).toBeNull();
+  expect(
+    await authenticateCredentials({
+      email,
+      password: "wrong",
+      cancelDeletion: "true",
+    }),
+  ).toBeNull();
+  await expect(authenticateCredentials({ email, password })).rejects.toThrow(
+    `DeletionPending:${result.deletionScheduledFor}`,
+  );
+  expect(await db.authSession.count({ where: { userId: owner } })).toBe(0);
+  expect(
+    await authenticateCredentials({ email, password, cancelDeletion: "true" }),
+  ).toEqual({ id: owner });
+  expect(
+    (await db.user.findUniqueOrThrow({ where: { id: owner } }))
+      .deletionScheduledFor,
+  ).toBeNull();
+  const fresh = await createAuthSession(owner);
+  expect(fresh.id).not.toBe(old.id);
+  expect(await isAuthSessionActive(old.id, owner)).toBe(false);
+  expect(await isAuthSessionActive(fresh.id, owner)).toBe(true);
+});
+
+it("rejects cancellation at the deadline and during irreversible processing", async () => {
+  const user = await db.user.findUniqueOrThrow({ where: { id: owner } });
+  await service().schedule(owner, input);
+  await db.user.update({
+    where: { id: owner },
+    data: { deletionScheduledFor: new Date(0) },
+  });
+  await expect(
+    authenticateCredentials({
+      email: user.email,
+      password,
+      cancelDeletion: "true",
+    }),
+  ).rejects.toThrow("DeletionProcessing");
+  await db.user.update({
+    where: { id: owner },
+    data: {
+      deletionStartedAt: new Date(),
+      deletionScheduledFor: new Date(Date.now() + DELETION_GRACE_MS),
+    },
+  });
+  await expect(
+    authenticateCredentials({
+      email: user.email,
+      password,
+      cancelDeletion: "true",
+    }),
+  ).rejects.toThrow("DeletionProcessing");
+});
+
+it("backs off failed worker cleanup, keeps the user disabled, and retries absent objects idempotently", async () => {
+  const doc = await addDoc();
+  const scheduled = await service().schedule(owner, input);
+  const now = new Date(scheduled.deletionScheduledFor);
+  store.failDelete = true;
+  expect(await service().processDue(new Date(now.getTime() - 1))).toBe(false);
+  expect(await service().processDue(now)).toBe(true);
+  const failed = await db.user.findUniqueOrThrow({ where: { id: owner } });
+  expect(failed.deletionStartedAt).not.toBeNull();
+  expect(failed.deletionAttempts).toBe(1);
+  expect(failed.deletionRetryAt!.getTime()).toBe(now.getTime() + 10000);
+  expect(await service().processDue(now)).toBe(false);
+  store.failDelete = false;
+  store.objects.delete(doc.objectKey); // Already manually absent is successful cleanup.
+  expect(await service().processDue(failed.deletionRetryAt!)).toBe(true);
+  expect(await db.user.findUnique({ where: { id: owner } })).toBeNull();
+  expect(await service().processDue(failed.deletionRetryAt!)).toBe(false);
+});
+
+it("rolls scheduling back if its audit cannot commit, retaining active sessions", async () => {
+  const session = await createAuthSession(owner);
+  const guarded = db.$extends({
+    query: {
+      auditEvent: {
+        async create() {
+          throw new Error("audit unavailable");
+        },
+      },
+    },
+  });
+  await expect(
+    service(guarded as unknown as typeof db).schedule(owner, input),
+  ).rejects.toThrow("audit unavailable");
+  expect(
+    (await db.user.findUniqueOrThrow({ where: { id: owner } }))
+      .deletionScheduledFor,
+  ).toBeNull();
+  expect(await isAuthSessionActive(session.id, owner)).toBe(true);
+});
+
+it("records scheduling once and cancellation without credentials or document details", async () => {
+  await service().schedule(owner, input);
+  await service().schedule(owner, input);
+  const account = await db.user.findUniqueOrThrow({ where: { id: owner } });
+  await authenticateCredentials({
+    email: account.email,
+    password,
+    cancelDeletion: "true",
+  });
+  const events = await db.auditEvent.findMany({
+    where: { userId: owner },
+    orderBy: { createdAt: "asc" },
+  });
+  expect(events.map((event) => event.action)).toEqual([
+    "account_deletion_scheduled",
+    "account_deletion_cancelled",
+  ]);
+  expect(events.every((event) => event.employmentId === null)).toBe(true);
+  expect(JSON.stringify(events)).not.toContain(password);
+});
+
+it("deletes User only after child deletion operations have succeeded", async () => {
+  await addDoc();
+  const operations: string[] = [];
+  const traced = db.$extends({
+    query: {
+      $allModels: {
+        async $allOperations({ model, operation, args, query }) {
+          const result = await query(args);
+          if (operation === "delete" || operation === "deleteMany")
+            operations.push(`${model}.${operation}`);
+          return result;
+        },
+      },
+    },
+  });
+  await cleanupDue(traced as unknown as typeof db);
+  expect(operations.at(-1)).toBe("User.delete");
+  expect(operations).toContain("EmploymentDocument.deleteMany");
+  expect(operations).toContain("Employment.deleteMany");
+  expect(operations).toContain("AuditEvent.deleteMany");
+});
+
+it("a stale worker selection cannot recreate cleanup metadata after cancellation", async () => {
+  const scheduled = await service().schedule(owner, input);
+  const account = await db.user.findUniqueOrThrow({ where: { id: owner } });
+  const guarded = db.$extends({
+    query: {
+      user: {
+        async findFirst({ args, query }) {
+          const result = await query(args);
+          await authenticateCredentials({
+            email: account.email,
+            password,
+            cancelDeletion: "true",
+          });
+          return result;
+        },
+      },
+    },
+  });
+  await service(guarded as unknown as typeof db).processDue(
+    new Date(scheduled.deletionScheduledFor),
+  );
+  const current = await db.user.findUniqueOrThrow({ where: { id: owner } });
+  expect(current.deletionScheduledFor).toBeNull();
+  expect(current.deletionStartedAt).toBeNull();
+  expect(current.deletionRetryAt).toBeNull();
   expect(store.removals).toBe(0);
 });

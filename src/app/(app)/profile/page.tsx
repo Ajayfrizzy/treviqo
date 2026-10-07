@@ -7,7 +7,7 @@ export default async function Profile() {
   const user = await employmentPageUser();
   const account = await getDb().user.findUniqueOrThrow({
     where: { id: user.id },
-    select: { email: true, deletionStartedAt: true },
+    select: { email: true },
   });
   return (
     <>
@@ -47,7 +47,7 @@ export default async function Profile() {
           <SignOutButton />
         </section>
       </div>
-      <DeleteAccount pending={Boolean(account.deletionStartedAt)} />
+      <DeleteAccount />
     </>
   );
 }

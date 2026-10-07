@@ -8,6 +8,7 @@ import {
   verifyPassword,
   verifyMissingPassword,
 } from "./password";
+import { CredentialStateError } from "./sign-in-state";
 import { allowCredentialAttempt } from "./rate-limit";
 
 export class RegistrationError extends Error {
@@ -74,7 +75,8 @@ export async function authenticateCredentials(
   const parsed = signInSchema.safeParse(input);
   if (!parsed.success) return null;
   const { email, password } = parsed.data;
-  if (!(await allowCredentialAttempt(email))) return null;
+  if (!(await allowCredentialAttempt(email)))
+    throw new CredentialStateError("SignInUnavailable");
   const user = await getDb().user.findUnique({
     where: { email },
     select: { id: true, passwordHash: true },
@@ -84,5 +86,40 @@ export async function authenticateCredentials(
     return null;
   }
   if (!(await verifyPassword(user.passwordHash, password))) return null;
-  return { id: user.id };
+  return getDb().$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${user.id} FOR UPDATE`;
+    const current = await tx.user.findUnique({ where: { id: user.id } });
+    if (!current || current.passwordHash !== user.passwordHash) return null;
+    if (
+      current.deletionStartedAt ||
+      (current.deletionScheduledFor &&
+        current.deletionScheduledFor <= new Date())
+    )
+      throw new CredentialStateError("DeletionProcessing");
+    if (current.deletionScheduledFor) {
+      const cancel =
+        typeof input === "object" &&
+        input !== null &&
+        "cancelDeletion" in input &&
+        input.cancelDeletion === "true";
+      if (!cancel)
+        throw new CredentialStateError(
+          `DeletionPending:${current.deletionScheduledFor.toISOString()}`,
+        );
+      // The account lock serializes cancellation with the worker and scheduling.
+      await tx.user.update({
+        where: { id: user.id },
+        data: {
+          deletionScheduledFor: null,
+          deletionRetryAt: null,
+          deletionAttempts: 0,
+        },
+      });
+      await tx.authSession.deleteMany({ where: { userId: user.id } });
+      await tx.auditEvent.create({
+        data: { userId: user.id, action: "account_deletion_cancelled" },
+      });
+    }
+    return { id: user.id };
+  });
 }

@@ -28,6 +28,7 @@ const schema = z.object({
   S3_BUCKET: optional(z.string().min(1)),
   S3_ACCESS_KEY_ID: optional(z.string().min(1)),
   S3_SECRET_ACCESS_KEY: optional(z.string().min(1)),
+  S3_VERSIONING: z.enum(["unversioned", "versioned"]).default("unversioned"),
   S3_FORCE_PATH_STYLE: z
     .enum(["true", "false"])
     .default("true")

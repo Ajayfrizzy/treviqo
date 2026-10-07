@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import type Redis from "ioredis";
+import { accountDeletionService } from "@/modules/account/service";
 import { reminderService } from "@/modules/reminders/service";
 import { getDb } from "@/server/db/client";
 import { getRedis } from "@/server/redis/client";
@@ -33,10 +34,18 @@ export function jobRunner(
   clock = () => new Date(),
 ) {
   async function perform(id: JobId, cursor: string | null) {
+    if (id === "account_cleanup")
+      return {
+        cursor: null,
+        more: await accountDeletionService(db).processDue(clock()),
+      };
     if (id === "session_cleanup")
       return { cursor: null, more: await cleanExpiredSessions(db, clock()) };
     const rows = await db.exitCase.findMany({
-      where: cursor ? { id: { gt: cursor } } : {},
+      where: {
+        ...(cursor ? { id: { gt: cursor } } : {}),
+        user: { deletionScheduledFor: null, deletionStartedAt: null },
+      },
       select: { id: true, userId: true },
       orderBy: { id: "asc" },
       take: 20,

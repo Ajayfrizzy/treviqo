@@ -106,11 +106,11 @@ export function documentService(
         await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
         const user = await tx.user.findUnique({
           where: { id: userId },
-          select: { deletionStartedAt: true },
+          select: { deletionStartedAt: true, deletionScheduledFor: true },
         });
-        if (!user || user.deletionStartedAt)
+        if (!user || user.deletionStartedAt || user.deletionScheduledFor)
           throw new DocumentError(
-            "Account deletion has started. Return to Profile to finish deletion; new uploads are blocked.",
+            "Your account is disabled for scheduled deletion. New uploads are blocked.",
             409,
           );
       }

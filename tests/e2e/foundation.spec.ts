@@ -145,7 +145,7 @@ test("real registration, generic login failures, persistence and logout invalida
       .fill("Wrong long fixture password");
     await page.getByRole("button", { name: "Sign in securely" }).click();
     await expect(page.getByRole("main").getByRole("alert")).toHaveText(
-      "Unable to sign in. Check your details or try again later.",
+      "Email or password is incorrect.",
     );
   }
   await login(page, email);

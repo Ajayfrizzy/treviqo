@@ -4,12 +4,12 @@ import { deleteAccountSchema } from "@/modules/account/shared";
 const mocks = vi.hoisted(() => ({
   user: vi.fn(),
   allow: vi.fn(),
-  remove: vi.fn(),
+  schedule: vi.fn(),
 }));
 vi.mock("@/modules/auth/session", () => ({ getCurrentUser: mocks.user }));
 vi.mock("@/modules/auth/rate-limit", () => ({ allowAuthRequest: mocks.allow }));
 vi.mock("@/modules/account/service", () => ({
-  accountDeletionService: () => ({ remove: mocks.remove }),
+  accountDeletionService: () => ({ schedule: mocks.schedule }),
 }));
 import { DELETE } from "@/app/api/account/route";
 const input = { password: " current password ", confirmation: "DELETE" };
@@ -48,7 +48,7 @@ it("requires exact confirmation, preserves passwords, and prohibits target-user 
 it("requires authentication before cleanup", async () => {
   mocks.user.mockResolvedValue(null);
   expect((await DELETE(req())).status).toBe(401);
-  expect(mocks.remove).not.toHaveBeenCalled();
+  expect(mocks.schedule).not.toHaveBeenCalled();
 });
 it.each([
   [{ origin: "https://foreign.test" }, 403],
@@ -57,7 +57,7 @@ it.each([
   "rejects foreign origin or unsupported bodies",
   async (headers, status) => {
     expect((await DELETE(req(input, headers))).status).toBe(status);
-    expect(mocks.remove).not.toHaveBeenCalled();
+    expect(mocks.schedule).not.toHaveBeenCalled();
   },
 );
 it("bounds streamed input and fails closed on unavailable rate limiting", async () => {
@@ -66,18 +66,24 @@ it("bounds streamed input and fails closed on unavailable rate limiting", async 
   const response = await DELETE(req());
   expect(response.status).toBe(503);
   expect(await response.text()).not.toContain("private secret");
-  expect(mocks.remove).not.toHaveBeenCalled();
+  expect(mocks.schedule).not.toHaveBeenCalled();
 });
 it("derives ownership only from the session and clears all auth cookie variants after success", async () => {
-  mocks.remove.mockResolvedValue({ status: "deleted" });
+  mocks.schedule.mockResolvedValue({
+    status: "scheduled",
+    deletionScheduledFor: "2026-10-14T00:00:00.000Z",
+  });
   const response = await DELETE(
     req(input, {
       cookie:
         "next-auth.session-token.0=private; __Secure-next-auth.session-token.1=private; other=keep",
     }),
   );
-  expect(mocks.remove).toHaveBeenCalledExactlyOnceWith("session-owner", input);
-  expect(response.status).toBe(200);
+  expect(mocks.schedule).toHaveBeenCalledExactlyOnceWith(
+    "session-owner",
+    input,
+  );
+  expect(response.status).toBe(202);
   expect(response.headers.get("cache-control")).toBe("private, no-store");
   const cookies = response.cookies.getAll();
   for (const name of [
@@ -94,22 +100,15 @@ it("derives ownership only from the session and clears all auth cookie variants 
     });
   expect(cookies.some((c) => c.name === "other")).toBe(false);
 });
-it("does not clear cookies or claim success for partial cleanup or provider failure", async () => {
-  mocks.remove.mockResolvedValueOnce({ status: "pending" });
-  const pending = await DELETE(req());
-  expect(pending.status).toBe(202);
-  expect(pending.headers.has("set-cookie")).toBe(false);
-  mocks.remove.mockRejectedValueOnce(
+it("does not clear cookies or claim success when scheduling fails", async () => {
+  mocks.schedule.mockRejectedValueOnce(
     new Error("403 AccessDenied document-content password secret-key"),
   );
   const failed = await DELETE(req());
   expect(failed.status).toBe(503);
   expect(failed.headers.has("set-cookie")).toBe(false);
   const body = await failed.text();
-  expect(body).toContain("Your account and cleanup records remain");
+  expect(body).toContain("could not be scheduled");
   expect(body).not.toContain("secret-key");
   expect(body).not.toContain("document-content");
-  expect(console.error).toHaveBeenCalledExactlyOnceWith(
-    "account_deletion_incomplete",
-  );
 });

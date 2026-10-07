@@ -246,3 +246,18 @@ Follow [the ordered deployment and live acceptance procedure](FIRST_RUMPTY_DEPLO
 ## Deployment blocker follow-up
 
 See [private-network execution, S3/AI diagnosis and manual backup fallback](RUMPTY_BLOCKERS.md) for current results and operator steps. Internal PostgreSQL/Redis DNS is expected to require a Rumpty-hosted workload; no public access is needed.
+
+### Scheduled deletion rollout
+
+Apply `20261007020000_scheduled_account_deletion` only in an explicitly authorized
+rollout; release the matching web and worker artifacts together. The worker's
+`account_cleanup` job must run for scheduled deletion to finish. Monitor overdue
+accounts, retry dates/counters and global job health. Legacy partially deleted
+accounts become immediately due and remain non-cancellable.
+
+Configure `S3_VERSIONING` after verifying the bucket mode with Rumpty. Default
+`unversioned` uses HEAD/DELETE/HEAD without version enumeration; `versioned`
+requires exact-version listing/deletion support and permissions. Do not configure
+unversioned mode for a bucket retaining historical versions. Local fixtures do not
+establish live Rumpty versioning or retention behavior. See the
+[deletion specification](../security/ACCOUNT_DELETION.md).

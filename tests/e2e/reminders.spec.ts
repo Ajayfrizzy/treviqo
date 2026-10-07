@@ -57,7 +57,7 @@ async function generate(page: Page) {
   const exit = (await created.json()).exitCase;
   await db.backgroundJob.updateMany({ data: { dueAt: new Date(0) } });
   const { execFileSync } = await import("node:child_process");
-  for (let n = 0; n < 2; n++)
+  for (let n = 0; n < 3; n++)
     execFileSync(
       process.execPath,
       ["--conditions=react-server", "dist-worker/worker/main.js", "--once"],

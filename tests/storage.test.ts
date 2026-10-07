@@ -98,6 +98,8 @@ it("signs short-lived attachment downloads without caching", async () => {
 
 it("purges only exact owned versions and verifies current-object absence", async () => {
   configure();
+  vi.stubEnv("S3_VERSIONING", "versioned");
+  vi.stubEnv("S3_VERSIONING", "versioned");
   const { ListObjectVersionsCommand, DeleteObjectCommand, HeadObjectCommand } =
     await import("@aws-sdk/client-s3");
   const versions = new Set(["v1", "v2", "marker"]);
@@ -129,6 +131,7 @@ it.each(["list", "delete", "head"])(
   "fails closed on denied %s permission during account purge",
   async (denied) => {
     configure();
+    vi.stubEnv("S3_VERSIONING", "versioned");
     const {
       ListObjectVersionsCommand,
       DeleteObjectCommand,
@@ -153,6 +156,7 @@ it.each(["list", "delete", "head"])(
 );
 it("accepts an already missing object but not a retained object or incomplete inventory", async () => {
   configure();
+  vi.stubEnv("S3_VERSIONING", "versioned");
   const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
   mocks.send.mockImplementation(async (command) => {
     if (command instanceof HeadObjectCommand)
@@ -173,6 +177,7 @@ it("accepts an already missing object but not a retained object or incomplete in
 });
 it("verifies absence after a NoSuchKey retry and rejects unsupported version inventories", async () => {
   configure();
+  vi.stubEnv("S3_VERSIONING", "versioned");
   const { HeadObjectCommand, DeleteObjectCommand } =
     await import("@aws-sdk/client-s3");
   mocks.send.mockImplementation(async (command) => {
@@ -188,5 +193,74 @@ it("verifies absence after a NoSuchKey retry and rejects unsupported version inv
   mocks.send.mockResolvedValue({});
   await expect(getObjectStorage().purge("unknown")).rejects.toThrow(
     "inventory unavailable",
+  );
+});
+
+it.each(["NotFound", "NoSuchKey", "Http404"])(
+  "accepts an already absent unversioned Rumpty object (%s) without version listing",
+  async (name) => {
+    configure();
+    vi.stubEnv("S3_VERSIONING", "unversioned");
+    const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
+    mocks.send.mockImplementation(async (command) => {
+      expect(command).toBeInstanceOf(HeadObjectCommand);
+      throw Object.assign(new Error("missing"), {
+        name,
+        $metadata: { httpStatusCode: name === "Http404" ? 404 : undefined },
+      });
+    });
+    await getObjectStorage().purge("missing");
+    expect(mocks.send).toHaveBeenCalledTimes(1);
+  },
+);
+it("deletes and verifies unversioned objects without ListObjectVersions", async () => {
+  configure();
+  vi.stubEnv("S3_VERSIONING", "unversioned");
+  const { HeadObjectCommand, DeleteObjectCommand } =
+    await import("@aws-sdk/client-s3");
+  let exists = true;
+  mocks.send.mockImplementation(async (command) => {
+    if (command instanceof DeleteObjectCommand) {
+      exists = false;
+      return {};
+    }
+    expect(command).toBeInstanceOf(HeadObjectCommand);
+    if (!exists) throw Object.assign(new Error("absent"), { name: "NotFound" });
+    return {};
+  });
+  await getObjectStorage().purge("owned");
+  expect(mocks.send).toHaveBeenCalledTimes(3);
+});
+it("fails closed on inaccessible or retained unversioned objects", async () => {
+  configure();
+  vi.stubEnv("S3_VERSIONING", "unversioned");
+  mocks.send.mockRejectedValue(
+    Object.assign(new Error("denied"), { name: "AccessDenied" }),
+  );
+  await expect(getObjectStorage().purge("owned")).rejects.toThrow("denied");
+  mocks.send.mockResolvedValue({});
+  await expect(getObjectStorage().purge("owned")).rejects.toThrow(
+    "remains accessible",
+  );
+});
+it("rejects known versioned objects when configured for unversioned cleanup", async () => {
+  configure();
+  vi.stubEnv("S3_VERSIONING", "unversioned");
+  mocks.send.mockResolvedValue({ VersionId: "retained-version" });
+  await expect(getObjectStorage().purge("owned")).rejects.toThrow(
+    "Versioned object requires",
+  );
+  expect(mocks.send).toHaveBeenCalledTimes(1);
+});
+it("does not checkpoint unversioned objects when DeleteObject fails", async () => {
+  configure();
+  vi.stubEnv("S3_VERSIONING", "unversioned");
+  const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
+  mocks.send.mockImplementation(async (command) => {
+    if (command instanceof HeadObjectCommand) return {};
+    throw new Error("delete denied");
+  });
+  await expect(getObjectStorage().purge("owned")).rejects.toThrow(
+    "delete denied",
   );
 });

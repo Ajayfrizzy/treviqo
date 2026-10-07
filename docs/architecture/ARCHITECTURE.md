@@ -158,3 +158,14 @@ Benefit persists only new worker portability assessments, source document/field/
 ## Milestone 7 implementation
 
 The Milestone 7 worker extends this monolith with PostgreSQL durable job/cursor/lease state and a repairable Redis due queue. It invokes the existing exit/finance services to reconcile owned reminders and cleans expired sessions. No microservice API or external notification provider is added. See [Milestone 7](../milestones/REMINDERS_RELIABILITY_SECURITY.md). Earlier milestone descriptions of absent workers/automation describe their historical scope.
+
+## Scheduled account lifecycle
+
+Account deletion now uses the existing background-job outbox/Redis worker, not
+browser-driven permanent cleanup. User schedule/start timestamps define active,
+pending and deleting states; per-account retry metadata and document checkpoints
+support bounded cleanup. Auth session creation, scheduling and cancellation share
+the User lock with upload reservation/PUT. The credentials provider can return a
+verified pending/processing state without creating a session; cancellation requires
+fresh credentials and creates a fresh session afterward. See
+[account lifecycle details](../security/ACCOUNT_DELETION.md).

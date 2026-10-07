@@ -1,3 +1,4 @@
+// Run with node --conditions=react-server after building the worker.
 // Only run against the local standalone app with disposable PostgreSQL/Redis
 // and the test TLS S3 fixture. Never target deployed accounts or live storage.
 import assert from "node:assert/strict";
@@ -103,21 +104,25 @@ try {
     403,
   );
   await deny(true);
-  const failed = await request(
-    "/api/account",
-    json({ password, confirmation: "DELETE" }, "DELETE"),
-  );
-  assert.equal(failed.status, 503);
-  assert.match((await failed.json()).error, /cleanup records remain/);
-  assert.ok(await db.user.findUnique({ where: { id: user.id } }));
-  assert.equal((await request("/api/me")).status, 200);
-  await deny(false);
   const success = await request(
     "/api/account",
     json({ password, confirmation: "DELETE" }, "DELETE"),
   );
-  assert.equal(success.status, 200);
-  assert.equal((await success.json()).status, "deleted");
+  assert.equal(success.status, 202);
+  const scheduled = await success.json();
+  assert.equal(scheduled.status, "scheduled");
+  assert.ok(await db.user.findUnique({ where: { id: user.id } }));
+  assert.equal((await request("/api/me")).status, 401);
+  const { accountDeletionService } =
+    await import("../dist-worker/modules/account/service.js");
+  const cleanup = accountDeletionService(db);
+  assert.equal(await cleanup.processDue(), false);
+  await cleanup.processDue(new Date(scheduled.deletionScheduledFor));
+  const failed = await db.user.findUniqueOrThrow({ where: { id: user.id } });
+  assert.ok(failed.deletionStartedAt);
+  assert.equal(failed.deletionAttempts, 1);
+  await deny(false);
+  await cleanup.processDue(failed.deletionRetryAt);
   assert.ok(
     success.headers
       .getSetCookie()
@@ -147,7 +152,7 @@ try {
   );
   documentId = undefined;
   console.log(
-    "PASS: standalone production account deletion, current-password rejection, TLS object purge, AccessDenied recovery, all-session revocation, Secure-cookie clearing and User-last cleanup.",
+    "PASS: standalone scheduled deletion, password rejection, grace period, TLS worker purge/retry, all-session revocation, Secure-cookie clearing and User-last cleanup.",
   );
 } finally {
   if (deniedPath) await deny(false);

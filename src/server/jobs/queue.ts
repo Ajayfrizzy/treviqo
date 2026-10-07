@@ -2,7 +2,11 @@ import "server-only";
 import type Redis from "ioredis";
 export const QUEUE = "treviqo:jobs:due";
 export const HEARTBEAT = "treviqo:worker:heartbeat";
-export const jobIds = ["reminders", "session_cleanup"] as const;
+export const jobIds = [
+  "reminders",
+  "session_cleanup",
+  "account_cleanup",
+] as const;
 export type JobId = (typeof jobIds)[number];
 export const validJob = (id: string): id is JobId =>
   (jobIds as readonly string[]).includes(id);

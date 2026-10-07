@@ -8,22 +8,26 @@ datasource db {
 }
 
 model User {
-  id                String               @id @default(cuid())
+  id                   String               @id @default(cuid())
   // Preserve legacy identities without requiring an external provider.
-  issuer            String?
-  subject           String?
-  email             String?              @unique
-  passwordHash      String?
-  deletionStartedAt DateTime?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
-  sessions          AuthSession[]
-  employments       Employment[]
-  documents         EmploymentDocument[]
-  auditEvents       AuditEvent[]
-  exitCases         ExitCase[]
+  issuer               String?
+  subject              String?
+  email                String?              @unique
+  passwordHash         String?
+  deletionStartedAt    DateTime?
+  deletionScheduledFor DateTime?
+  deletionRetryAt      DateTime?
+  deletionAttempts     Int                  @default(0)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  sessions             AuthSession[]
+  employments          Employment[]
+  documents            EmploymentDocument[]
+  auditEvents          AuditEvent[]
+  exitCases            ExitCase[]
 
   @@unique([issuer, subject])
+  @@index([deletionScheduledFor, deletionRetryAt])
 }
 
 model AuthSession {
@@ -94,6 +98,8 @@ enum DocumentStatus {
 }
 
 enum AuditAction {
+  account_deletion_scheduled
+  account_deletion_cancelled
   document_uploaded
   document_access_issued
   document_deleted
@@ -151,7 +157,7 @@ model AuditEvent {
   exitCaseId   String?
   reminderId   String?
   benefitId    String?
-  employmentId String
+  employmentId String?
   action       AuditAction
   createdAt    DateTime    @default(now())
   user         User        @relation(fields: [userId], references: [id], onDelete: Restrict)

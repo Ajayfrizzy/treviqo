@@ -170,6 +170,13 @@ The document review no longer displays model, prompt or schema metadata. Plain-l
 
 See the [interaction refinement report](../milestones/UI_INTERACTION_REFINEMENT.md) for test results and manual-check limits.
 
-## Profile account deletion
+## Seven-day account deletion
 
-A separate bordered Danger area follows ordinary account/session cards. It explains active-system data deletion, all-session sign-out, irreversibility, backup/download limitations and partial storage failure before the form opens. The red destructive button is labelled explicitly; deletion requires the current password and typing DELETE. Cancel closes the form before submission. Busy state blocks repeated submissions and announces progress. Password and confirmation fields clear after every response. Pending batches and failures provide recovery guidance without claiming success; continuing requires fresh password/confirmation. After successful server cleanup, a full navigation returns to sign-in with a completion message. No other Profile feature is added. See [security/deletion specification](../security/ACCOUNT_DELETION.md).
+The earlier immediate-deletion copy is superseded. Profile explains immediate
+account disabling, seven-day scheduling, all-session logout and password-verified
+cancellation before the displayed deadline. It requires current password and DELETE.
+Confirmation shows the actual scheduled date/time in West Africa Time. A valid
+pending-account sign-in shows the restricted deletion screen, with cancel and leave
+scheduled actions; cancellation asks for credentials again. After the deadline,
+only processing/disabled information is shown. Unknown email and wrong password
+share identical copy; infrastructure errors have distinct temporary-unavailable copy.

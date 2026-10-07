@@ -144,9 +144,26 @@ Responsive browser journeys now cover 320/375/430/768/1440px across employment, 
 
 Employment browser checks assert equal-width Save/Cancel controls, a shared background with distinct Cancel border, and at least 12px spacing at 320/375/430/768/1024/1280/1440px. Extraction tests hold requests open to verify the clicked button's busy state, disabled repeat-click protection, one request per action, recovery after a failed save, and successful retry. They also verify that original excerpts remain visible while technical model/prompt/schema UI is absent. A delayed navigation test verifies immediate pending feedback and an accessible shell until the destination loads.
 
-## Account deletion
+## Scheduled account deletion
 
-`account-deletion.test.ts` tests strict confirmation/ownership input, authentication, Origin/body limits, cookie clearing and redacted errors. Storage unit tests cover exact-key version purge and fail-closed listing/delete/HEAD errors. `account-deletion.integration.test.ts` uses real Argon2/PostgreSQL for password failures, all dependent tables, session revocation, cross-user isolation, partial batches/checkpoints, transaction rollback, unfinished uploads and concurrent PUT coordination. `tests/e2e/account-deletion.spec.ts` covers the Profile danger flow at 320/375/430/1440px, wrong password, Cancel, success/sign-in, revoked copied sessions, actual synthetic S3 AccessDenied with recovery, and tampered target-user/Origin rejection. Run with disposable PostgreSQL/Redis after all migrations; do not target production. Document integration and auth/Profile browser regression suites remain required because upload locking and S3 fixture inventory support are shared.
+`account-deletion.test.ts` covers strict confirmation/ownership input, authentication,
+Origin/body limits, cookie clearing and redacted scheduling errors. Storage unit
+checks cover unversioned HEAD/DELETE/HEAD (including already-absent keys), explicit
+versioned purge, retained files and provider failures. `sign-in-state.test.ts`
+covers generic credential errors versus infrastructure errors and exact deadlines.
+
+`account-deletion.integration.test.ts` uses real Argon2/PostgreSQL for scheduling,
+revocation, disabled sessions/uploads, credential-gated pending state, cancellation,
+deadlines, all child tables, cross-user isolation, batches/checkpoints, transaction
+rollback, upload locking and retry backoff. `tests/e2e/account-deletion.spec.ts`
+checks Profile scheduling/cancellation at 320/375/430/1440px, wrong-password privacy,
+revoked copied sessions, the compiled worker's deadline gate and synthetic S3
+AccessDenied recovery, plus Origin/target-user rejection and sign-in errors.
+
+Use disposable PostgreSQL/Redis after all migrations, with synthetic S3/AI fixtures.
+`tests/account-deletion-production-smoke.mjs` now exercises scheduling plus worker
+cleanup and requires `node --conditions=react-server` and a built worker. Never run
+it against live accounts or storage. The smoke retains its loopback/database guard.
 
 ## Navigation performance
 

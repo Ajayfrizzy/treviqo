@@ -2,6 +2,7 @@ import "server-only";
 import type { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { getEnv } from "@/server/config/env";
+import { CredentialStateError } from "./sign-in-state";
 import { authenticateCredentials } from "./credentials";
 import {
   createAuthSession,
@@ -30,9 +31,15 @@ export function getAuthOptions(onSignOutError?: () => void): NextAuthOptions {
         credentials: {
           email: { label: "Email", type: "email" },
           password: { label: "Password", type: "password" },
+          cancelDeletion: { label: "Cancel scheduled deletion", type: "text" },
         },
         async authorize(credentials) {
-          return authenticateCredentials(credentials);
+          try {
+            return await authenticateCredentials(credentials);
+          } catch (error) {
+            if (error instanceof CredentialStateError) throw error;
+            throw new Error("SignInUnavailable");
+          }
         },
       }),
     ],

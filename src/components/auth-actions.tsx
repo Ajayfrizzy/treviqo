@@ -1,4 +1,10 @@
 "use client";
+import {
+  pendingDeletionDate,
+  signInErrorMessage,
+  SIGN_IN_UNAVAILABLE,
+} from "@/modules/auth/sign-in-state";
+import { deletionDateLabel } from "@/modules/account/shared";
 import { Button } from "./button";
 import { uiRequest } from "./ui-request";
 import { getCsrfToken, signIn } from "next-auth/react";
@@ -15,6 +21,10 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [created, setCreated] = useState(false);
+  const [pendingDate, setPendingDate] = useState<string | null>(null);
+  const [processingDeletion, setProcessingDeletion] = useState(false);
+  const [cancelDeletion, setCancelDeletion] = useState(false);
+  const [verifiedEmail, setVerifiedEmail] = useState("");
   const [password, setPassword] = useState("");
   const [visible, setVisible] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
@@ -72,20 +82,76 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
           email,
           password,
           redirect: false,
+          cancelDeletion: cancelDeletion ? "true" : "false",
         });
         if (!response?.ok || response.error) {
-          setError("Unable to sign in. Check your details or try again later.");
+          const scheduledFor = pendingDeletionDate(response?.error);
+          if (scheduledFor || response?.error === "DeletionProcessing") {
+            setVerifiedEmail(email);
+            setPassword("");
+            setPendingDate(scheduledFor);
+            setProcessingDeletion(response?.error === "DeletionProcessing");
+            setCancelDeletion(false);
+          } else {
+            setError(signInErrorMessage(response?.error));
+          }
           return;
         }
         router.replace("/");
         router.refresh();
       }
     } catch {
-      setError("We could not complete your request. Please try again.");
+      setError(
+        register
+          ? "We could not complete your request. Please try again."
+          : SIGN_IN_UNAVAILABLE,
+      );
     } finally {
       setBusy(false);
     }
   }
+  if ((pendingDate || processingDeletion) && !cancelDeletion)
+    return (
+      <section aria-labelledby="pending-deletion-title">
+        <h2 id="pending-deletion-title">
+          {processingDeletion
+            ? "Account deletion is being processed"
+            : "Account deletion scheduled"}
+        </h2>
+        {pendingDate && (
+          <p>
+            Your account is scheduled for deletion on{" "}
+            {deletionDateLabel(pendingDate)}.
+          </p>
+        )}
+        <p>Your account is currently disabled.</p>
+        {processingDeletion ? (
+          <p>
+            The cancellation deadline has passed. Permanent cleanup is pending
+            or in progress.
+          </p>
+        ) : (
+          <>
+            <p>
+              You can cancel deletion before this date if you change your mind.
+            </p>
+            <Button
+              onClick={() => {
+                setCancelDeletion(true);
+                setError("");
+              }}
+            >
+              Cancel account deletion
+            </Button>
+          </>
+        )}
+        <p>
+          <a className="touch-link" href="/sign-in">
+            Leave account scheduled for deletion
+          </a>
+        </p>
+      </section>
+    );
   if (created)
     return (
       <div role="status" className="auth-success">
@@ -99,11 +165,21 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
     );
   return (
     <form className="auth-form" onSubmit={submit} noValidate aria-busy={busy}>
+      {cancelDeletion && (
+        <>
+          <h2>Cancel account deletion</h2>
+          <p>
+            Verify your email and current password to restore access. A fresh
+            session will be created after verification.
+          </p>
+        </>
+      )}
       <div className="form-field">
         <label htmlFor="email">Email</label>
         <input
           id="email"
           name="email"
+          defaultValue={verifiedEmail}
           type="email"
           autoComplete="username"
           inputMode="email"
@@ -198,7 +274,9 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
             : "Signing in…"
           : register
             ? "Create account"
-            : "Sign in securely"}
+            : cancelDeletion
+              ? "Verify and cancel deletion"
+              : "Sign in securely"}
       </Button>
       {busy && (
         <p role="status" className={register ? undefined : "sr-only"}>

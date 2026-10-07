@@ -104,7 +104,47 @@ export function getObjectStorage(): PrivateObjectStorage {
       }
     },
     async purge(key) {
-      // Account erasure requires version cleanup, not just a delete marker.
+      // Rumpty unversioned buckets need only HEAD/DELETE permissions. Version
+      // enumeration is opt-in for a deployment explicitly configured as versioned.
+      if (env.S3_VERSIONING === "unversioned") {
+        const abortSignal = AbortSignal.timeout(10000);
+        const absent = (error: unknown) =>
+          error instanceof Error &&
+          (["NoSuchKey", "NotFound"].includes(error.name) ||
+            (error as { $metadata?: { httpStatusCode?: number } }).$metadata
+              ?.httpStatusCode === 404);
+        const exists = async () => {
+          try {
+            const head = await client.send(
+              new HeadObjectCommand({ Bucket, Key: key }),
+              { abortSignal },
+            );
+            if (head.VersionId && head.VersionId !== "null")
+              throw new Error(
+                "Versioned object requires versioned cleanup configuration",
+              );
+            return true;
+          } catch (error) {
+            if (absent(error)) return false;
+            throw error;
+          }
+        };
+        try {
+          if (!(await exists())) return;
+          try {
+            await client.send(new DeleteObjectCommand({ Bucket, Key: key }), {
+              abortSignal,
+            });
+          } catch (error) {
+            if (!absent(error)) throw error;
+          }
+          if (await exists()) throw new Error("Object remains accessible");
+          return;
+        } finally {
+          client.destroy();
+        }
+      }
+      // Versioned deployments must also erase retained versions and markers.
       // Fail closed when the provider cannot list versions or verify absence.
       const abortSignal = AbortSignal.timeout(10000);
       let currentDeleted = false;

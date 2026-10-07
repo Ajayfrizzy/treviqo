@@ -1,10 +1,20 @@
+import { deletionDateLabel } from "@/modules/account/shared";
+import {
+  pendingDeletionDate,
+  signInErrorMessage,
+  SIGN_IN_UNAVAILABLE,
+} from "@/modules/auth/sign-in-state";
 import { authConfigured } from "@/modules/auth/options";
 import { CredentialsForm } from "@/components/auth-actions";
 export const dynamic = "force-dynamic";
 export default async function SignIn({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; account?: string }>;
+  searchParams: Promise<{
+    error?: string;
+    account?: string;
+    scheduledFor?: string;
+  }>;
 }) {
   let configured = false;
   try {
@@ -12,7 +22,10 @@ export default async function SignIn({
   } catch {
     /* Fail closed; never expose configuration. */
   }
-  const { error, account } = await searchParams;
+  const { error, account, scheduledFor } = await searchParams;
+  const scheduled = pendingDeletionDate(
+    `DeletionPending:${scheduledFor ?? ""}`,
+  );
   return (
     <main id="main" className="welcome">
       <div className="wordmark">
@@ -30,24 +43,28 @@ export default async function SignIn({
       </p>
       <section className="card">
         <h2>Welcome to Treviqo</h2>
-        {account === "deleted" && (
-          <p role="status">
-            Your account was deleted from Treviqo’s active systems. All sessions
-            have ended.
-          </p>
+        {account === "scheduled" && scheduled && (
+          <div role="status">
+            <h2>Account deletion scheduled</h2>
+            <p>
+              Your account has been disabled and is scheduled for permanent
+              deletion on {deletionDateLabel(scheduled)}. You have been signed
+              out on all devices.
+            </p>
+            <p>
+              Sign in below to cancel before this date. Provider backups may
+              remain temporarily under their retention policies.
+            </p>
+          </div>
         )}
-        {error && (
-          <p role="alert">We could not complete sign-in. Please try again.</p>
-        )}
+        {error && <p role="alert">{signInErrorMessage(error)}</p>}
         {configured ? (
           <>
             <p>Sign in to your personal space.</p>
             <CredentialsForm />
           </>
         ) : (
-          <p role="status">
-            Sign-in is being prepared. Please check back soon.
-          </p>
+          <p role="status">{SIGN_IN_UNAVAILABLE}</p>
         )}
       </section>
       <p className="quiet">Employment · Benefits · Continuity</p>
