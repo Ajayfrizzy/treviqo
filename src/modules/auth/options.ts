@@ -3,10 +3,17 @@ import type { NextAuthOptions } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { getEnv } from "@/server/config/env";
 import { authenticateCredentials } from "./credentials";
-import { createAuthSession, isAuthSessionActive, revokeAuthSession, SESSION_SECONDS } from "./session-store";
+import {
+  createAuthSession,
+  isAuthSessionActive,
+  revokeAuthSession,
+  SESSION_SECONDS,
+} from "./session-store";
 export function authConfigured() {
   const env = getEnv();
-  return Boolean(env.SESSION_SECRET && env.NEXTAUTH_URL && env.DATABASE_URL && env.REDIS_URL);
+  return Boolean(
+    env.SESSION_SECRET && env.NEXTAUTH_URL && env.DATABASE_URL && env.REDIS_URL,
+  );
 }
 export function getAuthOptions(onSignOutError?: () => void): NextAuthOptions {
   const env = getEnv();
@@ -14,13 +21,21 @@ export function getAuthOptions(onSignOutError?: () => void): NextAuthOptions {
   return {
     secret: env.SESSION_SECRET,
     session: { strategy: "jwt", maxAge: SESSION_SECONDS },
-    useSecureCookies: env.NODE_ENV === "production" || env.APP_URL.startsWith("https://"),
+    useSecureCookies:
+      env.NODE_ENV === "production" || env.APP_URL.startsWith("https://"),
     pages: { signIn: "/sign-in", error: "/sign-in" },
-    providers: [Credentials({
-      name: "Email and password",
-      credentials: { email: { label: "Email", type: "email" }, password: { label: "Password", type: "password" } },
-      async authorize(credentials) { return authenticateCredentials(credentials); },
-    })],
+    providers: [
+      Credentials({
+        name: "Email and password",
+        credentials: {
+          email: { label: "Email", type: "email" },
+          password: { label: "Password", type: "password" },
+        },
+        async authorize(credentials) {
+          return authenticateCredentials(credentials);
+        },
+      }),
+    ],
     callbacks: {
       async jwt({ token, user }) {
         if (user) {
@@ -32,15 +47,26 @@ export function getAuthOptions(onSignOutError?: () => void): NextAuthOptions {
       async session({ session, token }) {
         // Whitelist public fields; never serialize hashes, email or the session ID.
         const active = await isAuthSessionActive(token.sid, token.sub);
-        return { expires: session.expires, user: active && token.sub ? { id: token.sub } : undefined };
+        return {
+          expires: session.expires,
+          user: active && token.sub ? { id: token.sub } : undefined,
+        };
       },
     },
     events: {
       async signOut(message) {
-        try { if ("token" in message) await revokeAuthSession(message.token?.sid); }
-        catch (error) { onSignOutError?.(); throw error; }
+        try {
+          if ("token" in message) await revokeAuthSession(message.token?.sid);
+        } catch (error) {
+          onSignOutError?.();
+          throw error;
+        }
       },
     },
-    logger: { error: () => console.error("Authentication failed"), warn: () => {}, debug: () => {} },
+    logger: {
+      error: () => console.error("Authentication failed"),
+      warn: () => {},
+      debug: () => {},
+    },
   };
 }

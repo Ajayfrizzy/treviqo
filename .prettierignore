@@ -1,0 +1,17 @@
+node_modules/
+.next/
+dist-worker/
+out/
+coverage/
+playwright-report/
+test-results/
+.env*
+.aws/
+.codex/
+.agents/
+*.tsbuildinfo
+next-env.d.ts
+package-lock.json
+# Keep applied migration checksums and historical documentation unchanged.
+prisma/migrations/
+*.md

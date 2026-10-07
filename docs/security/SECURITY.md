@@ -82,7 +82,7 @@ Use Rumpty snapshots/backups where available and document restore strategy.
 
 Application-managed credentials authentication runs with Treviqo on Rumpty Cloud, backed by Treviqo PostgreSQL. No managed identity provider is assumed.
 
-- Password hashing uses the established `argon2` library: Argon2id, 64 MiB memory, three iterations, one lane, library-generated random salt. Passwords are 15–128 characters, never trimmed or truncated. Benchmark the parameters on Rumpty compute before launch. Passwords/hashes must never be logged.
+- Password hashing uses the established `argon2` library: Argon2id, 64 MiB memory, three iterations, one lane, library-generated random salt. New passwords follow the 8–128-character policy below and are never trimmed or truncated. Benchmark the parameters on Rumpty compute before launch. Passwords/hashes must never be logged.
 - Email is trimmed and lowercased before validation and persistence. PostgreSQL's unique index enforces duplicate rejection, including concurrent creates. Registration rejects duplicates with generic copy, but different success/failure statuses can still reveal whether an address is registered. Login uses identical generic errors for invalid credentials and nonexistent accounts; absent accounts perform dummy Argon2 verification. This reduces timing differences but is not a guarantee of constant response time.
 - Registration selects only `id`; its API returns only `success`. Login selects the hash only inside the server-only auth module, returning only `id`. Public session and `/api/me` responses whitelist fields and cannot serialize hashes, passwords, or session IDs.
 - NextAuth handles credentials CSRF validation and encrypted HttpOnly/SameSite=Lax cookies. Production requires HTTPS and Secure cookies. POST auth routes also validate exact Origin. Registration requires same-origin JSON. Both routes enforce an actual streamed 4 KiB body limit. Configure ingress body/time/concurrency limits as well.
@@ -140,3 +140,7 @@ Minimal DTOs exclude original filenames, snippets, proposals, financial amounts 
 ## Milestone 7 implementation
 
 Milestone 7 adds per-user Redis limits to uploads, signed links, writes and expensive API reads, failing closed on Redis errors. Employment and reminder transitions have atomic content-free audits. Reminder reads/commands revalidate ownership and current evidence. Queue payloads hold fixed job IDs only; worker logs use generic errors. Expired-session cleanup does not replace request-time expiry enforcement. Ingress must still protect server-rendered reads, request concurrency and aggregate abuse. See [review and operational limits](../milestones/REMINDERS_RELIABILITY_SECURITY.md#security-review-and-fixes).
+
+## October 2026 UI password policy
+
+New accounts require 8–128 characters including uppercase A–Z, lowercase a–z, a digit 0–9, and a non-letter/non-number/non-whitespace special character. Client and server import `src/modules/auth/validation.ts`; passwords are never trimmed or truncated. Sign-in uses its shared presence/maximum-length schema to preserve existing passphrase accounts. Argon2id parameters, dummy hashing, revocation, CSRF, encrypted cookies, ownership and throttling remain unchanged. Profile selects only the authenticated owner's email server-side; public session/API serialization remains unchanged.

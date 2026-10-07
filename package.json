@@ -22,7 +22,9 @@
     "worker:build": "node scripts/build-worker.mjs",
     "worker": "node --conditions=react-server dist-worker/worker/main.js",
     "worker:health": "node --conditions=react-server dist-worker/worker/health.js",
-    "deployment:check": "node --conditions=react-server dist-worker/ops/deployment.js"
+    "deployment:check": "node --conditions=react-server dist-worker/ops/deployment.js",
+    "format": "prettier --write . && prisma format",
+    "format:check": "prettier --check ."
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1146.0",
@@ -45,6 +47,7 @@
     "@types/react-dom": "^19.3.0",
     "eslint": "^9.39.5",
     "eslint-config-next": "^16.3.8",
+    "prettier": "3.9.9",
     "prisma": "^6.19.3",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"

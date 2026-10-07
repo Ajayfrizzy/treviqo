@@ -1,1 +1,8 @@
-export default function Loading() { return <div className="content" role="status"><p>Loading your space…</p></div>; }
+import { PageSkeleton } from "@/components/page-skeleton";
+export default function Loading() {
+  return (
+    <main id="main" className="content">
+      <PageSkeleton label="Loading your space…" />
+    </main>
+  );
+}

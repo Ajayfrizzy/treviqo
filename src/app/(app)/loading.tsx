@@ -1,1 +1,4 @@
-export default function LoadingEmployment() { return <div role="status" aria-live="polite"><p className="eyebrow">Your Treviqo</p><p>Loading your records…</p></div>; }
+import { PageSkeleton } from "@/components/page-skeleton";
+export default function Loading() {
+  return <PageSkeleton label="Loading your records…" />;
+}

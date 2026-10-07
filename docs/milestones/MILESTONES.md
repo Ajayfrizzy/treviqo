@@ -163,6 +163,8 @@ Deliver:
 Success:
 A judge understands Treviqo within the first minute and can complete the primary workflow without assistance.
 
+Focused implementation record: [Production UI/UX polish](UI_UX_POLISH.md). This covers the existing MVP interface only; it does not claim completion of demo preparation or deployment.
+
 ## Priority if time is constrained
 Protect:
 1. Employment records

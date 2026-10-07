@@ -1,16 +1,65 @@
 import { beforeEach, expect, it, vi } from "vitest";
-const checks = vi.hoisted(() => ({ db: vi.fn(), redis: vi.fn(), storage: vi.fn(), auth: vi.fn(), worker: vi.fn() }));
-vi.mock("@/server/db/client", () => ({ getDb: () => ({ user: { findFirst: checks.db }, reminder: { findFirst: checks.db }, backgroundJob: { findFirst: checks.db } }) }));
-vi.mock("@/server/redis/client", () => ({ getRedis: () => ({ ping: checks.redis }) }));
-vi.mock("@/server/storage/client", () => ({ getObjectStorage: () => ({ checkConnection: checks.storage }) }));
+const checks = vi.hoisted(() => ({
+  db: vi.fn(),
+  redis: vi.fn(),
+  storage: vi.fn(),
+  auth: vi.fn(),
+  worker: vi.fn(),
+}));
+vi.mock("@/server/db/client", () => ({
+  getDb: () => ({
+    user: { findFirst: checks.db },
+    reminder: { findFirst: checks.db },
+    backgroundJob: { findFirst: checks.db },
+  }),
+}));
+vi.mock("@/server/redis/client", () => ({
+  getRedis: () => ({ ping: checks.redis }),
+}));
+vi.mock("@/server/storage/client", () => ({
+  getObjectStorage: () => ({ checkConnection: checks.storage }),
+}));
 vi.mock("@/modules/auth/options", () => ({ authConfigured: checks.auth }));
 vi.mock("@/server/jobs/health", () => ({ workerHealthy: checks.worker }));
 import { GET as ready } from "@/app/api/ready/route";
 import { GET as health } from "@/app/api/health/route";
-beforeEach(() => { checks.db.mockResolvedValue(null); checks.redis.mockResolvedValue("PONG"); checks.storage.mockResolvedValue(undefined); checks.auth.mockReturnValue(true); checks.worker.mockResolvedValue(true); });
-it("liveness does not depend on infrastructure", () => { expect(health().status).toBe(200); });
-it("requires all integrations for readiness", async () => { expect((await ready()).status).toBe(200); checks.auth.mockReturnValue(false); expect((await ready()).status).toBe(503); });
-it("does not disclose provider errors or secrets", async () => { checks.db.mockRejectedValue(new Error("postgresql://secret")); const response = await ready(); expect(response.status).toBe(503); expect(await response.json()).toEqual({ status: "unavailable" }); });
-it("bounds hung infrastructure checks", async () => { vi.useFakeTimers(); checks.redis.mockReturnValue(new Promise(() => {})); const response = ready(); await vi.advanceTimersByTimeAsync(3100); expect((await response).status).toBe(503); vi.useRealTimers(); });
+beforeEach(() => {
+  checks.db.mockResolvedValue(null);
+  checks.redis.mockResolvedValue("PONG");
+  checks.storage.mockResolvedValue(undefined);
+  checks.auth.mockReturnValue(true);
+  checks.worker.mockResolvedValue(true);
+});
+it("liveness does not depend on infrastructure", () => {
+  expect(health().status).toBe(200);
+});
+it("requires all integrations for readiness", async () => {
+  expect((await ready()).status).toBe(200);
+  checks.auth.mockReturnValue(false);
+  expect((await ready()).status).toBe(503);
+});
+it("does not disclose provider errors or secrets", async () => {
+  checks.db.mockRejectedValue(new Error("postgresql://secret"));
+  const response = await ready();
+  expect(response.status).toBe(503);
+  expect(await response.json()).toEqual({ status: "unavailable" });
+});
+it("bounds hung infrastructure checks", async () => {
+  vi.useFakeTimers();
+  checks.redis.mockReturnValue(new Promise(() => {}));
+  const response = ready();
+  await vi.advanceTimersByTimeAsync(3100);
+  expect((await response).status).toBe(503);
+  vi.useRealTimers();
+});
 
-it("requires healthy worker progress when configured", async () => { vi.stubEnv("WORKER_REQUIRED","true"); try { expect((await ready()).status).toBe(200); checks.worker.mockResolvedValue(false); expect((await ready()).status).toBe(503); } finally { vi.unstubAllEnvs(); } });
+it("requires healthy worker progress when configured", async () => {
+  vi.stubEnv("WORKER_REQUIRED", "true");
+  try {
+    expect((await ready()).status).toBe(200);
+    checks.worker.mockResolvedValue(false);
+    expect((await ready()).status).toBe(503);
+  } finally {
+    vi.unstubAllEnvs();
+  }
+});

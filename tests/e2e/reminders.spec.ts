@@ -1,25 +1,197 @@
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
-const db = new PrismaClient(); const emails: string[] = []; const origin = "http://127.0.0.1:3100";
+const db = new PrismaClient();
+const emails: string[] = [];
+const origin = "http://127.0.0.1:3100";
 async function account(page: Page) {
-  const email = `reminder-${randomUUID()}@example.test`; emails.push(email); const password = "Synthetic exit checker passphrase";
-  await page.goto("/register"); await page.getByLabel("Email", { exact: true }).fill(email); await page.getByLabel("Password", { exact: true }).fill(password); await page.getByRole("button", { name: "Create account", exact: true }).click(); await expect(page.getByRole("status")).toContainText("Your account is ready");
-  await page.goto("/sign-in"); await page.getByLabel("Email", { exact: true }).fill(email); await page.getByLabel("Password", { exact: true }).fill(password); await page.getByRole("button", { name: "Sign in securely" }).click(); await expect(page).toHaveURL("/");
+  const email = `reminder-${randomUUID()}@example.test`;
+  emails.push(email);
+  const password = "Synthetic exit checker passphrase 7!";
+  await page.goto("/register");
+  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page
+    .getByRole("button", { name: "Create account", exact: true })
+    .click();
+  await expect(page.getByRole("status")).toContainText("Your account is ready");
+  await page.goto("/sign-in");
+  await page.getByLabel("Email", { exact: true }).fill(email);
+  await page.getByLabel("Password", { exact: true }).fill(password);
+  await page.getByRole("button", { name: "Sign in securely" }).click();
+  await expect(page).toHaveURL("/");
 }
-test.afterAll(async () => { const users = await db.user.findMany({ where: { email: { in: emails } }, select: { id: true } }); const ids = users.map(user => user.id); await db.auditEvent.deleteMany({ where: { userId: { in: ids } } }); await db.user.deleteMany({ where: { id: { in: ids } } }); await db.$disconnect(); });
-async function generate(page:Page) {
- const response=await page.request.post('/api/employments',{headers:{origin},data:{employerName:'Reminder fixture',roleTitle:'Worker',startDate:'2020-01-01'}});expect(response.status()).toBe(201);const employmentId=(await response.json()).employment.id;
- const created=await page.request.post('/api/exits',{headers:{origin},data:{employmentId,answers:{exitType:'resignation',lastWorkingDate:'2024-01-01',pension:'yes'}}});expect(created.status()).toBe(201);const exit=(await created.json()).exitCase;
- await db.backgroundJob.updateMany({data:{dueAt:new Date(0)}});
- const {execFileSync}=await import('node:child_process');for(let n=0;n<2;n++)execFileSync(process.execPath,['--conditions=react-server','dist-worker/worker/main.js','--once'],{env:{...process.env,NODE_ENV:'test',APP_URL:origin,NEXTAUTH_URL:origin},stdio:'pipe'});
- return exit;
-}
-for(const width of [320,375,430])test(`worker reminders, snooze and resolution at ${width}px`,async({page})=>{
- await page.setViewportSize({width,height:850});await account(page);await page.getByRole('link',{name:'View reminders'}).click();await expect(page.getByRole('heading',{name:'No reminders due'})).toBeVisible();const exit=await generate(page);await page.getByRole('button',{name:'Refresh reminders'}).click();const notice=page.getByRole('article').filter({has:page.getByRole('heading',{name:'Notice and dates',exact:true})});await expect(notice).toBeVisible();
- if(width===320){await page.route('**/api/reminders',route=>route.fulfill({status:503,json:{error:'Temporary failure. Retry.'}}));await notice.getByRole('button',{name:'Remind me in 7 days'}).click();await expect(page.getByRole('alert').filter({hasText:'Temporary failure'})).toContainText('Temporary failure');await page.unroute('**/api/reminders');}
- await notice.getByRole('button',{name:'Remind me in 7 days'}).click();await expect(notice).toHaveCount(0);await page.reload();await expect(notice).toHaveCount(0);
- const salary=page.getByRole('article').filter({has:page.getByRole('heading',{name:'Final salary records',exact:true})});await expect(salary).toContainText('missing document');await salary.getByRole('button',{name:'Dismiss this prompt'}).click();await expect(salary).toHaveCount(0);
- const leave=page.getByRole('article').filter({has:page.getByRole('heading',{name:'Unused leave',exact:true})});expect((await page.request.put(`/api/exits/${exit.id}`,{headers:{origin},data:{version:0,answers:{...exit.answers,leave:'none'}}})).status()).toBe(200);await page.getByRole('button',{name:'Refresh reminders'}).click();await expect(leave).toHaveCount(0);expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);await page.screenshot({path:`test-results/reminders-${width}.png`});
+test.afterAll(async () => {
+  const users = await db.user.findMany({
+    where: { email: { in: emails } },
+    select: { id: true },
+  });
+  const ids = users.map((user) => user.id);
+  await db.auditEvent.deleteMany({ where: { userId: { in: ids } } });
+  await db.user.deleteMany({ where: { id: { in: ids } } });
+  await db.$disconnect();
 });
-test('reminder ownership and anonymous/Origin/input boundaries',async({page,browser,request})=>{await account(page);await generate(page);const data=await(await page.request.get('/api/reminders')).json();const item=data.reminders[0];expect((await request.get('/api/reminders')).status()).toBe(401);expect((await request.post('/api/reminders',{data:{id:item.id,version:item.version,action:'dismiss'}})).status()).toBe(401);expect((await page.request.post('/api/reminders',{headers:{origin:'https://attacker.test'},data:{id:item.id,version:item.version,action:'dismiss'}})).status()).toBe(403);expect((await page.request.post('/api/reminders',{headers:{origin},data:{id:item.id,version:item.version,action:'dismiss',userId:'injected'}})).status()).toBe(422);const other=await browser.newContext({baseURL:origin});try{const p=await other.newPage();await account(p);expect((await(await other.request.get('/api/reminders')).json()).reminders).toEqual([]);expect((await other.request.post('/api/reminders',{headers:{origin},data:{id:item.id,version:item.version,action:'dismiss'}})).status()).toBe(404);}finally{await other.close();}});
+async function generate(page: Page) {
+  const response = await page.request.post("/api/employments", {
+    headers: { origin },
+    data: {
+      employerName: "Reminder fixture",
+      roleTitle: "Worker",
+      startDate: "2020-01-01",
+    },
+  });
+  expect(response.status()).toBe(201);
+  const employmentId = (await response.json()).employment.id;
+  const created = await page.request.post("/api/exits", {
+    headers: { origin },
+    data: {
+      employmentId,
+      answers: {
+        exitType: "resignation",
+        lastWorkingDate: "2024-01-01",
+        pension: "yes",
+      },
+    },
+  });
+  expect(created.status()).toBe(201);
+  const exit = (await created.json()).exitCase;
+  await db.backgroundJob.updateMany({ data: { dueAt: new Date(0) } });
+  const { execFileSync } = await import("node:child_process");
+  for (let n = 0; n < 2; n++)
+    execFileSync(
+      process.execPath,
+      ["--conditions=react-server", "dist-worker/worker/main.js", "--once"],
+      {
+        env: {
+          ...process.env,
+          NODE_ENV: "test",
+          APP_URL: origin,
+          NEXTAUTH_URL: origin,
+        },
+        stdio: "pipe",
+      },
+    );
+  return exit;
+}
+for (const width of [320, 375, 430, 768, 1440])
+  test(`worker reminders, snooze and resolution at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 850 });
+    await account(page);
+    await page.getByRole("link", { name: "View reminders" }).click();
+    await expect(
+      page.getByRole("heading", { name: "No reminders due" }),
+    ).toBeVisible();
+    const exit = await generate(page);
+    await page.getByRole("button", { name: "Refresh reminders" }).click();
+    const notice = page.getByRole("article").filter({
+      has: page.getByRole("heading", {
+        name: "Notice and dates",
+        exact: true,
+      }),
+    });
+    await expect(notice).toBeVisible();
+    if (width === 320) {
+      await page.route("**/api/reminders", (route) =>
+        route.fulfill({
+          status: 503,
+          json: { error: "Temporary failure. Retry." },
+        }),
+      );
+      await notice.getByRole("button", { name: "Remind me in 7 days" }).click();
+      await expect(
+        page.getByRole("alert").filter({ hasText: "Temporary failure" }),
+      ).toContainText("Temporary failure");
+      await page.unroute("**/api/reminders");
+    }
+    await notice.getByRole("button", { name: "Remind me in 7 days" }).click();
+    await expect(notice).toHaveCount(0);
+    await page.reload();
+    await expect(notice).toHaveCount(0);
+    const salary = page.getByRole("article").filter({
+      has: page.getByRole("heading", {
+        name: "Final salary records",
+        exact: true,
+      }),
+    });
+    await expect(salary).toContainText("missing document");
+    await salary.getByRole("button", { name: "Dismiss this prompt" }).click();
+    await expect(salary).toHaveCount(0);
+    const leave = page.getByRole("article").filter({
+      has: page.getByRole("heading", { name: "Unused leave", exact: true }),
+    });
+    expect(
+      (
+        await page.request.put(`/api/exits/${exit.id}`, {
+          headers: { origin },
+          data: { version: 0, answers: { ...exit.answers, leave: "none" } },
+        })
+      ).status(),
+    ).toBe(200);
+    await page.getByRole("button", { name: "Refresh reminders" }).click();
+    await expect(leave).toHaveCount(0);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({ path: `test-results/reminders-${width}.png` });
+  });
+test("reminder ownership and anonymous/Origin/input boundaries", async ({
+  page,
+  browser,
+  request,
+}) => {
+  await account(page);
+  await generate(page);
+  const data = await (await page.request.get("/api/reminders")).json();
+  const item = data.reminders[0];
+  expect((await request.get("/api/reminders")).status()).toBe(401);
+  expect(
+    (
+      await request.post("/api/reminders", {
+        data: { id: item.id, version: item.version, action: "dismiss" },
+      })
+    ).status(),
+  ).toBe(401);
+  expect(
+    (
+      await page.request.post("/api/reminders", {
+        headers: { origin: "https://attacker.test" },
+        data: { id: item.id, version: item.version, action: "dismiss" },
+      })
+    ).status(),
+  ).toBe(403);
+  expect(
+    (
+      await page.request.post("/api/reminders", {
+        headers: { origin },
+        data: {
+          id: item.id,
+          version: item.version,
+          action: "dismiss",
+          userId: "injected",
+        },
+      })
+    ).status(),
+  ).toBe(422);
+  const other = await browser.newContext({ baseURL: origin });
+  try {
+    const p = await other.newPage();
+    await account(p);
+    expect(
+      (await (await other.request.get("/api/reminders")).json()).reminders,
+    ).toEqual([]);
+    expect(
+      (
+        await other.request.post("/api/reminders", {
+          headers: { origin },
+          data: { id: item.id, version: item.version, action: "dismiss" },
+        })
+      ).status(),
+    ).toBe(404);
+  } finally {
+    await other.close();
+  }
+});

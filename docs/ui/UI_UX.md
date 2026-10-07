@@ -147,3 +147,15 @@ Worker-entered facts, confirmed/corrected fields, worker assessments, and unreso
 ## Milestone 7 implementation
 
 Milestone 7 adds Home → View reminders with mobile cards, source links, seven-day snooze and dismissal. Home stays selected in the existing five-section bottom navigation. Loading, empty, successful action, retry/error and delayed-worker states are explicit. Current evidence is rechecked on refresh; no email/push delivery or statutory deadline claims are shown.
+
+## Production polish — 7 October 2026
+
+The desktop shell uses a 232px sidebar (252px above 1100px), with a persistent brand, consistent outlined icons, and a filled active destination. Below 800px it collapses to the original five-area bottom navigation. Content is fluid up to 1200px, with one-column forms capped at 760px and auth at 520px. Desktop expands cards; it does not introduce tables. Page headings use a restrained 1.85–2.5rem scale. Cards, section spacing, status pills, secondary actions, and 48px form controls share styling. Mobile inputs use 16px text; focus, disabled, read-only, validation, date and select states remain visible. Motion respects reduced-motion preferences.
+
+Registration shows a live, text-labelled checklist: 8–128 characters, uppercase A–Z, lowercase a–z, number 0–9, and a non-letter/non-number/non-whitespace special character. Spaces are preserved but do not count as special characters. A shared module validates both client and server. Existing passwords remain usable at sign-in; complexity is a creation requirement. Both screens include password reveal, password-manager autocomplete, field-associated validation with focus on the first invalid field, explicit busy states, and retry feedback. Registration has one sign-in link; successful creation replaces the form with a clear next action.
+
+Profile reads only the authenticated account’s email. It explains password protection, the lack of email verification, the maximum eight-hour session, and the scope of sign-out. It does not expose hashes, session identifiers, or claim an exact expiry based on NextAuth’s rolling public expiry value. No database fields or public session fields were added.
+
+Route skeletons retain the shell and identify the section being loaded. Upload distinguishes byte transfer from storage completion, with indeterminate progress during finalization. Interrupted documents explain refresh/remove/retry. Extraction distinguishes processing, loading, manual preparation, and review saving; manual fallback remains available. API actions bound their UI wait (30 seconds normally, 120 seconds for extraction), preserve inputs on failure, and advise checking current records before retrying an uncertain mutation. They do not automatically retry. NextAuth continues to own sign-in and CSRF retrieval. Existing error boundaries provide explicit retry actions.
+
+Home, Exit, Passport and Documents first-use copy explains the purpose, value, and next action. The Passport still depends on explicitly closed employment; no domain behavior has changed. See [polish report](../milestones/UI_UX_POLISH.md) for validation and remaining checks.

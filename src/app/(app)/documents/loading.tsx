@@ -1,1 +1,4 @@
-export default function LoadingDocuments() { return <p role="status">Loading your documents…</p>; }
+import { PageSkeleton } from "@/components/page-skeleton";
+export default function Loading() {
+  return <PageSkeleton label="Loading your documents…" />;
+}

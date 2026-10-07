@@ -9,11 +9,6 @@
     "target": "ES2022",
     "allowImportingTsExtensions": false
   },
-  "include": [
-    "src/worker/**/*.ts",
-    "src/ops/**/*.ts"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+  "include": ["src/worker/**/*.ts", "src/ops/**/*.ts"],
+  "exclude": ["node_modules"]
 }

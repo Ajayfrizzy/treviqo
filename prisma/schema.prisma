@@ -1,32 +1,37 @@
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
 model User {
-  id           String   @id @default(cuid())
+  id           String               @id @default(cuid())
   // Preserve legacy identities without requiring an external provider.
   issuer       String?
   subject      String?
-  email        String?  @unique
+  email        String?              @unique
   passwordHash String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
   sessions     AuthSession[]
   employments  Employment[]
   documents    EmploymentDocument[]
   auditEvents  AuditEvent[]
   exitCases    ExitCase[]
+
   @@unique([issuer, subject])
 }
+
 model AuthSession {
   id        String   @id @default(uuid())
   userId    String
   expiresAt DateTime
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([userId])
   @@index([expiresAt])
 }
@@ -36,6 +41,7 @@ enum EmploymentStatus {
   exiting
   closed
 }
+
 enum EmploymentType {
   permanent
   contract
@@ -43,21 +49,23 @@ enum EmploymentType {
   internship
   other
 }
+
 model Employment {
-  id             String           @id @default(cuid())
+  id             String               @id @default(cuid())
   userId         String
-  employerName   String           @db.VarChar(160)
-  roleTitle      String           @db.VarChar(160)
-  startDate      DateTime         @db.Date
-  endDate        DateTime?        @db.Date
+  employerName   String               @db.VarChar(160)
+  roleTitle      String               @db.VarChar(160)
+  startDate      DateTime             @db.Date
+  endDate        DateTime?            @db.Date
   employmentType EmploymentType?
-  status         EmploymentStatus @default(active)
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
-  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status         EmploymentStatus     @default(active)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   documents      EmploymentDocument[]
   exitCases      ExitCase[]
   benefits       Benefit[]
+
   @@unique([id, userId])
   @@index([userId, status, startDate])
 }
@@ -74,6 +82,7 @@ enum DocumentType {
   benefit_document
   other
 }
+
 enum DocumentStatus {
   uploaded
   processing
@@ -82,6 +91,7 @@ enum DocumentStatus {
   deleting
   deleted
 }
+
 enum AuditAction {
   document_uploaded
   document_access_issued
@@ -108,27 +118,30 @@ enum AuditAction {
   reminder_snoozed
   reminder_dismissed
 }
+
 model EmploymentDocument {
-  id                String         @id @default(uuid())
+  id                String               @id @default(uuid())
   userId            String
   employmentId      String
-  documentType      DocumentType    @default(other)
-  originalFilename  String         @db.VarChar(255)
-  sanitizedFilename String         @db.VarChar(160)
-  objectKey         String         @unique
-  mimeType          String         @db.VarChar(64)
+  documentType      DocumentType         @default(other)
+  originalFilename  String               @db.VarChar(255)
+  sanitizedFilename String               @db.VarChar(160)
+  objectKey         String               @unique
+  mimeType          String               @db.VarChar(64)
   fileSize          Int
-  checksum          String         @db.VarChar(64)
-  status            DocumentStatus @default(uploaded)
-  createdAt         DateTime       @default(now())
-  updatedAt         DateTime       @updatedAt
-  user              User           @relation(fields: [userId], references: [id], onDelete: Restrict)
-  employment        Employment     @relation(fields: [employmentId, userId], references: [id, userId], onDelete: Restrict)
+  checksum          String               @db.VarChar(64)
+  status            DocumentStatus       @default(uploaded)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  user              User                 @relation(fields: [userId], references: [id], onDelete: Restrict)
+  employment        Employment           @relation(fields: [employmentId, userId], references: [id, userId], onDelete: Restrict)
   extractions       DocumentExtraction[]
+
   @@unique([id, userId])
   @@index([userId, employmentId, createdAt])
   @@index([status, updatedAt])
 }
+
 model AuditEvent {
   id           String      @id @default(cuid())
   userId       String
@@ -140,6 +153,7 @@ model AuditEvent {
   action       AuditAction
   createdAt    DateTime    @default(now())
   user         User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+
   @@index([userId, createdAt])
   @@index([documentId, action])
 }
@@ -149,12 +163,14 @@ enum ExtractionStatus {
   ready
   failed
 }
+
 enum ExtractionConfidence {
   high
   medium
   low
   needs_review
 }
+
 enum FieldReviewState {
   proposed
   confirmed
@@ -162,47 +178,53 @@ enum FieldReviewState {
   rejected
   unknown
 }
+
 model DocumentExtraction {
-  id            String @id @default(uuid())
+  id            String             @id @default(uuid())
   documentId    String
   userId        String
-  status        ExtractionStatus @default(processing)
+  status        ExtractionStatus   @default(processing)
   documentType  DocumentType?
-  sourceKind    String @db.VarChar(32)
-  sourceHash    String? @db.VarChar(64)
-  model         String @db.VarChar(160)
-  promptVersion String @db.VarChar(64)
-  schemaVersion String @db.VarChar(64)
-  errorCode     String? @db.VarChar(32)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  sourceKind    String             @db.VarChar(32)
+  sourceHash    String?            @db.VarChar(64)
+  model         String             @db.VarChar(160)
+  promptVersion String             @db.VarChar(64)
+  schemaVersion String             @db.VarChar(64)
+  errorCode     String?            @db.VarChar(32)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
   document      EmploymentDocument @relation(fields: [documentId, userId], references: [id, userId], onDelete: Cascade)
   fields        ExtractedField[]
+
   @@index([userId, documentId, createdAt])
   @@index([status, createdAt])
 }
+
 model ExtractedField {
-  id            String @id @default(uuid())
+  id            String                    @id @default(uuid())
   extractionId  String
-  key           String @db.VarChar(64)
-  proposedValue String? @db.VarChar(1000)
-  value         String? @db.VarChar(1000)
-  evidence      String? @db.VarChar(1600)
+  key           String                    @db.VarChar(64)
+  proposedValue String?                   @db.VarChar(1000)
+  value         String?                   @db.VarChar(1000)
+  evidence      String?                   @db.VarChar(1600)
   confidence    ExtractionConfidence
-  reviewState   FieldReviewState @default(proposed)
-  version       Int @default(0)
-  updatedAt     DateTime @updatedAt
-  extraction    DocumentExtraction @relation(fields: [extractionId], references: [id], onDelete: Cascade)
+  reviewState   FieldReviewState          @default(proposed)
+  version       Int                       @default(0)
+  updatedAt     DateTime                  @updatedAt
+  extraction    DocumentExtraction        @relation(fields: [extractionId], references: [id], onDelete: Cascade)
   revisions     ExtractionFieldRevision[]
+
   @@unique([extractionId, key])
 }
+
 model ExtractionFieldRevision {
-  id        String @id @default(uuid())
+  id        String           @id @default(uuid())
   fieldId   String
   state     FieldReviewState
-  value     String? @db.VarChar(1000)
-  createdAt DateTime @default(now())
-  field     ExtractedField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+  value     String?          @db.VarChar(1000)
+  createdAt DateTime         @default(now())
+  field     ExtractedField   @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
   @@index([fieldId, createdAt])
 }
 
@@ -213,17 +235,20 @@ enum ExitType {
   contract_completion
   retirement
 }
+
 enum ExitAnswer {
   unknown
   yes
   no
 }
+
 enum ExitFollowup {
   unknown
   none
   pending
   resolved
 }
+
 enum ExitAssets {
   unknown
   none
@@ -231,6 +256,7 @@ enum ExitAssets {
   scheduled
   returned
 }
+
 enum ExitReference {
   unknown
   not_needed
@@ -238,38 +264,40 @@ enum ExitReference {
   requested
   saved
 }
+
 model ExitCase {
-  id                      String @id @default(uuid())
+  id                      String               @id @default(uuid())
   userId                  String
-  employmentId            String @unique
+  employmentId            String               @unique
   exitType                ExitType
-  lastWorkingDate         DateTime @db.Date
-  noticeDate              DateTime? @db.Date
-  noticeApplicable        ExitAnswer @default(unknown)
-  noticeRequirement       String? @db.VarChar(1000)
+  lastWorkingDate         DateTime             @db.Date
+  noticeDate              DateTime?            @db.Date
+  noticeApplicable        ExitAnswer           @default(unknown)
+  noticeRequirement       String?              @db.VarChar(1000)
   noticeFieldId           String?
   noticeFieldVersion      Int?
   finalPayDocumentId      String?
-  finalPayPeriod          String? @db.VarChar(160)
-  leave                   ExitFollowup @default(unknown)
-  reimbursements          ExitFollowup @default(unknown)
+  finalPayPeriod          String?              @db.VarChar(160)
+  leave                   ExitFollowup         @default(unknown)
+  reimbursements          ExitFollowup         @default(unknown)
   reimbursementDocumentId String?
-  pension                 ExitAnswer @default(unknown)
-  pensionDetailsSaved     Boolean @default(false)
-  assets                  ExitAssets @default(unknown)
+  pension                 ExitAnswer           @default(unknown)
+  pensionDetailsSaved     Boolean              @default(false)
+  assets                  ExitAssets           @default(unknown)
   assetDocumentId         String?
   exitDocumentId          String?
-  reference               ExitReference @default(unknown)
+  reference               ExitReference        @default(unknown)
   referenceDocumentId     String?
-  benefits                ExitFollowup @default(unknown)
-  version                 Int @default(0)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-  user                    User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  employment              Employment @relation(fields: [employmentId, userId], references: [id, userId], onDelete: Cascade)
+  benefits                ExitFollowup         @default(unknown)
+  version                 Int                  @default(0)
+  createdAt               DateTime             @default(now())
+  updatedAt               DateTime             @updatedAt
+  user                    User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  employment              Employment           @relation(fields: [employmentId, userId], references: [id, userId], onDelete: Cascade)
   settlementItems         SettlementItem[]
   pensionVerification     PensionVerification?
   reminders               Reminder[]
+
   @@unique([id, userId])
   @@index([userId, updatedAt])
 }
@@ -284,44 +312,47 @@ enum SettlementCategory {
   other_deduction
   total
 }
+
 model SettlementItem {
-  id                   String @id @default(uuid())
+  id                   String             @id @default(uuid())
   exitCaseId           String
   userId               String
   category             SettlementCategory
-  label                String @db.VarChar(160)
+  label                String             @db.VarChar(160)
   documentId           String
   expectedFieldId      String
   expectedFieldVersion Int
   actualFieldId        String?
   actualFieldVersion   Int?
-  expectedPeriod       String @db.VarChar(7)
-  actualPeriod         String @db.VarChar(7)
-  version              Int @default(0)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-  exitCase             ExitCase @relation(fields: [exitCaseId, userId], references: [id, userId], onDelete: Cascade)
+  expectedPeriod       String             @db.VarChar(7)
+  actualPeriod         String             @db.VarChar(7)
+  version              Int                @default(0)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  exitCase             ExitCase           @relation(fields: [exitCaseId, userId], references: [id, userId], onDelete: Cascade)
+
   @@index([exitCaseId, userId])
 }
+
 model PensionVerification {
-  id                   String @id @default(uuid())
-  exitCaseId           String @unique
+  id                   String    @id @default(uuid())
+  exitCaseId           String    @unique
   userId               String
-  targetPeriod         String @db.VarChar(7)
+  targetPeriod         String    @db.VarChar(7)
   statementRunId       String?
   expectedFieldId      String?
   expectedFieldVersion Int?
   followUpDate         DateTime? @db.Date
-  confirmedHash        String? @db.VarChar(64)
+  confirmedHash        String?   @db.VarChar(64)
   confirmedAt          DateTime?
-  version              Int @default(0)
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-  exitCase             ExitCase @relation(fields: [exitCaseId, userId], references: [id, userId], onDelete: Cascade)
+  version              Int       @default(0)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  exitCase             ExitCase  @relation(fields: [exitCaseId, userId], references: [id, userId], onDelete: Cascade)
+
   @@unique([exitCaseId, userId])
   @@index([userId, followUpDate])
 }
-
 
 enum BenefitCategory {
   pension
@@ -331,13 +362,15 @@ enum BenefitCategory {
   cooperative
   provident
 }
+
 enum BenefitPortability {
   portable
   employer_linked
   unknown
 }
+
 model Benefit {
-  id                      String @id @default(uuid())
+  id                      String             @id @default(uuid())
   userId                  String
   employmentId            String
   category                BenefitCategory
@@ -346,11 +379,12 @@ model Benefit {
   sourceDocumentUpdatedAt DateTime?
   sourceFieldId           String?
   sourceFieldVersion      Int?
-  contextHash             String @db.VarChar(64)
-  version                 Int @default(0)
-  createdAt               DateTime @default(now())
-  updatedAt               DateTime @updatedAt
-  employment              Employment @relation(fields: [employmentId, userId], references: [id, userId], onDelete: Cascade)
+  contextHash             String             @db.VarChar(64)
+  version                 Int                @default(0)
+  createdAt               DateTime           @default(now())
+  updatedAt               DateTime           @updatedAt
+  employment              Employment         @relation(fields: [employmentId, userId], references: [id, userId], onDelete: Cascade)
+
   @@unique([employmentId, category])
   @@index([userId, employmentId])
 }
@@ -361,40 +395,45 @@ enum ReminderKind {
   missing_document
   stale_action
 }
+
 enum ReminderState {
   active
   snoozed
   dismissed
   resolved
 }
+
 model Reminder {
-  id           String @id @default(uuid())
+  id           String        @id @default(uuid())
   userId       String
   exitCaseId   String
-  key          String @db.VarChar(64)
+  key          String        @db.VarChar(64)
   kind         ReminderKind
-  fingerprint  String @db.VarChar(64)
+  fingerprint  String        @db.VarChar(64)
   state        ReminderState @default(active)
   dueAt        DateTime
   snoozedUntil DateTime?
-  version      Int @default(0)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  exitCase     ExitCase @relation(fields: [exitCaseId, userId], references: [id, userId], onDelete: Cascade)
+  version      Int           @default(0)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  exitCase     ExitCase      @relation(fields: [exitCaseId, userId], references: [id, userId], onDelete: Cascade)
+
   @@unique([exitCaseId, key])
   @@index([userId, state, dueAt])
 }
+
 model BackgroundJob {
-  id              String @id
-  state           String @default("pending") @db.VarChar(16)
-  dueAt           DateTime @default(now())
+  id              String    @id
+  state           String    @default("pending") @db.VarChar(16)
+  dueAt           DateTime  @default(now())
   cursor          String?
   leaseToken      String?
   leaseUntil      DateTime?
-  attempts        Int @default(0)
-  createdAt       DateTime @default(now())
+  attempts        Int       @default(0)
+  createdAt       DateTime  @default(now())
   lastSucceededAt DateTime?
-  errorCode       String? @db.VarChar(32)
-  updatedAt       DateTime @updatedAt
+  errorCode       String?   @db.VarChar(32)
+  updatedAt       DateTime  @updatedAt
+
   @@index([state, dueAt])
 }

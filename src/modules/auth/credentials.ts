@@ -1,5 +1,6 @@
 import "server-only";
-import { z } from "zod";
+import { credentialsSchema, signInSchema } from "./validation";
+export { credentialsSchema } from "./validation";
 import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db/client";
 import {
@@ -9,11 +10,6 @@ import {
 } from "./password";
 import { allowCredentialAttempt } from "./rate-limit";
 
-export const credentialsSchema = z.object({
-  email: z.string().trim().toLowerCase().email().max(254),
-  // Passphrases are encouraged. Do not trim or silently truncate passwords.
-  password: z.string().min(15).max(128),
-});
 export class RegistrationError extends Error {
   constructor() {
     super(
@@ -75,7 +71,7 @@ export async function registerUser(input: unknown): Promise<{ id: string }> {
 export async function authenticateCredentials(
   input: unknown,
 ): Promise<{ id: string } | null> {
-  const parsed = credentialsSchema.safeParse(input);
+  const parsed = signInSchema.safeParse(input);
   if (!parsed.success) return null;
   const { email, password } = parsed.data;
   if (!(await allowCredentialAttempt(email))) return null;

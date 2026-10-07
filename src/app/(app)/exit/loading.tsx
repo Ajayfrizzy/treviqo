@@ -1,1 +1,4 @@
-export default function LoadingExit() { return <p role="status">Loading your exit checklist…</p>; }
+import { PageSkeleton } from "@/components/page-skeleton";
+export default function Loading() {
+  return <PageSkeleton label="Loading your exit checklist…" />;
+}

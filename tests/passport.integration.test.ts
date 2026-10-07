@@ -5,26 +5,479 @@ import { passportService } from "@/modules/passport/service";
 import { exitService } from "@/modules/exits/service";
 import { financeService } from "@/modules/finance/service";
 import { updateEmployment } from "@/modules/employments/service";
-const db=getDb();const service=passportService(db);let a:string,b:string,job:string,other:string;
-const jobInput={employerName:"Harbour",roleTitle:"Worker",startDate:"2024-01-01",endDate:"2026-10-31",status:"closed",employmentType:null};
-async function employment(userId:string,status:"closed"|"active"="closed") {return (await db.employment.create({data:{userId,employerName:"Harbour",roleTitle:"Worker",startDate:new Date("2024-01-01"),endDate:status==="closed"?new Date("2026-10-31"):null,status}})).id;}
-async function source(type:DocumentType="employment_contract",values:Record<string,string>={hmo_reference:"HMO with employer"},employmentId=job,userId=a) {
- const doc=await db.employmentDocument.create({data:{userId,employmentId,documentType:type,originalFilename:"PRIVATE_RSA123456.pdf",sanitizedFilename:"PRIVATE_RSA123456.pdf",objectKey:crypto.randomUUID(),mimeType:"application/pdf",fileSize:1,checksum:"secret-checksum",status:"ready"}});
- const run=await db.documentExtraction.create({data:{userId,documentId:doc.id,documentType:type,sourceKind:"manual",model:"manual",promptVersion:"evidence-v2",schemaVersion:"fields-v2",status:"ready",fields:{create:Object.entries(values).map(([key,value])=>({key,value,proposedValue:value,evidence:"PRIVATE_EXCERPT_123456",reviewState:"confirmed",confidence:"high",version:1}))}},include:{fields:true}});return {doc,run,field:run.fields.find(field=>field.key===Object.keys(values)[0])!};
+const db = getDb();
+const service = passportService(db);
+let a: string, b: string, job: string, other: string;
+const jobInput = {
+  employerName: "Harbour",
+  roleTitle: "Worker",
+  startDate: "2024-01-01",
+  endDate: "2026-10-31",
+  status: "closed",
+  employmentType: null,
+};
+async function employment(
+  userId: string,
+  status: "closed" | "active" = "closed",
+) {
+  return (
+    await db.employment.create({
+      data: {
+        userId,
+        employerName: "Harbour",
+        roleTitle: "Worker",
+        startDate: new Date("2024-01-01"),
+        endDate: status === "closed" ? new Date("2026-10-31") : null,
+        status,
+      },
+    })
+  ).id;
 }
-async function assessment(category="hmo",classification="employer_linked") {const evidence=await source();const view=await service.read(a,job);return {...evidence,input:{category,classification,version:null,contextToken:view.contextToken,documentId:evidence.doc.id,fieldId:evidence.field.id,fieldVersion:1,evidenceAcknowledged:true}};}
-beforeEach(async()=>{a=(await db.user.create({data:{}})).id;b=(await db.user.create({data:{}})).id;job=await employment(a);other=await employment(b);});
-afterEach(async()=>{await db.auditEvent.deleteMany({where:{userId:{in:[a,b]}}});await db.employmentDocument.deleteMany({where:{userId:{in:[a,b]}}});await db.user.deleteMany({where:{id:{in:[a,b]}}});});afterAll(()=>db.$disconnect());
-it("derives closed entries, unknowns and dates without creating copied Passport rows",async()=>{const active=await employment(a,"active");const list=await service.list(a);expect(list.map(i=>i.id)).toEqual([job]);const view=await service.read(a,job);expect(view).toMatchObject({employer:"Harbour",endDate:"2026-10-31",exit:null,pension:{provider:null,state:"not_started"}});expect(view.benefits).toHaveLength(6);expect(view.benefits.every(i=>i.classification==="unknown")).toBe(true);expect(view.documents.every(i=>i.state==="Not saved")).toBe(true);await expect(service.read(a,active)).rejects.toMatchObject({status:404});});
-it("enforces ownership for list/read/save/remove and composite database ownership",async()=>{const {input}=await assessment();await expect(service.read(b,job)).rejects.toMatchObject({status:404});await expect(service.read("",job)).rejects.toMatchObject({status:401});await expect(service.list("")).rejects.toMatchObject({status:401});expect((await service.list(b)).map(i=>i.id)).toEqual([other]);await expect(service.command(b,job,{action:"save",input})).rejects.toMatchObject({status:404});await service.command(a,job,{action:"save",input});await expect(service.command(b,job,{action:"remove",category:"hmo",version:0})).rejects.toMatchObject({status:404});await expect(db.benefit.updateMany({where:{employmentId:job},data:{userId:b}})).rejects.toThrow();});
-it("saves/updates/removes worker assessments with audit and optimistic versions",async()=>{const {input}=await assessment();const saved=await service.command(a,job,{action:"save",input});expect(saved.benefits.find(i=>i.category==="hmo")).toMatchObject({classification:"employer_linked",version:0});await expect(service.command(a,job,{action:"save",input})).rejects.toMatchObject({status:409});await service.command(a,job,{action:"save",input:{...input,classification:"portable",version:0}});await expect(service.command(a,job,{action:"remove",category:"hmo",version:0})).rejects.toMatchObject({status:409});await service.command(a,job,{action:"remove",category:"hmo",version:1});expect((await service.read(a,job)).benefits.find(i=>i.category==="hmo")!.version).toBeNull();expect(await db.auditEvent.count({where:{employmentId:job,action:"benefit_saved"}})).toBe(2);expect(await db.auditEvent.count({where:{employmentId:job,action:"benefit_removed"}})).toBe(1);});
-it("rejects foreign/sibling evidence, unreviewed fields, category mismatch and ownership injection",async()=>{const {input,field}=await assessment();const sibling=await source("employment_contract",{hmo_reference:"Other"},await employment(a));const foreign=await source("benefit_document",{},other,b);for(const documentId of [sibling.doc.id,foreign.doc.id])await expect(service.command(a,job,{action:"save",input:{...input,documentId}})).rejects.toMatchObject({status:422});await expect(service.command(a,job,{action:"save",input:{...input,category:"pension"}})).rejects.toMatchObject({status:422});await db.extractedField.update({where:{id:field.id},data:{reviewState:"proposed"}});await expect(service.command(a,job,{action:"save",input})).rejects.toMatchObject({status:422});await expect(service.command(a,job,{action:"save",input:{...input,userId:b}})).rejects.toThrow();});
-it("invalidates field revisions, rejection, deletion and changed employment context",async()=>{const {input,field,doc}=await assessment();await service.command(a,job,{action:"save",input});await db.extractedField.update({where:{id:field.id},data:{version:2}});expect((await service.read(a,job)).benefits.find(i=>i.category==="hmo")).toMatchObject({stale:true,classification:"unknown",savedClassification:"employer_linked"});await service.command(a,job,{action:"save",input:{...input,version:0,fieldVersion:2}});await db.extractedField.update({where:{id:field.id},data:{reviewState:"rejected",value:null,version:3}});expect((await service.read(a,job)).benefits.find(i=>i.category==="hmo")!.stale).toBe(true);await db.employmentDocument.delete({where:{id:doc.id}});expect((await service.read(a,job)).sources).toEqual([]);await updateEmployment(a,job,{...jobInput,roleTitle:"New role"});await expect(service.command(a,job,{action:"save",input:{...input,version:1,fieldId:null,fieldVersion:null}})).rejects.toMatchObject({status:409});});
-it("reopening removes the derived entry and re-closing requires re-review",async()=>{const {input}=await assessment();await service.command(a,job,{action:"save",input});await updateEmployment(a,job,{...jobInput,status:"active",endDate:null});expect(await service.list(a)).toEqual([]);await expect(service.read(a,job)).rejects.toMatchObject({status:404});await expect(service.command(a,job,{action:"remove",category:"hmo",version:0})).rejects.toMatchObject({status:404});await updateEmployment(a,job,jobInput);expect((await service.read(a,job)).benefits.find(i=>i.category==="hmo")!.stale).toBe(true);});
-it("masks names/providers and never exposes filenames, identifiers, excerpts or financial fields",async()=>{await db.employment.update({where:{id:job},data:{employerName:"Harbour ID 123456789"}});await source("pension_statement",{provider:"Pensions RSA: ABC123456789",contribution_1_employee_amount:"NGN 54321"});const json=JSON.stringify(await service.read(a,job));for(const sensitive of ["123456789","PRIVATE_RSA","PRIVATE_EXCERPT","secret-checksum","54321","proposedValue","userId"])expect(json).not.toContain(sensitive);expect(json).toContain("[hidden]");});
-it("keeps conflicting providers, date mismatches and unavailable documents explicit",async()=>{const first=await source("pension_statement",{provider:"First PFA"});await source("pension_statement",{provider:"Second PFA"});await exitService(db).create(a,{employmentId:job,answers:{exitType:"resignation",lastWorkingDate:"2026-10-30"}});const view=await service.read(a,job);expect(view.pension.provider).toBeNull();expect(view.pension.providerBasis).toContain("disagree");expect(view.dateWarning).toContain("clarification");await db.employmentDocument.updateMany({where:{employmentId:job},data:{status:"deleting"}});const changed=await service.read(a,job);expect(changed.pension.provider).toBeNull();expect(changed.documents.find(i=>i.category==="pension")!.state).toContain("Unavailable");expect(JSON.stringify(changed.sources)).not.toContain(first.doc.id);});
-it("reuses current pension confirmation and invalidates deleted statement evidence",async()=>{const exit=await exitService(db).create(a,{employmentId:job,answers:{exitType:"retirement",lastWorkingDate:"2026-10-31",pension:"yes"}});const statement=await source("pension_statement",{provider:"Harbour Pension",statement_start:"2026-10",statement_end:"2026-11",entries_complete:"yes",contribution_1_employer:"Harbour",contribution_1_period:"2026-10",contribution_1_date:"2026-11-05",contribution_1_employee_amount:"NGN 20000",contribution_1_employer_amount:"NGN 25000"});const finance=financeService(db);const matched=await finance.command(a,exit.id,{action:"pension_save",input:{version:0,targetPeriod:"2026-10",statementRunId:statement.run.id,expectedFieldId:null,expectedFieldVersion:null,followUpDate:null}});await finance.command(a,exit.id,{action:"pension_confirm",version:1,evidenceToken:matched.pension!.evidenceToken});expect((await service.read(a,job)).pension).toMatchObject({state:"confirmed",provider:"Harbour Pension",targetPeriod:"2026-10"});await db.employmentDocument.delete({where:{id:statement.doc.id}});expect((await service.read(a,job)).pension).toMatchObject({state:"needs_clarification",provider:null});});
-it("rolls back benefit mutation if auditing fails",async()=>{const {input}=await assessment();const guarded=db.$extends({query:{auditEvent:{async create(){throw new Error("audit unavailable");}}}});await expect(passportService(guarded as unknown as typeof db).command(a,job,{action:"save",input})).rejects.toThrow();expect(await db.benefit.count({where:{employmentId:job}})).toBe(0);});
-it("invalidates document metadata and exit-context edits without replacing the saved assessment",async()=>{const {input,doc}=await assessment();await service.command(a,job,{action:"save",input});await db.employmentDocument.update({where:{id:doc.id},data:{documentType:"benefit_document"}});expect((await service.read(a,job)).benefits.find(i=>i.category==="hmo")!.stale).toBe(true);const current=await service.read(a,job);await service.command(a,job,{action:"save",input:{...input,version:0,contextToken:current.contextToken,fieldId:null,fieldVersion:null}});expect((await service.read(a,job)).benefits.find(i=>i.category==="hmo")!.stale).toBe(false);await exitService(db).create(a,{employmentId:job,answers:{exitType:"contract_completion",lastWorkingDate:"2026-10-31"}});expect((await service.read(a,job)).benefits.find(i=>i.category==="hmo")).toMatchObject({stale:true,classification:"unknown",savedClassification:"employer_linked"});});
-it("allows unresolved assessments without evidence and serializes competing creates",async()=>{const view=await service.read(a,job);const input={category:"cooperative",classification:"unknown",version:null,contextToken:view.contextToken,documentId:null,fieldId:null,fieldVersion:null,evidenceAcknowledged:false};const attempts=await Promise.allSettled([service.command(a,job,{action:"save",input}),service.command(a,job,{action:"save",input})]);expect(attempts.filter(result=>result.status==="fulfilled")).toHaveLength(1);expect(await db.benefit.count({where:{employmentId:job}})).toBe(1);expect(await db.auditEvent.count({where:{employmentId:job,action:"benefit_saved"}})).toBe(1);});
-it("never promotes proposed provider evidence and does not substitute an unselected statement",async()=>{const proposed=await source("pension_statement",{provider:"Unreviewed PFA"});await db.extractedField.update({where:{id:proposed.field.id},data:{reviewState:"proposed",value:null}});expect((await service.read(a,job)).pension.provider).toBeNull();const exit=await exitService(db).create(a,{employmentId:job,answers:{exitType:"retirement",lastWorkingDate:"2026-10-31",pension:"yes"}});await financeService(db).command(a,exit.id,{action:"pension_save",input:{version:0,targetPeriod:"2026-10",statementRunId:proposed.run.id,expectedFieldId:null,expectedFieldVersion:null,followUpDate:null}});await source("pension_statement",{provider:"Different reviewed PFA"});expect((await service.read(a,job)).pension.provider).toBeNull();});
+async function source(
+  type: DocumentType = "employment_contract",
+  values: Record<string, string> = { hmo_reference: "HMO with employer" },
+  employmentId = job,
+  userId = a,
+) {
+  const doc = await db.employmentDocument.create({
+    data: {
+      userId,
+      employmentId,
+      documentType: type,
+      originalFilename: "PRIVATE_RSA123456.pdf",
+      sanitizedFilename: "PRIVATE_RSA123456.pdf",
+      objectKey: crypto.randomUUID(),
+      mimeType: "application/pdf",
+      fileSize: 1,
+      checksum: "secret-checksum",
+      status: "ready",
+    },
+  });
+  const run = await db.documentExtraction.create({
+    data: {
+      userId,
+      documentId: doc.id,
+      documentType: type,
+      sourceKind: "manual",
+      model: "manual",
+      promptVersion: "evidence-v2",
+      schemaVersion: "fields-v2",
+      status: "ready",
+      fields: {
+        create: Object.entries(values).map(([key, value]) => ({
+          key,
+          value,
+          proposedValue: value,
+          evidence: "PRIVATE_EXCERPT_123456",
+          reviewState: "confirmed",
+          confidence: "high",
+          version: 1,
+        })),
+      },
+    },
+    include: { fields: true },
+  });
+  return {
+    doc,
+    run,
+    field: run.fields.find((field) => field.key === Object.keys(values)[0])!,
+  };
+}
+async function assessment(
+  category = "hmo",
+  classification = "employer_linked",
+) {
+  const evidence = await source();
+  const view = await service.read(a, job);
+  return {
+    ...evidence,
+    input: {
+      category,
+      classification,
+      version: null,
+      contextToken: view.contextToken,
+      documentId: evidence.doc.id,
+      fieldId: evidence.field.id,
+      fieldVersion: 1,
+      evidenceAcknowledged: true,
+    },
+  };
+}
+beforeEach(async () => {
+  a = (await db.user.create({ data: {} })).id;
+  b = (await db.user.create({ data: {} })).id;
+  job = await employment(a);
+  other = await employment(b);
+});
+afterEach(async () => {
+  await db.auditEvent.deleteMany({ where: { userId: { in: [a, b] } } });
+  await db.employmentDocument.deleteMany({ where: { userId: { in: [a, b] } } });
+  await db.user.deleteMany({ where: { id: { in: [a, b] } } });
+});
+afterAll(() => db.$disconnect());
+it("derives closed entries, unknowns and dates without creating copied Passport rows", async () => {
+  const active = await employment(a, "active");
+  const list = await service.list(a);
+  expect(list.map((i) => i.id)).toEqual([job]);
+  const view = await service.read(a, job);
+  expect(view).toMatchObject({
+    employer: "Harbour",
+    endDate: "2026-10-31",
+    exit: null,
+    pension: { provider: null, state: "not_started" },
+  });
+  expect(view.benefits).toHaveLength(6);
+  expect(view.benefits.every((i) => i.classification === "unknown")).toBe(true);
+  expect(view.documents.every((i) => i.state === "Not saved")).toBe(true);
+  await expect(service.read(a, active)).rejects.toMatchObject({ status: 404 });
+});
+it("enforces ownership for list/read/save/remove and composite database ownership", async () => {
+  const { input } = await assessment();
+  await expect(service.read(b, job)).rejects.toMatchObject({ status: 404 });
+  await expect(service.read("", job)).rejects.toMatchObject({ status: 401 });
+  await expect(service.list("")).rejects.toMatchObject({ status: 401 });
+  expect((await service.list(b)).map((i) => i.id)).toEqual([other]);
+  await expect(
+    service.command(b, job, { action: "save", input }),
+  ).rejects.toMatchObject({ status: 404 });
+  await service.command(a, job, { action: "save", input });
+  await expect(
+    service.command(b, job, { action: "remove", category: "hmo", version: 0 }),
+  ).rejects.toMatchObject({ status: 404 });
+  await expect(
+    db.benefit.updateMany({
+      where: { employmentId: job },
+      data: { userId: b },
+    }),
+  ).rejects.toThrow();
+});
+it("saves/updates/removes worker assessments with audit and optimistic versions", async () => {
+  const { input } = await assessment();
+  const saved = await service.command(a, job, { action: "save", input });
+  expect(saved.benefits.find((i) => i.category === "hmo")).toMatchObject({
+    classification: "employer_linked",
+    version: 0,
+  });
+  await expect(
+    service.command(a, job, { action: "save", input }),
+  ).rejects.toMatchObject({ status: 409 });
+  await service.command(a, job, {
+    action: "save",
+    input: { ...input, classification: "portable", version: 0 },
+  });
+  await expect(
+    service.command(a, job, { action: "remove", category: "hmo", version: 0 }),
+  ).rejects.toMatchObject({ status: 409 });
+  await service.command(a, job, {
+    action: "remove",
+    category: "hmo",
+    version: 1,
+  });
+  expect(
+    (await service.read(a, job)).benefits.find((i) => i.category === "hmo")!
+      .version,
+  ).toBeNull();
+  expect(
+    await db.auditEvent.count({
+      where: { employmentId: job, action: "benefit_saved" },
+    }),
+  ).toBe(2);
+  expect(
+    await db.auditEvent.count({
+      where: { employmentId: job, action: "benefit_removed" },
+    }),
+  ).toBe(1);
+});
+it("rejects foreign/sibling evidence, unreviewed fields, category mismatch and ownership injection", async () => {
+  const { input, field } = await assessment();
+  const sibling = await source(
+    "employment_contract",
+    { hmo_reference: "Other" },
+    await employment(a),
+  );
+  const foreign = await source("benefit_document", {}, other, b);
+  for (const documentId of [sibling.doc.id, foreign.doc.id])
+    await expect(
+      service.command(a, job, {
+        action: "save",
+        input: { ...input, documentId },
+      }),
+    ).rejects.toMatchObject({ status: 422 });
+  await expect(
+    service.command(a, job, {
+      action: "save",
+      input: { ...input, category: "pension" },
+    }),
+  ).rejects.toMatchObject({ status: 422 });
+  await db.extractedField.update({
+    where: { id: field.id },
+    data: { reviewState: "proposed" },
+  });
+  await expect(
+    service.command(a, job, { action: "save", input }),
+  ).rejects.toMatchObject({ status: 422 });
+  await expect(
+    service.command(a, job, { action: "save", input: { ...input, userId: b } }),
+  ).rejects.toThrow();
+});
+it("invalidates field revisions, rejection, deletion and changed employment context", async () => {
+  const { input, field, doc } = await assessment();
+  await service.command(a, job, { action: "save", input });
+  await db.extractedField.update({
+    where: { id: field.id },
+    data: { version: 2 },
+  });
+  expect(
+    (await service.read(a, job)).benefits.find((i) => i.category === "hmo"),
+  ).toMatchObject({
+    stale: true,
+    classification: "unknown",
+    savedClassification: "employer_linked",
+  });
+  await service.command(a, job, {
+    action: "save",
+    input: { ...input, version: 0, fieldVersion: 2 },
+  });
+  await db.extractedField.update({
+    where: { id: field.id },
+    data: { reviewState: "rejected", value: null, version: 3 },
+  });
+  expect(
+    (await service.read(a, job)).benefits.find((i) => i.category === "hmo")!
+      .stale,
+  ).toBe(true);
+  await db.employmentDocument.delete({ where: { id: doc.id } });
+  expect((await service.read(a, job)).sources).toEqual([]);
+  await updateEmployment(a, job, { ...jobInput, roleTitle: "New role" });
+  await expect(
+    service.command(a, job, {
+      action: "save",
+      input: { ...input, version: 1, fieldId: null, fieldVersion: null },
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+});
+it("reopening removes the derived entry and re-closing requires re-review", async () => {
+  const { input } = await assessment();
+  await service.command(a, job, { action: "save", input });
+  await updateEmployment(a, job, {
+    ...jobInput,
+    status: "active",
+    endDate: null,
+  });
+  expect(await service.list(a)).toEqual([]);
+  await expect(service.read(a, job)).rejects.toMatchObject({ status: 404 });
+  await expect(
+    service.command(a, job, { action: "remove", category: "hmo", version: 0 }),
+  ).rejects.toMatchObject({ status: 404 });
+  await updateEmployment(a, job, jobInput);
+  expect(
+    (await service.read(a, job)).benefits.find((i) => i.category === "hmo")!
+      .stale,
+  ).toBe(true);
+});
+it("masks names/providers and never exposes filenames, identifiers, excerpts or financial fields", async () => {
+  await db.employment.update({
+    where: { id: job },
+    data: { employerName: "Harbour ID 123456789" },
+  });
+  await source("pension_statement", {
+    provider: "Pensions RSA: ABC123456789",
+    contribution_1_employee_amount: "NGN 54321",
+  });
+  const json = JSON.stringify(await service.read(a, job));
+  for (const sensitive of [
+    "123456789",
+    "PRIVATE_RSA",
+    "PRIVATE_EXCERPT",
+    "secret-checksum",
+    "54321",
+    "proposedValue",
+    "userId",
+  ])
+    expect(json).not.toContain(sensitive);
+  expect(json).toContain("[hidden]");
+});
+it("keeps conflicting providers, date mismatches and unavailable documents explicit", async () => {
+  const first = await source("pension_statement", { provider: "First PFA" });
+  await source("pension_statement", { provider: "Second PFA" });
+  await exitService(db).create(a, {
+    employmentId: job,
+    answers: { exitType: "resignation", lastWorkingDate: "2026-10-30" },
+  });
+  const view = await service.read(a, job);
+  expect(view.pension.provider).toBeNull();
+  expect(view.pension.providerBasis).toContain("disagree");
+  expect(view.dateWarning).toContain("clarification");
+  await db.employmentDocument.updateMany({
+    where: { employmentId: job },
+    data: { status: "deleting" },
+  });
+  const changed = await service.read(a, job);
+  expect(changed.pension.provider).toBeNull();
+  expect(
+    changed.documents.find((i) => i.category === "pension")!.state,
+  ).toContain("Unavailable");
+  expect(JSON.stringify(changed.sources)).not.toContain(first.doc.id);
+});
+it("reuses current pension confirmation and invalidates deleted statement evidence", async () => {
+  const exit = await exitService(db).create(a, {
+    employmentId: job,
+    answers: {
+      exitType: "retirement",
+      lastWorkingDate: "2026-10-31",
+      pension: "yes",
+    },
+  });
+  const statement = await source("pension_statement", {
+    provider: "Harbour Pension",
+    statement_start: "2026-10",
+    statement_end: "2026-11",
+    entries_complete: "yes",
+    contribution_1_employer: "Harbour",
+    contribution_1_period: "2026-10",
+    contribution_1_date: "2026-11-05",
+    contribution_1_employee_amount: "NGN 20000",
+    contribution_1_employer_amount: "NGN 25000",
+  });
+  const finance = financeService(db);
+  const matched = await finance.command(a, exit.id, {
+    action: "pension_save",
+    input: {
+      version: 0,
+      targetPeriod: "2026-10",
+      statementRunId: statement.run.id,
+      expectedFieldId: null,
+      expectedFieldVersion: null,
+      followUpDate: null,
+    },
+  });
+  await finance.command(a, exit.id, {
+    action: "pension_confirm",
+    version: 1,
+    evidenceToken: matched.pension!.evidenceToken,
+  });
+  expect((await service.read(a, job)).pension).toMatchObject({
+    state: "confirmed",
+    provider: "Harbour Pension",
+    targetPeriod: "2026-10",
+  });
+  await db.employmentDocument.delete({ where: { id: statement.doc.id } });
+  expect((await service.read(a, job)).pension).toMatchObject({
+    state: "needs_clarification",
+    provider: null,
+  });
+});
+it("rolls back benefit mutation if auditing fails", async () => {
+  const { input } = await assessment();
+  const guarded = db.$extends({
+    query: {
+      auditEvent: {
+        async create() {
+          throw new Error("audit unavailable");
+        },
+      },
+    },
+  });
+  await expect(
+    passportService(guarded as unknown as typeof db).command(a, job, {
+      action: "save",
+      input,
+    }),
+  ).rejects.toThrow();
+  expect(await db.benefit.count({ where: { employmentId: job } })).toBe(0);
+});
+it("invalidates document metadata and exit-context edits without replacing the saved assessment", async () => {
+  const { input, doc } = await assessment();
+  await service.command(a, job, { action: "save", input });
+  await db.employmentDocument.update({
+    where: { id: doc.id },
+    data: { documentType: "benefit_document" },
+  });
+  expect(
+    (await service.read(a, job)).benefits.find((i) => i.category === "hmo")!
+      .stale,
+  ).toBe(true);
+  const current = await service.read(a, job);
+  await service.command(a, job, {
+    action: "save",
+    input: {
+      ...input,
+      version: 0,
+      contextToken: current.contextToken,
+      fieldId: null,
+      fieldVersion: null,
+    },
+  });
+  expect(
+    (await service.read(a, job)).benefits.find((i) => i.category === "hmo")!
+      .stale,
+  ).toBe(false);
+  await exitService(db).create(a, {
+    employmentId: job,
+    answers: { exitType: "contract_completion", lastWorkingDate: "2026-10-31" },
+  });
+  expect(
+    (await service.read(a, job)).benefits.find((i) => i.category === "hmo"),
+  ).toMatchObject({
+    stale: true,
+    classification: "unknown",
+    savedClassification: "employer_linked",
+  });
+});
+it("allows unresolved assessments without evidence and serializes competing creates", async () => {
+  const view = await service.read(a, job);
+  const input = {
+    category: "cooperative",
+    classification: "unknown",
+    version: null,
+    contextToken: view.contextToken,
+    documentId: null,
+    fieldId: null,
+    fieldVersion: null,
+    evidenceAcknowledged: false,
+  };
+  const attempts = await Promise.allSettled([
+    service.command(a, job, { action: "save", input }),
+    service.command(a, job, { action: "save", input }),
+  ]);
+  expect(
+    attempts.filter((result) => result.status === "fulfilled"),
+  ).toHaveLength(1);
+  expect(await db.benefit.count({ where: { employmentId: job } })).toBe(1);
+  expect(
+    await db.auditEvent.count({
+      where: { employmentId: job, action: "benefit_saved" },
+    }),
+  ).toBe(1);
+});
+it("never promotes proposed provider evidence and does not substitute an unselected statement", async () => {
+  const proposed = await source("pension_statement", {
+    provider: "Unreviewed PFA",
+  });
+  await db.extractedField.update({
+    where: { id: proposed.field.id },
+    data: { reviewState: "proposed", value: null },
+  });
+  expect((await service.read(a, job)).pension.provider).toBeNull();
+  const exit = await exitService(db).create(a, {
+    employmentId: job,
+    answers: {
+      exitType: "retirement",
+      lastWorkingDate: "2026-10-31",
+      pension: "yes",
+    },
+  });
+  await financeService(db).command(a, exit.id, {
+    action: "pension_save",
+    input: {
+      version: 0,
+      targetPeriod: "2026-10",
+      statementRunId: proposed.run.id,
+      expectedFieldId: null,
+      expectedFieldVersion: null,
+      followUpDate: null,
+    },
+  });
+  await source("pension_statement", { provider: "Different reviewed PFA" });
+  expect((await service.read(a, job)).pension.provider).toBeNull();
+});

@@ -1,1 +1,10 @@
-:root { --canvas: #f6f7f2; --surface: #fff; --ink: #172d27; --muted: #53625c; --accent: #123f35; --border: #dce2d9; --radius: 1.25rem; --radius-small: .65rem; }
+:root {
+  --canvas: #f6f7f2;
+  --surface: #fff;
+  --ink: #172d27;
+  --muted: #53625c;
+  --accent: #123f35;
+  --border: #dce2d9;
+  --radius: 1.25rem;
+  --radius-small: 0.65rem;
+}
