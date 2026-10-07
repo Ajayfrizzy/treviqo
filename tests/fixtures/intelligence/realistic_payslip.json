@@ -1,0 +1,66 @@
+{
+  "type": "payslip",
+  "text": "PAYSLIP \u2014 SYNTHETIC TEST ONLY\nPrepared for the monthly payroll record. All names and amounts below are fictional.\n\nEmployer: Harbour Workshop Ltd\nEmployee: Ada Example\nPay period: September 2026\nGross pay: NGN 420,000.00\nNet pay: NGN 338,400.00\nBasic salary: NGN 300,000.00\nEmployee pension deduction: NGN 24,000.00\nPAYE tax: NGN 42,600.00\nOther deductions: NGN 15,000.00\nApproved expense reimbursement: NGN 18,500.00\nTotal allowances: NGN 120,000.00\n\nNotes: The reimbursement is listed separately from salary. This record reports the stated amounts only; do not calculate any totals. No bank account, pension identifier or authentication details are included.\nIssued: 30 September 2026. Retain this statement for personal records.",
+  "classification": {
+    "type": "payslip",
+    "evidence": "PAYSLIP",
+    "confidence": "high"
+  },
+  "fields": {
+    "employer": {
+      "value": "Harbour Workshop Ltd",
+      "evidence": "Employer: Harbour Workshop Ltd",
+      "confidence": "medium"
+    },
+    "employee": {
+      "value": "Ada Example",
+      "evidence": "Employee: Ada Example",
+      "confidence": "medium"
+    },
+    "pay_period": {
+      "value": "September 2026",
+      "evidence": "Pay period: September 2026",
+      "confidence": "medium"
+    },
+    "gross_pay": {
+      "value": "NGN 420,000.00",
+      "evidence": "Gross pay: NGN 420,000.00",
+      "confidence": "medium"
+    },
+    "net_pay": {
+      "value": "NGN 338,400.00",
+      "evidence": "Net pay: NGN 338,400.00",
+      "confidence": "medium"
+    },
+    "basic_salary": {
+      "value": "NGN 300,000.00",
+      "evidence": "Basic salary: NGN 300,000.00",
+      "confidence": "medium"
+    },
+    "pension_deduction": {
+      "value": "NGN 24,000.00",
+      "evidence": "Employee pension deduction: NGN 24,000.00",
+      "confidence": "medium"
+    },
+    "tax": {
+      "value": "NGN 42,600.00",
+      "evidence": "PAYE tax: NGN 42,600.00",
+      "confidence": "medium"
+    },
+    "other_deductions": {
+      "value": "NGN 15,000.00",
+      "evidence": "Other deductions: NGN 15,000.00",
+      "confidence": "medium"
+    },
+    "reimbursements": {
+      "value": "NGN 18,500.00",
+      "evidence": "Approved expense reimbursement: NGN 18,500.00",
+      "confidence": "medium"
+    },
+    "allowances": {
+      "value": "NGN 120,000.00",
+      "evidence": "Total allowances: NGN 120,000.00",
+      "confidence": "medium"
+    }
+  }
+}

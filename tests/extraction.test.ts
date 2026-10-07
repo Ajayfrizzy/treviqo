@@ -139,3 +139,57 @@ it("never accepts AI completeness assertions for pension absence decisions", () 
     fields.find((field) => field.key === "entries_complete"),
   ).toMatchObject({ value: null, confidence: "needs_review" });
 });
+
+it("validates every expected realistic payslip field against the synthetic source", () => {
+  const fixture = JSON.parse(
+    readFileSync("tests/fixtures/intelligence/realistic_payslip.json", "utf8"),
+  );
+  const fields = parseFields(
+    JSON.stringify(fixture.fields),
+    "payslip",
+    fixture.text,
+  );
+  expect(fields).toHaveLength(11);
+  expect(fields.every((f) => f.value === fixture.fields[f.key].value)).toBe(
+    true,
+  );
+});
+it("expands sparse model proposals without weakening evidence, duplicate, or key checks", () => {
+  const source = "Employer: Harbour Workshop Ltd";
+  const field = {
+    key: "employer",
+    value: "Harbour Workshop Ltd",
+    evidence: source,
+  };
+  const parse = (fields: unknown[]) =>
+    parseFields(JSON.stringify({ fields }), "employment_contract", source);
+  const fields = parse([field]);
+  expect(fields).toHaveLength(14);
+  expect(fields.find((f) => f.key === "employer")).toEqual({
+    key: "employer",
+    value: field.value,
+    evidence: source,
+    confidence: "needs_review",
+  });
+  expect(fields.find((f) => f.key === "salary")).toEqual({
+    key: "salary",
+    value: null,
+    evidence: null,
+    confidence: "needs_review",
+  });
+  expect(parse([]).every((f) => f.value === null)).toBe(true);
+  expect(
+    parse([{ ...field, evidence: "invented excerpt" }]).every(
+      (f) => f.value === null,
+    ),
+  ).toBe(true);
+  expect(
+    parse([{ ...field, value: "invented employer" }]).every(
+      (f) => f.value === null,
+    ),
+  ).toBe(true);
+  expect(() => parse([field, field])).toThrow();
+  expect(() => parse([{ ...field, key: "legal_entitlement" }])).toThrow();
+  expect(() => parse([{ ...field, confidence: "high" }])).toThrow();
+  expect(() => parse([{ key: "employer", value: field.value }])).toThrow();
+});

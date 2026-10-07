@@ -4,7 +4,7 @@ import { getDb } from "@/server/db/client";
 import { documentService } from "@/modules/documents/service";
 import { extractionService } from "@/modules/extractions/service";
 import { FakeStorage } from "./helpers/fake-storage";
-import type { DocumentAI } from "@/server/ai/client";
+import { InferenceError, type DocumentAI } from "@/server/ai/client";
 const db = getDb();
 const fixture = JSON.parse(
   readFileSync("tests/fixtures/intelligence/employment_contract.json", "utf8"),
@@ -77,8 +77,8 @@ it("persists only proposed grounded fields with source/model/version metadata, w
     documentType: "employment_contract",
     model: "fixture-model",
     sourceKind: "pdf_text",
-    promptVersion: "evidence-v2",
-    schemaVersion: "fields-v2",
+    promptVersion: "evidence-v3",
+    schemaVersion: "fields-v3",
   });
   expect(
     extraction!.fields.every(
@@ -349,4 +349,78 @@ it("fails closed on throttling and rolls back review when auditing fails", async
   expect(
     await db.extractedField.findUnique({ where: { id: run.fields[0]!.id } }),
   ).toMatchObject({ reviewState: "proposed", version: 0, value: null });
+});
+
+it("persists timeout fallback and permits manual entry without another inference call", async () => {
+  ai.complete = vi.fn().mockRejectedValue(new InferenceError("timeout"));
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  const failed = (
+    await service().start(userId, documentId, {
+      mode: "ai",
+      type: "employment_contract",
+      text: fixture.text,
+    })
+  ).extraction!;
+  expect(failed).toMatchObject({
+    status: "failed",
+    errorCode: "timeout",
+    fields: [],
+  });
+  expect(log).toHaveBeenCalledWith(
+    "extraction_inference_failed",
+    "extraction",
+    "timeout",
+    null,
+  );
+  const manual = (
+    await service().start(userId, documentId, {
+      mode: "manual",
+      type: "employment_contract",
+    })
+  ).extraction!;
+  expect(manual.status).toBe("ready");
+  expect(
+    manual.fields.every(
+      (f) =>
+        f.value === null &&
+        f.proposedValue === null &&
+        f.reviewState === "proposed",
+    ),
+  ).toBe(true);
+  expect(ai.complete).toHaveBeenCalledTimes(1);
+});
+
+it("persists sparse 3B responses only as proposals and retains missing review fields", async () => {
+  ai.complete = vi.fn().mockResolvedValue(
+    JSON.stringify({
+      fields: [
+        {
+          key: "employer",
+          value: "Harbour Workshop Ltd",
+          evidence: "Employer: Harbour Workshop Ltd",
+        },
+      ],
+    }),
+  );
+  const run = (
+    await service().start(userId, documentId, {
+      mode: "ai",
+      type: "employment_contract",
+      text: fixture.text,
+    })
+  ).extraction!;
+  expect(run.status).toBe("ready");
+  expect(run.fields).toHaveLength(15);
+  expect(run.fields.find((f) => f.key === "employer")).toMatchObject({
+    proposedValue: "Harbour Workshop Ltd",
+    value: null,
+    confidence: "needs_review",
+    reviewState: "proposed",
+  });
+  expect(run.fields.find((f) => f.key === "salary")).toMatchObject({
+    proposedValue: null,
+    value: null,
+    reviewState: "proposed",
+  });
+  expect(ai.complete).toHaveBeenCalledTimes(1);
 });

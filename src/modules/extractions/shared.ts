@@ -164,6 +164,8 @@ export const failureMessages: Record<string, string> = {
   too_large:
     "This document is too long for one extraction. Enter the key fields manually.",
   unavailable: "AI is unavailable. Try again later or enter fields manually.",
+  timeout:
+    "AI took too long to respond. Try again later or enter fields manually.",
   malformed:
     "The model response could not be verified. Retry or enter fields manually.",
   interrupted: "This attempt was interrupted. Retry or enter fields manually.",

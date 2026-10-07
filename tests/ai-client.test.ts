@@ -1,9 +1,10 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { getDocumentAI } from "@/server/ai/client";
+import { getDocumentAI, INFERENCE_TIMEOUT_MS } from "@/server/ai/client";
 import { parseEnv } from "@/server/config/env";
 import { classificationPrompt } from "@/modules/extractions/prompts";
 const task = classificationPrompt("Synthetic employment contract");
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
@@ -48,7 +49,7 @@ it("uses bounded non-streaming JSON requests with no redirects, tools, or fallba
   expect(body).toMatchObject({
     model: "fixture-model",
     temperature: 0,
-    max_tokens: 4096,
+    max_tokens: 256,
     response_format: { type: "json_object" },
     stream: false,
   });
@@ -72,4 +73,72 @@ it("rejects provider failures, truncated output, malformed envelopes and excessi
     vi.fn().mockRejectedValue(new DOMException("timeout", "TimeoutError")),
   );
   await expect(getDocumentAI().complete(task)).rejects.toThrow();
+});
+
+it("bounds stalled headers and stalled response bodies without automatic retries", async () => {
+  configure();
+  for (const bodyStarted of [false, true]) {
+    vi.useFakeTimers();
+    const fetcher = vi.fn((_url, init) => {
+      const signal = init.signal as AbortSignal;
+      if (!bodyStarted)
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), {
+            once: true,
+          });
+        });
+      return Promise.resolve(
+        new Response(
+          new ReadableStream({
+            start(controller) {
+              signal.addEventListener(
+                "abort",
+                () => controller.error(signal.reason),
+                { once: true },
+              );
+            },
+          }),
+        ),
+      );
+    });
+    vi.stubGlobal("fetch", fetcher);
+    // Fake the clock driving AbortSignal.timeout, whose native timer is not faked.
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation((ms) => {
+        const controller = new AbortController();
+        setTimeout(
+          () =>
+            controller.abort(
+              new DOMException("private details", "TimeoutError"),
+            ),
+          ms,
+        );
+        return controller.signal;
+      });
+    const pending = expect(
+      getDocumentAI().complete(task),
+    ).rejects.toMatchObject({ code: "timeout", message: "AI timeout" });
+    await vi.advanceTimersByTimeAsync(INFERENCE_TIMEOUT_MS);
+    await pending;
+    expect(timeout).toHaveBeenCalledWith(INFERENCE_TIMEOUT_MS);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    timeout.mockRestore();
+    vi.useRealTimers();
+  }
+});
+it("retains only safe provider failure metadata and does not retry 429 or 503", async () => {
+  configure();
+  for (const status of [429, 503]) {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(new Response("secret provider body", { status }));
+    vi.stubGlobal("fetch", fetcher);
+    await expect(getDocumentAI().complete(task)).rejects.toMatchObject({
+      code: "http",
+      httpStatus: status,
+      message: "AI http",
+    });
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  }
 });

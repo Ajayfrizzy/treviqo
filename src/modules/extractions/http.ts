@@ -5,6 +5,7 @@ import { getCurrentUser } from "@/modules/auth/session";
 import { readSmallBody, sameOrigin } from "@/modules/auth/request";
 import { DocumentError } from "@/modules/documents/validation";
 import { extractionService } from "./service";
+import { extractionDatabaseCode } from "./diagnostics";
 const json = (body: unknown, status = 200) =>
   Response.json(body, {
     status,
@@ -14,11 +15,15 @@ const json = (body: unknown, status = 200) =>
     },
   });
 export async function extractionRequest(request: Request, documentId: string) {
+  let stage = "authentication";
   try {
     const user = await getCurrentUser();
     if (!user) throw new DocumentError("Sign in to review documents.", 401);
+    stage = "read_limiter";
     if (request.method === "GET") await limitWorkflow(user.id, "read");
+    stage = "service_initialization";
     const service = extractionService();
+    stage = "read";
     if (request.method === "GET")
       return json(
         await service.read(
@@ -28,6 +33,7 @@ export async function extractionRequest(request: Request, documentId: string) {
         ),
       );
     if (!sameOrigin(request)) throw new DocumentError("Request rejected.", 403);
+    stage = "write_limiter";
     await limitWorkflow(user.id, "write");
     if (
       request.headers.get("content-type")?.split(";")[0] !== "application/json"
@@ -41,6 +47,7 @@ export async function extractionRequest(request: Request, documentId: string) {
     } catch {
       throw new DocumentError("Invalid or oversized request.", 400);
     }
+    stage = request.method === "POST" ? "start" : "review";
     return json(
       request.method === "POST"
         ? await service.start(user.id, documentId, input)
@@ -59,6 +66,11 @@ export async function extractionRequest(request: Request, documentId: string) {
         },
         422,
       );
+    console.error(
+      "extraction_request_failed",
+      stage,
+      extractionDatabaseCode(error),
+    );
     return json(
       {
         error:

@@ -5,8 +5,8 @@ import {
   supportedTypes,
   type ExtractionType,
 } from "./shared";
-export const PROMPT_VERSION = "evidence-v2";
-export const SCHEMA_VERSION = "fields-v2";
+export const PROMPT_VERSION = "evidence-v3";
+export const SCHEMA_VERSION = "fields-v3";
 const cell = z
   .object({
     value: z.string().trim().min(1).max(1000).nullable(),
@@ -29,6 +29,30 @@ export function fieldsSchema(type: ExtractionType) {
       ),
     )
     .strict();
+}
+// Small-model wire schema: only present facts, no repeated null/confidence cells.
+// Application fields stay complete and untrusted; unknown/duplicate keys fail closed.
+export function proposalsSchema(type: ExtractionType) {
+  const keys = Object.keys(fieldLabels[type]);
+  return z
+    .object({
+      fields: z
+        .array(
+          z
+            .object({
+              key: z.enum(keys as [string, ...string[]]),
+              value: z.string().trim().min(1).max(1000),
+              evidence: z.string().trim().min(1).max(1600),
+            })
+            .strict(),
+        )
+        .max(keys.length),
+    })
+    .strict()
+    .superRefine(({ fields }, ctx) => {
+      if (new Set(fields.map((field) => field.key)).size !== fields.length)
+        ctx.addIssue({ code: "custom", message: "Duplicate field keys" });
+    });
 }
 export const normalizeEvidence = (text: string) =>
   text.replace(/\s+/g, " ").trim();
@@ -55,7 +79,29 @@ export function parseClassification(raw: string, source: string) {
   return value;
 }
 export function parseFields(raw: string, type: ExtractionType, source: string) {
-  return Object.entries(fieldsSchema(type).parse(JSON.parse(raw))).map(
+  const decoded = JSON.parse(raw);
+  const proposals =
+    decoded && typeof decoded === "object" && Object.hasOwn(decoded, "fields")
+      ? proposalsSchema(type).parse(decoded).fields
+      : null;
+  const input = proposals
+    ? Object.fromEntries(
+        Object.keys(fieldLabels[type]).map((key) => {
+          const field = proposals.find((field) => field.key === key);
+          return [
+            key,
+            field
+              ? {
+                  value: field.value,
+                  evidence: field.evidence,
+                  confidence: "needs_review",
+                }
+              : { value: null, evidence: null, confidence: "needs_review" },
+          ];
+        }),
+      )
+    : decoded;
+  return Object.entries(fieldsSchema(type).parse(input)).map(
     ([key, input]) => ({
       key,
       ...(key === "entries_complete"

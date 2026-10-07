@@ -42,7 +42,17 @@ const handler = async (request, response) => {
       fixtures.find((item) => source.includes(item.classification.evidence)) ??
       fixtures[0];
     const classify = body.messages[0].content.includes("Classify only");
-    let result = classify ? fixture.classification : fixture.fields;
+    let result = classify
+      ? fixture.classification
+      : {
+          fields: Object.entries(fixture.fields)
+            .filter(([, field]) => field.value !== null)
+            .map(([key, field]) => ({
+              key,
+              value: field.value,
+              evidence: field.evidence,
+            })),
+        };
     if (source.includes("FIXTURE_LOW") && classify)
       result = { ...fixture.classification, confidence: "low" };
     const content = source.includes("FIXTURE_MALFORMED")
