@@ -147,3 +147,29 @@ Employment browser checks assert equal-width Save/Cancel controls, a shared back
 ## Account deletion
 
 `account-deletion.test.ts` tests strict confirmation/ownership input, authentication, Origin/body limits, cookie clearing and redacted errors. Storage unit tests cover exact-key version purge and fail-closed listing/delete/HEAD errors. `account-deletion.integration.test.ts` uses real Argon2/PostgreSQL for password failures, all dependent tables, session revocation, cross-user isolation, partial batches/checkpoints, transaction rollback, unfinished uploads and concurrent PUT coordination. `tests/e2e/account-deletion.spec.ts` covers the Profile danger flow at 320/375/430/1440px, wrong password, Cancel, success/sign-in, revoked copied sessions, actual synthetic S3 AccessDenied with recovery, and tampered target-user/Origin rejection. Run with disposable PostgreSQL/Redis after all migrations; do not target production. Document integration and auth/Profile browser regression suites remain required because upload locking and S3 fixture inventory support are shared.
+
+## Navigation performance
+
+`tests/e2e/navigation.spec.ts` checks tab navigation at 375/1440px, employment
+creation/closure followed by fresh Home/Documents/Passport screens, and sign-out.
+It attaches per-tab click-to-heading timings (including browser automation overhead).
+The normal browser suite runs this journey in development mode.
+
+For actual production prefetch coverage, build first, then use disposable local
+PostgreSQL/Redis with all migrations applied:
+
+```sh
+openssl req -x509 -newkey rsa:2048 -nodes \
+  -keyout /tmp/treviqo-nav-test.key -out /tmp/treviqo-nav-test.crt \
+  -days 1 -subj /CN=127.0.0.1 -addext 'subjectAltName=IP:127.0.0.1'
+NAVIGATION_TLS_KEY=/tmp/treviqo-nav-test.key \
+NAVIGATION_TLS_CERT=/tmp/treviqo-nav-test.crt \
+  npx playwright test --config playwright.navigation.config.ts --reporter=list,json
+```
+
+Export disposable `DATABASE_URL` and `REDIS_URL` before running. The production
+configuration starts the actual standalone build on 3110 and a loopback-only TLS
+proxy on 3443. Only the test browser accepts the generated self-signed certificate;
+application TLS validation remains intact. Storage and AI are disabled for this
+navigation-only journey. Use Playwright's JSON reporter to retain timing attachments.
+These local timings do not represent Rumpty network/database latency.

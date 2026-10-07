@@ -17,13 +17,13 @@ export default async function Documents({
 }) {
   const user = await documentPageUser();
   const query = await searchParams;
-  const employments = await listEmployments(user.id);
+  let employments;
   let documents;
   try {
-    documents = await documentService().list(
-      user.id,
-      query.employmentId || undefined,
-    );
+    [employments, documents] = await Promise.all([
+      listEmployments(user.id),
+      documentService().list(user.id, query.employmentId || undefined),
+    ]);
   } catch (error) {
     if (error instanceof DocumentError && error.status === 404) notFound();
     throw error;

@@ -41,4 +41,13 @@ jobs:
       - run: npm run build
       - run: npm run worker:build
       - run: npx playwright install --with-deps chromium
+      - name: Verify production tab navigation
+        env:
+          NAVIGATION_TLS_KEY: ${{ runner.temp }}/treviqo-navigation.key
+          NAVIGATION_TLS_CERT: ${{ runner.temp }}/treviqo-navigation.crt
+        run: |
+          openssl req -x509 -newkey rsa:2048 -nodes \
+            -keyout "$NAVIGATION_TLS_KEY" -out "$NAVIGATION_TLS_CERT" \
+            -days 1 -subj /CN=127.0.0.1 -addext 'subjectAltName=IP:127.0.0.1'
+          npx playwright test --config playwright.navigation.config.ts
       - run: npm run test:e2e

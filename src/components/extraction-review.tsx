@@ -1,5 +1,6 @@
 "use client";
 import { Button } from "./button";
+import { useRouter } from "next/navigation";
 import { uiRequest } from "./ui-request";
 import { useState } from "react";
 import { documentTypes } from "@/modules/documents/shared";
@@ -21,6 +22,7 @@ export function ExtractionReview({
   documentId: string;
   initial: Bundle;
 }) {
+  const router = useRouter();
   const [data, setData] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -62,6 +64,8 @@ export function ExtractionReview({
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Please retry.");
       setData(result);
+      // Classification/review can change records in prefetched destinations.
+      if (method !== "GET") router.refresh();
       if (method === "PATCH") setMessage("Review saved.");
       if (method === "POST" && result.extraction?.status === "ready")
         setMessage(

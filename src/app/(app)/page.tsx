@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { PageSkeleton } from "@/components/page-skeleton";
 import Link from "@/components/action-link";
 import { employmentPageUser } from "@/modules/employments/page-user";
 import { listEmployments } from "@/modules/employments/service";
@@ -6,9 +8,9 @@ import { exitService } from "@/modules/exits/service";
 import { EmploymentCard } from "@/components/employment-card";
 export default async function Home() {
   const user = await employmentPageUser();
-  const records = await listEmployments(user.id);
-  const exits = await exitService().list(user.id);
-  const { current, previous } = groupEmployments(records);
+  // Start independent reads together; each section can stream when ready.
+  const records = listEmployments(user.id);
+  const exits = exitService().list(user.id);
   return (
     <>
       <p className="eyebrow">Your Treviqo</p>
@@ -16,6 +18,30 @@ export default async function Home() {
       <p className="intro">
         Your roles and your history, together in a space that belongs to you.
       </p>
+      <Suspense fallback={<PageSkeleton label="Loading employments…" />}>
+        <EmploymentOverview records={records} />
+      </Suspense>
+      <p className="history">
+        <Link className="button-link secondary" href="/reminders">
+          View reminders
+        </Link>
+      </p>
+      <Suspense fallback={<PageSkeleton label="Loading exit checklists…" />}>
+        <ExitOverview exits={exits} />
+      </Suspense>
+    </>
+  );
+}
+
+async function EmploymentOverview({
+  records: pending,
+}: {
+  records: ReturnType<typeof listEmployments>;
+}) {
+  const records = await pending;
+  const { current, previous } = groupEmployments(records);
+  return (
+    <>
       {!records.length ? (
         <section className="card empty-employment">
           <span className="badge">Start here</span>
@@ -64,24 +90,28 @@ export default async function Home() {
           </section>
         </>
       )}
-      <p className="history">
-        <Link className="button-link secondary" href="/reminders">
-          View reminders
-        </Link>
-      </p>
-      <section className="card exit-context">
-        <h2>
-          {exits.length ? "Your exit checklists" : "No active exit process"}
-        </h2>
-        <p>
-          {exits.length
-            ? `${exits.length} saved checklist${exits.length === 1 ? "" : "s"} to review.`
-            : "Start a checklist when you have a planned or actual last working date."}
-        </p>
-        <Link className="touch-link" href="/exit">
-          {exits.length ? "Review exit checklists" : "Open Job Exit Checker"}
-        </Link>
-      </section>
     </>
+  );
+}
+async function ExitOverview({
+  exits: pending,
+}: {
+  exits: ReturnType<ReturnType<typeof exitService>["list"]>;
+}) {
+  const exits = await pending;
+  return (
+    <section className="card exit-context">
+      <h2>
+        {exits.length ? "Your exit checklists" : "No active exit process"}
+      </h2>
+      <p>
+        {exits.length
+          ? `${exits.length} saved checklist${exits.length === 1 ? "" : "s"} to review.`
+          : "Start a checklist when you have a planned or actual last working date."}
+      </p>
+      <Link className="touch-link" href="/exit">
+        {exits.length ? "Review exit checklists" : "Open Job Exit Checker"}
+      </Link>
+    </section>
   );
 }

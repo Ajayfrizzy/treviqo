@@ -46,6 +46,7 @@ export function Navigation() {
         <Link
           key={section.href}
           href={section.href}
+          prefetch={true}
           aria-current={
             path === section.href ||
             (section.href === "/documents" && path.startsWith("/documents/")) ||
