@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/action-link";
 import { notFound } from "next/navigation";
 import { documentPageUser } from "@/modules/documents/page-user";
 import { documentService } from "@/modules/documents/service";

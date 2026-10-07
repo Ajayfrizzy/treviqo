@@ -33,7 +33,27 @@ async function create(page: Page) {
   await page.getByLabel("Role or title").fill("Product designer");
   await page.getByLabel("Start date", { exact: true }).fill("2024-02-29");
   await noOverflow(page);
-  await page.getByRole("button", { name: "Save employment" }).click();
+  const save = page.getByRole("button", {
+    name: "Save employment",
+    exact: true,
+  });
+  const cancel = page.getByRole("link", { name: "Cancel", exact: true });
+  const saveBox = (await save.boundingBox())!;
+  const cancelBox = (await cancel.boundingBox())!;
+  expect(saveBox.width).toBeCloseTo(cancelBox.width, 0);
+  expect(saveBox.y).toBeCloseTo(cancelBox.y, 0);
+  expect(cancelBox.x - saveBox.x - saveBox.width).toBeGreaterThanOrEqual(12);
+  expect(
+    await save.evaluate((el) => getComputedStyle(el).backgroundColor),
+  ).toBe(await cancel.evaluate((el) => getComputedStyle(el).backgroundColor));
+  expect(
+    await cancel.evaluate((el) => getComputedStyle(el).borderColor),
+  ).not.toBe(await save.evaluate((el) => getComputedStyle(el).borderColor));
+  await page.screenshot({
+    path: `test-results/employment-actions-${page.viewportSize()!.width}.png`,
+    fullPage: true,
+  });
+  await save.click();
   await expect(page.getByRole("status")).toHaveText("Employment added.");
   return new URL(page.url()).pathname.split("/").at(-1)!;
 }

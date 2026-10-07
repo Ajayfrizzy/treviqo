@@ -1,6 +1,7 @@
 "use client";
+import { Button } from "./button";
 import { uiRequest } from "./ui-request";
-import Link from "next/link";
+import Link from "@/components/action-link";
 import { useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -198,13 +199,17 @@ export function EmploymentForm({
           </>
         )}
       </fieldset>
-      <div className="form-actions">
-        <button type="submit" aria-busy={busy} disabled={busy}>
+      <div className="form-actions paired-actions">
+        <Button type="submit" aria-busy={busy} disabled={busy}>
           {busy ? "Saving…" : "Save employment"}
-        </button>
-        {!busy && (
+        </Button>
+        {busy ? (
+          <Button type="button" className="button-cancel" disabled>
+            Cancel
+          </Button>
+        ) : (
           <Link
-            className="touch-link"
+            className="button-link button-cancel"
             href={employment ? `/employments/${employment.id}` : "/"}
           >
             Cancel

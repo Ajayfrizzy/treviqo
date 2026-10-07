@@ -1,7 +1,8 @@
 "use client";
+import { Button } from "./button";
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import Link from "@/components/action-link";
 import { documentTypes } from "@/modules/documents/shared";
 type Employment = { id: string; employerName: string; roleTitle: string };
 export function DocumentUpload({
@@ -134,12 +135,16 @@ export function DocumentUpload({
           />
         </div>
       )}
-      <div className="form-actions">
-        <button disabled={busy} aria-busy={busy} type="submit">
+      <div className="form-actions paired-actions">
+        <Button disabled={busy} aria-busy={busy} type="submit">
           {busy ? "Uploading…" : "Upload document"}
-        </button>
-        {!busy && (
-          <Link className="touch-link" href="/documents">
+        </Button>
+        {busy ? (
+          <Button type="button" className="button-cancel" disabled>
+            Cancel
+          </Button>
+        ) : (
+          <Link className="button-link button-cancel" href="/documents">
             Cancel
           </Link>
         )}

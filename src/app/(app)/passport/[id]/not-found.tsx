@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/action-link";
 export default function NotFound() {
   return (
     <section className="card">

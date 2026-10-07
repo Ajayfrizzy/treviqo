@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/action-link";
 import { documentPageUser } from "@/modules/documents/page-user";
 import { listEmployments } from "@/modules/employments/service";
 import { getEnv } from "@/server/config/env";

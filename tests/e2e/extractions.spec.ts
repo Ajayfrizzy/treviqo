@@ -261,3 +261,89 @@ test("protects extraction APIs/pages, cross-origin writes and stale field edits"
     await other.close();
   }
 });
+
+test("review actions show local feedback, block repeated clicks, recover, and hide technical metadata", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 850 });
+  const id = await createDocument(page);
+  await page.goto(`/documents/${id}/review`);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let starts = 0;
+  await page.route(`**/api/documents/${id}/extractions`, async (route) => {
+    if (route.request().method() === "POST") {
+      starts++;
+      await gate;
+    }
+    await route.continue();
+  });
+  const extract = page.getByRole("button", {
+    name: "Extract details",
+    exact: true,
+  });
+  try {
+    await extract.click();
+    await expect(extract).toHaveAttribute("aria-busy", "true");
+    await expect(extract).toBeDisabled();
+    await extract.evaluate((button: HTMLButtonElement) => {
+      button.click();
+      button.click();
+    });
+    expect(starts).toBe(1);
+    await expect(page.getByRole("status")).toContainText(
+      "Processing your document",
+    );
+  } finally {
+    release();
+  }
+  await expect(page.getByRole("status")).toContainText("Details are ready", {
+    timeout: 20000,
+  });
+  await page.unroute(`**/api/documents/${id}/extractions`);
+  await expect(
+    page.getByText("Source and extraction record", { exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByRole("main")).not.toContainText("Prompt:");
+  await expect(page.getByRole("main")).not.toContainText("Schema:");
+  const employer = page.getByRole("region", { name: "Employer", exact: true });
+  await expect(
+    employer.getByText("Source excerpt", { exact: true }),
+  ).toBeVisible();
+  let finish!: () => void;
+  const saveGate = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  let saves = 0;
+  await page.route(`**/api/documents/${id}/extractions`, async (route) => {
+    saves++;
+    await saveGate;
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "Review unavailable. Please retry." }),
+    });
+  });
+  const confirm = employer.getByRole("button", { name: "Confirm proposal" });
+  try {
+    await confirm.click();
+    await expect(confirm).toHaveAttribute("aria-busy", "true");
+    await expect(confirm).toBeDisabled();
+    await confirm.evaluate((button: HTMLButtonElement) => button.click());
+    expect(saves).toBe(1);
+    await page.screenshot({
+      path: "test-results/review-button-pending-320.png",
+    });
+  } finally {
+    finish();
+  }
+  await expect(
+    page.getByRole("alert").filter({ hasText: "Review unavailable" }),
+  ).toBeVisible();
+  await expect(confirm).toBeEnabled();
+  await page.unroute(`**/api/documents/${id}/extractions`);
+  await confirm.click();
+  await expect(employer.getByText("confirmed", { exact: true })).toBeVisible();
+});

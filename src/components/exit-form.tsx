@@ -1,7 +1,8 @@
 "use client";
+import { Button } from "./button";
 import { uiRequest } from "./ui-request";
 import { useRef, useState } from "react";
-import Link from "next/link";
+import Link from "@/components/action-link";
 import { useRouter } from "next/navigation";
 import {
   emptyExitInput,
@@ -79,6 +80,7 @@ export function ExitForm({
     setTimeout(() => heading.current?.focus(), 0);
   }
   async function save() {
+    if (busy) return;
     if (!validate()) return;
     setBusy(true);
     setError("");
@@ -419,29 +421,37 @@ export function ExitForm({
         )}
         <div className="form-actions">
           {step > 0 && (
-            <button
+            <Button
               type="button"
               className="secondary"
               onClick={() => move(step - 1)}
             >
               Back
-            </button>
+            </Button>
           )}
           {step < steps.length - 1 && (
-            <button type="button" onClick={() => move(step + 1)}>
+            <Button type="button" onClick={() => move(step + 1)}>
               Next
-            </button>
+            </Button>
           )}
         </div>
-        <button type="submit" aria-busy={busy}>
-          {busy ? "Saving…" : "Save and view checklist"}
-        </button>
-        <Link
-          className="touch-link"
-          href={initial ? `/exit/${initial.id}` : "/exit"}
-        >
-          Cancel
-        </Link>
+        <div className="form-actions paired-actions">
+          <Button type="submit" aria-busy={busy}>
+            {busy ? "Saving…" : "Save and view checklist"}
+          </Button>
+          {busy ? (
+            <Button type="button" className="button-cancel" disabled>
+              Cancel
+            </Button>
+          ) : (
+            <Link
+              className="button-link button-cancel"
+              href={initial ? `/exit/${initial.id}` : "/exit"}
+            >
+              Cancel
+            </Link>
+          )}
+        </div>
       </fieldset>
       {busy && <p role="status">Saving your answers…</p>}
     </form>

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/action-link";
 import { employmentPageUser } from "@/modules/employments/page-user";
 import { exitService } from "@/modules/exits/service";
 import { exitTypes } from "@/modules/exits/shared";

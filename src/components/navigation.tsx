@@ -1,5 +1,5 @@
 "use client";
-import Link from "next/link";
+import Link from "@/components/action-link";
 import { usePathname } from "next/navigation";
 export const sections = [
   { href: "/", label: "Home", icon: "home" },

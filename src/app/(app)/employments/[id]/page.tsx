@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/action-link";
 import { notFound } from "next/navigation";
 import { employmentPageUser } from "@/modules/employments/page-user";
 import { getEmployment } from "@/modules/employments/service";
@@ -61,9 +61,11 @@ export default async function EmploymentDetail({
         </Link>
       </section>
       {record.status === "closed" && (
-        <Link className="button-link" href={`/passport/${record.id}`}>
-          View Passport entry
-        </Link>
+        <div className="form-actions">
+          <Link className="button-link" href={`/passport/${record.id}`}>
+            View Passport entry
+          </Link>
+        </div>
       )}
       <p className="quiet">
         These are the details you recorded. An employment status does not start

@@ -1,6 +1,7 @@
 "use client";
+import { Button } from "./button";
 import { uiRequest } from "./ui-request";
-import Link from "next/link";
+import Link from "@/components/action-link";
 import { useState } from "react";
 import {
   categories,
@@ -28,6 +29,7 @@ export function FinanceReview({ initial }: { initial: FinanceView }) {
   const [formKey, setFormKey] = useState(0);
   const [operation, setOperation] = useState("");
   async function request(body?: unknown): Promise<boolean> {
+    if (busy) return false;
     setOperation(
       body
         ? "Saving your review and checking current evidence…"
@@ -76,13 +78,9 @@ export function FinanceReview({ initial }: { initial: FinanceView }) {
         <Link className="touch-link" href="/documents">
           Open document reviews
         </Link>
-        <button
-          className="secondary"
-          disabled={busy}
-          onClick={() => void request()}
-        >
+        <Button className="secondary" disabled={busy} onClick={() => request()}>
           Refresh evidence
-        </button>
+        </Button>
       </section>
       {error && (
         <p role="alert" className="form-message">
@@ -138,7 +136,7 @@ export function FinanceReview({ initial }: { initial: FinanceView }) {
                 )}
               />
               <div className="form-actions">
-                <button
+                <Button
                   disabled={busy}
                   onClick={() => {
                     setEditing(item);
@@ -146,8 +144,8 @@ export function FinanceReview({ initial }: { initial: FinanceView }) {
                   }}
                 >
                   Edit item
-                </button>
-                <button
+                </Button>
+                <Button
                   className="secondary"
                   disabled={busy}
                   onClick={() => {
@@ -156,7 +154,7 @@ export function FinanceReview({ initial }: { initial: FinanceView }) {
                         "Remove this comparison item? Source documents will remain.",
                       )
                     )
-                      void request({
+                      return request({
                         action: "settlement_remove",
                         id: item.id,
                         version: item.version,
@@ -164,7 +162,7 @@ export function FinanceReview({ initial }: { initial: FinanceView }) {
                   }}
                 >
                   Remove item
-                </button>
+                </Button>
               </div>
             </article>
           ))}
@@ -201,12 +199,12 @@ export function FinanceReview({ initial }: { initial: FinanceView }) {
               No verification started. Closing a pension-enabled employment with
               an exit case creates a waiting check; you can also start one now.
             </p>
-            <button
+            <Button
               disabled={busy || !data.pensionApplicable}
-              onClick={() => void request({ action: "pension_start" })}
+              onClick={() => request({ action: "pension_start" })}
             >
               Start pension check
-            </button>
+            </Button>
           </>
         ) : (
           <>
@@ -239,10 +237,10 @@ export function FinanceReview({ initial }: { initial: FinanceView }) {
                 </Link>
               )}
             {data.pension.result.state === "contribution_detected" && (
-              <button
+              <Button
                 disabled={busy}
                 onClick={() =>
-                  void request({
+                  request({
                     action: "pension_confirm",
                     version: data.pension!.version,
                     evidenceToken: data.pension!.evidenceToken,
@@ -250,7 +248,7 @@ export function FinanceReview({ initial }: { initial: FinanceView }) {
                 }
               >
                 I checked the statement — confirm match
-              </button>
+              </Button>
             )}
           </>
         )}
@@ -433,14 +431,18 @@ function SettlementForm({
           pay, recurring salary with partial pay, or an unapproved claim with an
           approved amount.
         </p>
-        <button type="submit" aria-busy={busy}>
-          Save comparison
-        </button>
-        {initial && (
-          <button type="button" className="secondary" onClick={cancel}>
-            Cancel editing
-          </button>
-        )}
+        <div
+          className={initial ? "form-actions paired-actions" : "form-actions"}
+        >
+          <Button type="submit" aria-busy={busy}>
+            {busy ? "Saving…" : "Save comparison"}
+          </Button>
+          {initial && (
+            <Button type="button" className="button-cancel" onClick={cancel}>
+              Cancel editing
+            </Button>
+          )}
+        </div>
       </fieldset>
     </form>
   );
@@ -546,9 +548,9 @@ function PensionForm({
           value={followUp}
           onChange={(event) => setFollowUp(event.target.value)}
         />
-        <button type="submit" aria-busy={busy}>
-          Save pension review
-        </button>
+        <Button type="submit" aria-busy={busy}>
+          {busy ? "Saving…" : "Save pension review"}
+        </Button>
       </fieldset>
     </form>
   );

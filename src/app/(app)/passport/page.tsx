@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/action-link";
 import { employmentPageUser } from "@/modules/employments/page-user";
 import { passportService } from "@/modules/passport/service";
 import { formatEmploymentDate } from "@/modules/employments/validation";

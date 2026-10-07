@@ -1,6 +1,7 @@
 "use client";
+import { Button } from "./button";
 import { uiRequest } from "./ui-request";
-import Link from "next/link";
+import Link from "@/components/action-link";
 import { useState } from "react";
 import {
   benefitCategories,
@@ -28,6 +29,7 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
   const [editing, setEditing] = useState<BenefitView | null>(null);
   const [operation, setOperation] = useState("");
   async function request(command?: unknown) {
+    if (busy) return false;
     setOperation(
       command
         ? "Saving your assessment and checking evidence…"
@@ -87,13 +89,9 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
           Current source records, not a legal record or employer verification.
           Sensitive identifiers are omitted or masked.
         </p>
-        <button
-          className="secondary"
-          disabled={busy}
-          onClick={() => void request()}
-        >
+        <Button className="secondary" disabled={busy} onClick={() => request()}>
           Refresh Passport
-        </button>
+        </Button>
       </header>
       {busy && <p role="status">{operation}</p>}
       {error && (
@@ -257,14 +255,14 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
                   cancel={() => setEditing(null)}
                 />
               ) : (
-                <button disabled={busy} onClick={() => setEditing(benefit)}>
+                <Button disabled={busy} onClick={() => setEditing(benefit)}>
                   {benefit.version === null
                     ? "Assess benefit"
                     : "Review assessment"}
-                </button>
+                </Button>
               )}
               {benefit.version !== null && (
-                <button
+                <Button
                   className="secondary"
                   disabled={busy}
                   onClick={() => {
@@ -273,7 +271,7 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
                         "Remove your assessment? Original employment and evidence remain.",
                       )
                     )
-                      void request({
+                      return request({
                         action: "remove",
                         category: benefit.category,
                         version: benefit.version,
@@ -281,7 +279,7 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
                   }}
                 >
                   Remove assessment
-                </button>
+                </Button>
               )}
             </article>
           ))}
@@ -438,13 +436,13 @@ function BenefitForm({
           />
           I checked the evidence and it supports this assessment.
         </label>
-        <div className="form-actions">
-          <button type="submit" aria-busy={busy}>
+        <div className="form-actions paired-actions">
+          <Button type="submit" aria-busy={busy}>
             {busy ? "Saving…" : "Save assessment"}
-          </button>
-          <button type="button" className="secondary" onClick={cancel}>
+          </Button>
+          <Button type="button" className="button-cancel" onClick={cancel}>
             Cancel
-          </button>
+          </Button>
         </div>
       </fieldset>
     </form>

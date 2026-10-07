@@ -1,4 +1,5 @@
-import Link from "next/link";
+import { DocumentFilter } from "@/components/document-filter";
+import Link from "@/components/action-link";
 import { documentPageUser } from "@/modules/documents/page-user";
 import { documentService } from "@/modules/documents/service";
 import { DocumentError } from "@/modules/documents/validation";
@@ -44,7 +45,7 @@ export default async function Documents({
           <Link className="button-link" href="/documents/upload">
             Upload document
           </Link>
-          <form className="employment-form document-filter" action="/documents">
+          <DocumentFilter>
             <label htmlFor="employment-filter">Filter by employment</label>
             <select
               id="employment-filter"
@@ -58,10 +59,7 @@ export default async function Documents({
                 </option>
               ))}
             </select>
-            <button className="secondary" type="submit">
-              Apply filter
-            </button>
-          </form>
+          </DocumentFilter>
           {documents.length ? (
             <div className="employment-list">
               {documents.map((doc) => (

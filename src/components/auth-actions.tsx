@@ -1,8 +1,9 @@
 "use client";
+import { Button } from "./button";
 import { uiRequest } from "./ui-request";
 import { getCsrfToken, signIn } from "next-auth/react";
 import { useState, type FormEvent } from "react";
-import Link from "next/link";
+import Link from "@/components/action-link";
 import { useRouter } from "next/navigation";
 import {
   credentialsSchema,
@@ -150,7 +151,7 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
                 .join(" ") || undefined
             }
           />
-          <button
+          <Button
             type="button"
             className="password-toggle secondary"
             aria-label={visible ? "Hide password" : "Show password"}
@@ -159,7 +160,7 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
             onClick={() => setVisible(!visible)}
           >
             {visible ? "Hide" : "Show"}
-          </button>
+          </Button>
         </div>
         {fieldErrors.password && (
           <p id="password-error" className="field-error">
@@ -190,7 +191,7 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
           {error}
         </p>
       )}
-      <button disabled={busy} aria-busy={busy} type="submit">
+      <Button disabled={busy} aria-busy={busy} type="submit">
         {busy
           ? register
             ? "Creating account…"
@@ -198,7 +199,7 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
           : register
             ? "Create account"
             : "Sign in securely"}
-      </button>
+      </Button>
       {busy && (
         <p role="status">
           {register
@@ -244,14 +245,14 @@ export function SignOutButton() {
   }
   return (
     <>
-      <button
+      <Button
         className="secondary"
         disabled={busy}
         aria-busy={busy}
-        onClick={() => void logout()}
+        onClick={() => logout()}
       >
         {busy ? "Signing out…" : "Sign out"}
-      </button>
+      </Button>
       {error && <p role="alert">{error}</p>}
     </>
   );

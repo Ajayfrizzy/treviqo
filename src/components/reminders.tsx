@@ -1,6 +1,7 @@
 "use client";
+import { Button } from "./button";
 import { uiRequest } from "./ui-request";
-import Link from "next/link";
+import Link from "@/components/action-link";
 import { useState } from "react";
 interface Data {
   updatesAvailable: boolean;
@@ -20,6 +21,7 @@ export function Reminders({ initial }: { initial: Data }) {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   async function request(input?: unknown) {
+    if (busy) return;
     setBusy(true);
     setError("");
     setSuccess("");
@@ -57,13 +59,9 @@ export function Reminders({ initial }: { initial: Data }) {
         These are in-app prompts, not legal deadlines. Review source records
         before acting. No email or push notification is sent.
       </p>
-      <button
-        className="secondary"
-        disabled={busy}
-        onClick={() => void request()}
-      >
+      <Button className="secondary" disabled={busy} onClick={() => request()}>
         Refresh reminders
-      </button>
+      </Button>
       {!data.updatesAvailable && (
         <p role="status">
           Background updates are delayed. Existing reminders are checked against
@@ -101,10 +99,10 @@ export function Reminders({ initial }: { initial: Data }) {
                 Review current records
               </Link>
               <div className="form-actions">
-                <button
+                <Button
                   disabled={busy}
                   onClick={() =>
-                    void request({
+                    request({
                       id: item.id,
                       version: item.version,
                       action: "snooze",
@@ -112,12 +110,12 @@ export function Reminders({ initial }: { initial: Data }) {
                   }
                 >
                   Remind me in 7 days
-                </button>
-                <button
+                </Button>
+                <Button
                   disabled={busy}
                   className="secondary"
                   onClick={() =>
-                    void request({
+                    request({
                       id: item.id,
                       version: item.version,
                       action: "dismiss",
@@ -125,7 +123,7 @@ export function Reminders({ initial }: { initial: Data }) {
                   }
                 >
                   Dismiss this prompt
-                </button>
+                </Button>
               </div>
             </article>
           ))}

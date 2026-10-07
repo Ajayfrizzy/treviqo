@@ -159,3 +159,13 @@ Profile reads only the authenticated account’s email. It explains password pro
 Route skeletons retain the shell and identify the section being loaded. Upload distinguishes byte transfer from storage completion, with indeterminate progress during finalization. Interrupted documents explain refresh/remove/retry. Extraction distinguishes processing, loading, manual preparation, and review saving; manual fallback remains available. API actions bound their UI wait (30 seconds normally, 120 seconds for extraction), preserve inputs on failure, and advise checking current records before retrying an uncertain mutation. They do not automatically retry. NextAuth continues to own sign-in and CSRF retrieval. Existing error boundaries provide explicit retry actions.
 
 Home, Exit, Passport and Documents first-use copy explains the purpose, value, and next action. The Passport still depends on explicitly closed employment; no domain behavior has changed. See [polish report](../milestones/UI_UX_POLISH.md) for validation and remaining checks.
+
+## Interaction refinement — 7 October 2026
+
+Save/Cancel pairs use equal grid columns with a shared green background and white text. Cancel has a lighter inset border and lighter text weight. Both controls remain present while saving; Cancel is disabled until the result is known. Narrow-screen padding keeps labels wrapping at word boundaries. Upload, Exit and benefit/settlement editing use the same action grouping. Review, refresh and card-following actions have explicit spacing.
+
+A shared Button shows a local spinner and blocks repeat clicks while its async handler runs. Forms expose their existing busy state, and synchronous actions have a pressed treatment. Document filtering and error retries use transitions. Links show pending feedback through Next.js useLinkStatus without adding artificial delays. Loading panels combine the destination label, a spinner, explanatory copy, progress track and skeletons; motion respects reduced-motion preferences.
+
+The document review no longer displays model, prompt or schema metadata. Plain-language provenance, original-document links, evidence excerpts, confidence/review states and correction history remain available. Technical metadata stays in the existing extraction record; domain rules and API contracts are unchanged.
+
+See the [interaction refinement report](../milestones/UI_INTERACTION_REFINEMENT.md) for test results and manual-check limits.

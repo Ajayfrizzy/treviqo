@@ -1,4 +1,5 @@
 "use client";
+import { Button } from "./button";
 import { uiRequest } from "./ui-request";
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -28,6 +29,7 @@ export function DocumentActions({ id, ready }: { id: string; ready: boolean }) {
     };
   }, [link, expiresAt]);
   async function request(action: "access" | "delete") {
+    if (busy) return;
     setOperation(
       action === "access"
         ? "Preparing your private download link…"
@@ -68,19 +70,19 @@ export function DocumentActions({ id, ready }: { id: string; ready: boolean }) {
         </p>
       )}
       {!ready && (
-        <button
+        <Button
           className="secondary"
           disabled={refreshing || busy}
           aria-busy={refreshing}
           onClick={() => startRefresh(() => router.refresh())}
         >
           {refreshing ? "Refreshing status…" : "Refresh document status"}
-        </button>
+        </Button>
       )}
       {ready && (
-        <button disabled={busy} onClick={() => void request("access")}>
+        <Button disabled={busy} onClick={() => request("access")}>
           Open / download
-        </button>
+        </Button>
       )}
       {expired && (
         <p role="status">
@@ -113,7 +115,7 @@ export function DocumentActions({ id, ready }: { id: string; ready: boolean }) {
         </div>
       )}
       {!confirm ? (
-        <button
+        <Button
           className="secondary"
           disabled={busy}
           onClick={() => {
@@ -122,21 +124,21 @@ export function DocumentActions({ id, ready }: { id: string; ready: boolean }) {
           }}
         >
           Delete document
-        </button>
+        </Button>
       ) : (
         <div className="delete-confirm">
           <h2>Delete this document?</h2>
           <p>The stored file will be removed. This cannot be undone.</p>
-          <button disabled={busy} onClick={() => void request("delete")}>
+          <Button disabled={busy} onClick={() => request("delete")}>
             Confirm deletion
-          </button>
-          <button
+          </Button>
+          <Button
             className="secondary"
             disabled={busy}
             onClick={() => setConfirm(false)}
           >
             Keep document
-          </button>
+          </Button>
         </div>
       )}
       {busy && <p role="status">{operation}</p>}

@@ -1,4 +1,5 @@
 "use client";
+import { Button } from "./button";
 import { uiRequest } from "./ui-request";
 import { useState } from "react";
 import { documentTypes } from "@/modules/documents/shared";
@@ -151,9 +152,9 @@ export function ExtractionReview({
             </p>
           </details>
           <div className="document-actions">
-            <button
+            <Button
               onClick={() =>
-                void request("POST", {
+                request("POST", {
                   mode: "ai",
                   ...(type ? { type } : {}),
                   ...(text ? { text } : {}),
@@ -161,32 +162,30 @@ export function ExtractionReview({
               }
             >
               Extract details
-            </button>
-            <button
+            </Button>
+            <Button
               className="secondary"
               onClick={() => {
                 if (!type) {
                   setError("Choose a document type for manual entry.");
                   return;
                 }
-                void request("POST", { mode: "manual", type });
+                return request("POST", { mode: "manual", type });
               }}
             >
               Enter details manually
-            </button>
+            </Button>
           </div>
         </fieldset>
       </section>
       {data.attempts.length > 0 && (
-        <section className="employment-form">
+        <section className="card employment-form review-attempt">
           <label htmlFor="attempt">Review attempt</label>
           <select
             id="attempt"
             disabled={busy}
             value={current?.id ?? ""}
-            onChange={(event) =>
-              void request("GET", undefined, event.target.value)
-            }
+            onChange={(event) => request("GET", undefined, event.target.value)}
           >
             {data.attempts.map((attempt, index) => (
               <option key={attempt.id} value={attempt.id}>
@@ -195,13 +194,13 @@ export function ExtractionReview({
               </option>
             ))}
           </select>
-          <button
+          <Button
             className="secondary"
             disabled={busy}
-            onClick={() => void request("GET", undefined, current?.id)}
+            onClick={() => request("GET", undefined, current?.id)}
           >
             Refresh review
-          </button>
+          </Button>
         </section>
       )}
       {current && (
@@ -230,22 +229,13 @@ export function ExtractionReview({
               attempt, or enter details manually.
             </p>
           )}
-          <details>
-            <summary>Source and extraction record</summary>
-            <p>
-              Source:{" "}
-              {current.sourceKind === "user_transcript"
-                ? "Your transcription (not verified against the file)"
-                : current.sourceKind === "manual"
-                  ? "Manual entry"
-                  : "PDF text"}
-              . Model: {current.model}. Prompt: {current.promptVersion}. Schema:{" "}
-              {current.schemaVersion}.
-            </p>
-            <p>
-              AI confidence is a model estimate, not a verified probability.
-            </p>
-          </details>
+          <p className="field-hint">
+            {current.sourceKind === "user_transcript"
+              ? "Based on text you supplied; compare it with the original document."
+              : current.sourceKind === "manual"
+                ? "Details entered manually. Check them against your original document."
+                : "Based on text from your PDF. Check each detail against the original document."}
+          </p>
         </section>
       )}
       {current?.fields.map((field) => (
@@ -255,7 +245,7 @@ export function ExtractionReview({
           type={current.documentType}
           busy={busy}
           save={(action, value) =>
-            void request("PATCH", {
+            request("PATCH", {
               fieldId: field.id,
               version: field.version,
               action,
@@ -276,7 +266,7 @@ function FieldCard({
   field: ReviewField;
   type: string | null;
   busy: boolean;
-  save: (action: string, value?: string) => void;
+  save: (action: string, value?: string) => Promise<void>;
 }) {
   const [value, setValue] = useState(field.value ?? field.proposedValue ?? "");
   const label = labelFor(type, field.key);
@@ -339,24 +329,24 @@ function FieldCard({
           />
         )}
         <div className="review-actions">
-          <button
+          <Button
             disabled={busy || !field.proposedValue}
             onClick={() => save("confirm")}
           >
             Confirm proposal
-          </button>
-          <button
+          </Button>
+          <Button
             disabled={busy || !value.trim()}
             onClick={() => save("correct", value.trim())}
           >
             Save correction
-          </button>
-          <button className="secondary" onClick={() => save("reject")}>
+          </Button>
+          <Button className="secondary" onClick={() => save("reject")}>
             Reject
-          </button>
-          <button className="secondary" onClick={() => save("unknown")}>
+          </Button>
+          <Button className="secondary" onClick={() => save("unknown")}>
             Mark unknown
-          </button>
+          </Button>
         </div>
       </fieldset>
       {field.key === "document_type" && (

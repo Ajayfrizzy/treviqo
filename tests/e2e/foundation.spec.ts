@@ -269,3 +269,41 @@ test("registration shares server policy, shows requirements and supports reveal 
     page.getByRole("button", { name: "Create account", exact: true }),
   ).toBeEnabled();
 });
+
+test("slow navigation gives immediate feedback and keeps the shell usable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 850 });
+  const email = await register(page);
+  await login(page, email);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/exit?*", async (route) => {
+    await gate;
+    await route.continue();
+  });
+  const nav = page.getByRole("navigation", { name: "Primary" });
+  try {
+    await nav.getByRole("link", { name: "Exit", exact: true }).click();
+    await expect
+      .poll(
+        async () =>
+          await page
+            .locator('.link-feedback[data-pending="true"], .loading-heading')
+            .count(),
+      )
+      .toBeGreaterThan(0);
+    await expect(nav).toBeVisible();
+    await page.screenshot({ path: "test-results/navigation-pending-375.png" });
+  } finally {
+    release();
+  }
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Job Exit Checker",
+  );
+  await expect(page.locator('.link-feedback[data-pending="true"]')).toHaveCount(
+    0,
+  );
+});

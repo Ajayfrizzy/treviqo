@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/action-link";
 import { notFound } from "next/navigation";
 import { employmentPageUser } from "@/modules/employments/page-user";
 import { financeService } from "@/modules/finance/service";

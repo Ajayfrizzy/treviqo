@@ -1,4 +1,4 @@
-import Link from "next/link";
+import Link from "@/components/action-link";
 import { employmentPageUser } from "@/modules/employments/page-user";
 import { listEmployments } from "@/modules/employments/service";
 import { groupEmployments } from "@/modules/employments/validation";
