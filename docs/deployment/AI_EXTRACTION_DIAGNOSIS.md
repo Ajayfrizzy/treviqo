@@ -1,8 +1,32 @@
 # Rumpty extraction diagnosis — 8 October 2026
 
-Status: application fixes implemented and tested locally with disposable PostgreSQL/Redis and synthetic AI/storage. No commit, push, deployment, production migration, production data access, or live inference was performed for this change. `.env` is unchanged.
+Status: compact extraction/salvage and attempt-history changes implemented. Latest user-supplied production diagnostics still show `extraction_output_invalid extraction` with zero grounded usable fields; **P2028 is no longer appearing in that latest live test**. This is evidence of separate progress, not proof that every production database failure is resolved. Local validation below uses only disposable PostgreSQL/Redis and synthetic AI/storage. No commit, push, deployment, production data change or live inference was performed. `.env` is unchanged.
 
-## Production evidence and root-cause assessment
+## Latest extraction follow-up
+
+The earlier v4 parser required an object wrapper, did not recognize field-name capitalization/aliases, and discarded every duplicate key, even identical grounded duplicates. It also failed to mark a sparse single valid proposal partial unless another proposal was explicitly rejected. These constraints could discard otherwise usable small-model output. The safe production diagnostics do not reveal the raw output, so they cannot establish which specific shape/evidence defect caused the observed zero-field failure.
+
+`evidence-v5` / `fields-v5` now uses shorter extraction instructions, a canonical type-specific key list and **one concise example per type**. The model is asked to copy values and their containing source excerpts, omit facts it cannot ground, and never infer missing values. Confidence is not requested; every newly parsed field receives `needs_review` in the application. The pension prompt preserves separate rows, posting-date versus contribution-period semantics and identifier restrictions, and no longer lists the user-only completeness key. Provider schema enforcement remains disabled. Token limits and timeouts are unchanged.
+
+Bounded salvage accepts one complete JSON object or array inside fences/prose. Supported shapes are `{fields:[...]}`, a top-level proposal array, `{fields:{key,value,evidence}}`, a single proposal object, and legacy keyed cells. Structural property capitalization, whitespace, camel case and equivalent field names are normalized. The explicit alias list is limited to employer_name → employer, employee_name → employee, and job_title/role_title → role, and every result still must belong to the selected type. No fuzzy matching or guessed field/value relationship is used.
+
+Duplicate proposals with the same normalized, grounded value are retained once. Different grounded values for one canonical key cause that key to be omitted; invalid duplicates cannot poison an independently valid proposal. Semantically malformed entries are dropped individually. Truncated/broken JSON syntax, competing top-level structures, conflicting normalized property names, nesting beyond 12 levels, more than 100 candidates or output beyond 65,536 characters (with the transport still capped at 64 KiB) fail closed. Delimiters, values and evidence are never fabricated.
+
+A usable result is `ready` with `errorCode=partial` when proposals were dropped **or fewer than the type's extractable keys have grounded values**. Thus one valid field is explicitly partial. Partial describes limited coverage, not proof that the document contains every omitted field. All values stay proposed and unconfirmed. Zero valid fields remains failed, with explicit retry and manual entry. Retries use the same deterministic prompt; no automatic paid retry or rate-limit change was introduced. Prior attempts remain stored.
+
+## Attempt-history UX
+
+The previous selector made all failed attempts prominent. During POST, the previous record also remained mounted while the form was disabled, making it look like the result of the newly running attempt. The UI now separates local new-request state from the last stored record:
+
+- Latest status is shown by default; previous attempts are inside a collapsed **View previous attempts** disclosure.
+- Entries use concise status/date labels in Africa/Lagos time (WAT). Older attempts can still be inspected and reviewed, with an explicit Previous attempt label and Return to current attempt action.
+- A new POST immediately hides the old status/fields and shows **Extracting details… / This may take up to 90 seconds.** The old attempt becomes history while the request is pending.
+- Partial output shows **Some details were extracted**, verification guidance and editable missing fields.
+- Current unverifiable output shows **Extraction failed** with retry/manual-entry guidance. Other failures retain their useful provider, timeout or storage-specific guidance.
+- If the request outcome is uncertain, a refresh instruction is shown instead of restoring the old failure as the new result. Refresh reads actual server state; there is no automatic retry.
+- A request guard prevents overlapping actions. Loading another attempt or saving a review does not pretend a new extraction started.
+
+## Earlier transaction diagnosis (retained)
 
 A text-based employment contract now reproduces extraction failure in production. The supplied diagnostics are:
 
@@ -35,7 +59,7 @@ If PostgreSQL is unavailable, no application can durably save a failure category
 
 ## Classification and prompts
 
-`evidence-v4` / `fields-v4` uses a compact classification object with only `type` and `evidence`. The transport sends ordinary chat messages without `response_format`, strict schemas or appended JSON Schema text. Local schema descriptions remain available for tooling; application validation remains authoritative. Output limits stay 256 classification / 2,048 extraction tokens, 25 seconds per provider call and 64 KiB per response.
+The preceding `evidence-v4` / `fields-v4` change introduced a compact classification object with only `type` and `evidence`. The transport sends ordinary chat messages without `response_format`, strict schemas or appended JSON Schema text. Local schema descriptions remain available for tooling; application validation remains authoritative. Output limits stay 256 classification / 2,048 extraction tokens, 25 seconds per provider call and 64 KiB per response.
 
 The parser accepts one complete JSON object inside fences or surrounding prose. It normalizes whitespace, capitalization, spaces/hyphens and an explicit allowlist of equivalent labels (for example `Pay Slip`, `salary-slip`, `final settlement document`). It does not fuzzy-match unknown types, repair incomplete JSON or choose between multiple objects. Unsupported, malformed, ungrounded or ambiguous classification becomes `other` / `needs_review`, pausing type-specific extraction until the user selects a type. Known explicit low-confidence legacy answers also pause. Grounded recognized categories receive application-assigned medium confidence and remain unconfirmed proposals.
 
@@ -50,23 +74,23 @@ Sparse arrays and legacy field objects are evaluated proposal by proposal. Retai
 - include evidence occurring in the source after whitespace normalization;
 - occur inside that evidence excerpt.
 
-Malformed cells, unsupported keys, missing/invented evidence, mismatched values and duplicated keys are discarded. All proposals for a duplicated key are omitted rather than arbitrarily choosing a conflicting value. Pension completeness remains user-assessed; AI completeness assertions cannot become proposals. Missing fields stay null and remain available for manual correction.
+Malformed cells, unsupported keys, missing/invented evidence and mismatched values are discarded. Duplicate handling follows the v5 policy above. Pension completeness remains user-assessed; AI completeness assertions cannot become proposals. Missing fields stay null and remain available for manual correction.
 
-Six valid and two invalid proposals produce six retained proposals, status `ready`, and existing `errorCode` value `partial`. The review screen explains that some suggestions were omitted. This additive use of the existing metadata column needs **no database migration**. It does not mean every fact in the document was found: omitted sparse fields do not themselves establish model error. Zero usable grounded field proposals produces `failed` / `malformed` with manual entry still available. Classification-only Other is a ready review requiring user selection, not a claim of successful field extraction. No value is automatically confirmed.
+Six valid and two invalid proposals produce six retained proposals, status `ready`, and existing `errorCode` value `partial`. The review screen explains that some suggestions were omitted. This additive use of the existing metadata column needs **no database migration**. It does not mean every fact in the document was found; absent sparse fields now also mark limited coverage as partial, without establishing a model error. Zero usable grounded field proposals produces `failed` / `malformed` with manual entry still available. Classification-only Other is a ready review requiring user selection, not a claim of successful field extraction. No value is automatically confirmed.
 
-## Validation
+## Validation for this follow-up
 
-All database/browser commands explicitly used disposable loopback PostgreSQL and Redis, with all 11 existing migrations applied locally. No production URL or credentials were used.
+All database/browser commands explicitly target disposable loopback PostgreSQL/Redis with the 11 existing migrations applied locally. No migration was added.
 
-- `npm run validate`: lint, TypeScript, **289 unit tests**, production Next.js build and worker build passed.
-- `npm run test:integration`: **114 tests passed**, including **23 extraction integration tests**.
-- `npm run test:e2e -- tests/e2e/extractions.spec.ts`: **10 passed**, including existing 320/375/430/768/1440px review flows and partial/ambiguous/manual fallback at 320/1440px.
-- `npm run test:e2e`: **90 passed** (5.3 minutes), including shared worker reminders/account deletion and navigation.
-- Final `npm run lint && npm run typecheck`, targeted Prettier checks, `node --check scripts/rumpty-ai-stages.mjs`, and `git diff --check`: passed.
+- `npm run validate`: lint, TypeScript, **316 unit tests**, production Next.js build and worker build passed.
+- `npm run test:integration -- tests/extractions.integration.test.ts`: **27 passed**.
+- `npm run test:e2e -- tests/e2e/extractions.spec.ts`: **15 passed**, including existing review flows at 320/375/430/768/1440px and new history/retry checks at 320/375/430/1440px.
+- `npm run test:e2e -- tests/e2e/extractions.spec.ts --grep 'attempt history stays secondary'`: **4 passed** after the final spacing adjustment.
+- `npm run lint && npm run typecheck`, targeted Prettier checks and `git diff --check`: passed.
 
-New tests cover fenced/prose/case/alias classification, malformed/ambiguous/ungrounded classification, independently valid proposals, unsupported/malformed/missing evidence, conflicting duplicates, zero grounded fields, real P2028 recovery, failed recovery followed by expiry reconciliation, atomic rollback, inference without held document locks, simultaneous reservation, lease expiry during a document-lock wait, stale and late completions, worker expiry and actual job dispatch and unconfirmed partial proposals. Existing authorization, deletion-during-inference, review revision, audit rollback and manual fallback checks remain active.
+Coverage includes compact JSON, fenced/prose-wrapped arrays, singleton salvage, normalized keys, identical/conflicting duplicates, independently malformed cells, unsupported keys, empty/inferred values, missing/ungrounded evidence, bounded/ambiguous output, one-field partial persistence, zero-field failure, proposed-only values, deterministic explicit retries and preserved attempts. Existing transaction, ownership, audit, lease and concurrency tests remain active.
 
-Initial failure-injection tests intercepted reservation instead of result persistence; injection now begins only after reservation, during the fixture AI call. Those tests passed after correction. Browser tests emitted development-server warnings, including an early-closed navigation stream, but extraction assertions passed. The standalone production smoke's expected schema version was updated; that TLS smoke was not separately rerun in this change.
+Browser additions cover collapsed history, current versus historical selection, immediate new-request state without stale failure, salvaged partial output, request-error recovery and manual entry at mobile/desktop widths. No live model inference is used, and live extraction success is not claimed. The browser suite emits expected `extraction_output_invalid extraction` diagnostics for deliberately malformed fixture responses. No test failures remained. Full unrelated browser/integration suites and standalone production TLS smoke were not rerun in this focused follow-up.
 
 ## Remaining Rumpty/model checks
 
@@ -75,18 +99,20 @@ Initial failure-injection tests intercepted reservation instead of result persis
 - Earlier live diagnostics (7 October) found that accepted `json_object`/`json_schema` requests did not reliably enforce output shape, a max_tokens request was not respected, and some extraction responses omitted evidence. The new parser tolerates harmless formatting but still cannot accept missing evidence or validate semantic correctness solely from substring grounding.
 - Deploy matching web and worker artifacts together when separately authorized. The worker is needed for unattended expiry cleanup. No schema migration is added by this change.
 
-## Changed files and handoff
+## Changed files and handoff for this follow-up
 
-- `src/modules/extractions/persistence.ts` (new), `service.ts`: atomic lifecycle persistence, reservation/read expiry, recovery diagnostics and worker reaper.
-- `src/modules/extractions/schema.ts`, `prompts.ts`, `shared.ts`: tolerant classification, individually validated proposals, compact prompts and safe persistence-failure guidance.
-- `src/server/ai/client.ts`: plain-chat compatibility without provider structured-output requirements.
-- `src/server/jobs/queue.ts`, `runner.ts`: extraction expiry job using the existing scheduler.
-- `src/components/extraction-review.tsx`: partial-result explanation; existing manual/review actions remain.
-- `tests/extraction.test.ts`, `extractions.integration.test.ts`, `ai-client.test.ts`, `jobs.integration.test.ts`, `e2e/extractions.spec.ts`, `fixtures/ai-server.mjs`: regression coverage and synthetic protocol variations.
-- `scripts/rumpty-ai-stages.mjs`: synthetic acceptance now uses the application's tolerant parser, while still requiring all expected values and no dropped proposals for accuracy acceptance. Not run against Rumpty.
-- `tests/extraction-production-smoke.mjs`: expected schema version updated; not separately executed.
-- This report, `docs/ai/AI_DOCUMENTS.md`, `docs/testing/TESTING.md`: current contracts, verification and remaining checks.
+- `src/modules/extractions/schema.ts`, `prompts.ts`, `shared.ts`: bounded salvage, canonicalization/duplicates, partial coverage, shorter prompts, versioned metadata and failed-result copy.
+- `src/components/extraction-review.tsx`, `src/app/globals.css`: collapsed history, spaced mobile history actions, explicit current/historical selection, processing and uncertain-outcome states.
+- `tests/extraction.test.ts`, `extractions.integration.test.ts`, `e2e/extractions.spec.ts`, `fixtures/ai-server.mjs`: parser, persistence/retry and browser regressions.
+- `tests/extraction-production-smoke.mjs`: expected version updated to fields-v5; standalone TLS smoke not separately executed.
+- This report, `docs/ui/UI_UX.md`, `docs/ai/AI_DOCUMENTS.md`: updated contracts, UI behavior and remaining limitations.
 
-No migration, dependency or environment change was introduced. Disposable test
-containers were removed after validation. Physical-device and hosted Rumpty checks
-remain manual follow-up; browser responsive checks are local automated evidence.
+The persistence implementation, worker expiry job, ownership rules and rate limits
+are unchanged in this follow-up. No dependency or environment change was introduced.
+Physical-device checks and hosted Rumpty acceptance remain manual follow-up.
+
+Mobile screenshots were inspected at 320px. The pending state clearly replaces the
+old failure. The first history inspection identified touching buttons/default
+bullets; spacing and list styling were corrected and responsive checks rerun.
+
+Disposable local test containers were removed after validation.

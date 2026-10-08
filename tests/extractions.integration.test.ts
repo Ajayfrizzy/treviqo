@@ -81,8 +81,8 @@ it("persists only proposed grounded fields with source/model/version metadata, w
     documentType: "employment_contract",
     model: "fixture-model",
     sourceKind: "pdf_text",
-    promptVersion: "evidence-v4",
-    schemaVersion: "fields-v4",
+    promptVersion: "evidence-v5",
+    schemaVersion: "fields-v5",
   });
   expect(
     extraction!.fields.every(
@@ -821,4 +821,84 @@ it("reserves only one of two simultaneous AI starts", async () => {
   });
   expect(ai.complete).toHaveBeenCalledTimes(1);
   expect(await db.documentExtraction.count({ where: { documentId } })).toBe(1);
+});
+
+it.each([
+  [
+    {
+      KEY: "Employer Name",
+      VALUE: "Harbour Workshop Ltd",
+      EVIDENCE: "Employer: Harbour Workshop Ltd",
+    },
+    { key: "salary" },
+  ],
+  {
+    fields: {
+      key: "employer",
+      value: "Harbour Workshop Ltd",
+      evidence: "Employer: Harbour Workshop Ltd",
+    },
+  },
+  {
+    key: "EMPLOYER",
+    value: "Harbour Workshop Ltd",
+    evidence: "Employer: Harbour Workshop Ltd",
+  },
+])("persists salvaged output as partial proposals only: %j", async (output) => {
+  ai.complete = vi
+    .fn()
+    .mockResolvedValue(
+      `Here is the result:\n\`\`\`json\n${JSON.stringify(output)}\n\`\`\`\nReview it.`,
+    );
+  const run = (
+    await service().start(userId, documentId, {
+      mode: "ai",
+      type: "employment_contract",
+      text: fixture.text,
+    })
+  ).extraction!;
+  expect(run).toMatchObject({ status: "ready", errorCode: "partial" });
+  expect(run.fields.find((f) => f.key === "employer")).toMatchObject({
+    proposedValue: "Harbour Workshop Ltd",
+    value: null,
+    confidence: "needs_review",
+    reviewState: "proposed",
+  });
+  expect(ai.complete).toHaveBeenCalledTimes(1);
+});
+it("uses the same prompt only on explicit retry and preserves the failed attempt", async () => {
+  const complete = vi
+    .fn()
+    .mockResolvedValueOnce("not JSON")
+    .mockResolvedValueOnce(
+      JSON.stringify({
+        fields: [
+          {
+            key: "employer",
+            value: "Harbour Workshop Ltd",
+            evidence: "Employer: Harbour Workshop Ltd",
+          },
+        ],
+      }),
+    );
+  ai.complete = complete;
+  const input = { mode: "ai", type: "employment_contract", text: fixture.text };
+  const first = (await service().start(userId, documentId, input)).extraction!;
+  expect(first).toMatchObject({
+    status: "failed",
+    errorCode: "malformed",
+    fields: [],
+  });
+  expect(complete).toHaveBeenCalledTimes(1);
+  const second = await service().start(userId, documentId, input);
+  expect(second.extraction).toMatchObject({
+    status: "ready",
+    errorCode: "partial",
+  });
+  expect(complete).toHaveBeenCalledTimes(2);
+  expect(complete.mock.calls[0]).toEqual(complete.mock.calls[1]);
+  expect(second.attempts).toHaveLength(2);
+  expect(
+    (await service().read(userId, documentId, first.id)).extraction,
+  ).toMatchObject({ status: "failed", errorCode: "malformed", fields: [] });
 });

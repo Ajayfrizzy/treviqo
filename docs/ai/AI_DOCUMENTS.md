@@ -173,3 +173,25 @@ transactions. Ownership, document locking, live leases and audit atomicity remai
 Expired attempts are reconciled on read/start and by the existing worker's new
 `extraction_cleanup` job. See the [current diagnosis and validation report](../deployment/AI_EXTRACTION_DIAGNOSIS.md)
 for evidence, limitations and production follow-up.
+
+## Compact extraction and salvage follow-up (v5)
+
+Current metadata is `evidence-v5` / `fields-v5`. Extraction uses a shorter key list
+and one type-specific example, with verbatim value/evidence and omission instructions.
+It does not request confidence or use provider schema enforcement. All new parsed
+fields receive application-assigned `needs_review`; trusted values still require
+explicit user confirmation/correction.
+
+The parser recovers complete object/array JSON from fences/prose, singleton proposals
+and singleton fields wrappers. It normalizes key capitalization/whitespace/camel case
+and a small explicit alias list before enforcing the selected type's allowlist.
+Matching grounded duplicates are deduplicated; conflicting grounded values for one
+key are omitted. Invalid entries do not discard independent valid fields. It never
+repairs incomplete JSON or invents values/evidence. Bounded input, exact grounding,
+pension completeness restrictions and manual fallback remain mandatory.
+
+Partial now includes limited coverage as well as rejected proposals. One usable field
+is saved ready/partial, with all other review fields null. Zero usable fields remains
+failed. Retries are explicit, deterministic, rate limited and preserve history. See
+[the current diagnosis](../deployment/AI_EXTRACTION_DIAGNOSIS.md) and
+[attempt-history UX](../ui/UI_UX.md) for current behavior and validation.

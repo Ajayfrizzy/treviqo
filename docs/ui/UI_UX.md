@@ -180,3 +180,27 @@ pending-account sign-in shows the restricted deletion screen, with cancel and le
 scheduled actions; cancellation asks for credentials again. After the deadline,
 only processing/disabled information is shown. Unknown email and wrong password
 share identical copy; infrastructure errors have distinct temporary-unavailable copy.
+
+## Extraction attempts — 8 October 2026
+
+The latest attempt is the default review. Earlier attempts remain stored and are
+available through a collapsed **View previous attempts** disclosure, with concise
+status/date buttons in Africa/Lagos time (WAT). Selecting one labels it **Previous
+attempt**; **Return to current attempt** restores the latest record. The old
+prominent Latest/Earlier selector is removed.
+
+Starting extraction immediately replaces the old status and fields with
+**Extracting details… / This may take up to 90 seconds.** Earlier results stay in
+history, never appearing as the outcome of the running request. Manual setup has
+its own pending copy. An uncertain request outcome asks the user to refresh actual
+server state before retrying; it does not restore the old failure as a new result.
+No automatic retry occurs. Request controls prevent overlapping actions.
+
+Current unverifiable output reads **Extraction failed** and explains that Treviqo
+could not verify enough reliable details, with retry and manual entry available.
+Partial output reads **Some details were extracted** and asks the user to compare
+every proposal with the original before confirming it. Missing fields stay editable;
+source excerpts, review actions and prior corrections remain available. Confidence
+is application-assigned Needs review for newly extracted proposals, never automatic
+confirmation. Partial coverage does not claim that all omitted fields exist in the
+source document.

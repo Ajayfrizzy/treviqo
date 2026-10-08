@@ -65,10 +65,27 @@ const handler = async (request, response) => {
     }
     if (source.includes("FIXTURE_CLASSIFICATION_INVALID") && classify)
       result = { type: "ambiguous" };
+    if (source.includes("FIXTURE_SALVAGE") && !classify)
+      result = [
+        {
+          KEY: " Employer Name ",
+          VALUE: "Harbour Workshop Ltd",
+          EVIDENCE: "Employer: Harbour Workshop Ltd",
+        },
+        {
+          key: "employer",
+          value: "Harbour Workshop Ltd",
+          evidence: "Employer: Harbour Workshop Ltd",
+        },
+        { key: "salary", value: "invented" },
+        null,
+      ];
     const content =
       source.includes("FIXTURE_MALFORMED") && !classify
         ? "not JSON"
-        : JSON.stringify(result);
+        : source.includes("FIXTURE_SALVAGE") && !classify
+          ? `Here are the details:\n\`\`\`json\n${JSON.stringify(result)}\n\`\`\`\nPlease review.`
+          : JSON.stringify(result);
     response.setHeader("content-type", "application/json");
     response.end(
       JSON.stringify({

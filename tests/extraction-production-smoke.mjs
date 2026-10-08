@@ -83,7 +83,7 @@ try {
   assert.equal(response.status, 200);
   const run = (await response.json()).extraction;
   assert.equal(run.status, "ready");
-  assert.equal(run.schemaVersion, "fields-v4");
+  assert.equal(run.schemaVersion, "fields-v5");
   assert.equal(run.sourceKind, "pdf_text");
   assert.ok(
     run.fields.every((f) => f.value === null && f.reviewState === "proposed"),

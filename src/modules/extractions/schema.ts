@@ -5,8 +5,8 @@ import {
   supportedTypes,
   type ExtractionType,
 } from "./shared";
-export const PROMPT_VERSION = "evidence-v4";
-export const SCHEMA_VERSION = "fields-v4";
+export const PROMPT_VERSION = "evidence-v5";
+export const SCHEMA_VERSION = "fields-v5";
 const cell = z
   .object({
     value: z.string().trim().min(1).max(1000).nullable(),
@@ -67,21 +67,21 @@ export function groundedCell(input: z.infer<typeof cell>, source: string) {
     return { value: null, evidence: null, confidence: "needs_review" as const };
   return { ...input, evidence };
 }
-// Recover one complete JSON object, including fenced JSON or harmless prose.
-// Never repair truncated JSON or choose between multiple candidate objects.
-function decodeObject(raw: string): Record<string, unknown> {
+// Bounded structural salvage only: one complete JSON object or array, possibly
+// fenced or wrapped in prose. Never invent delimiters or splice broken objects.
+function decodeValue(raw: string): unknown {
   if (raw.length > 65536) throw new Error("Oversized output");
   let start = -1,
-    depth = 0,
     quoted = false,
     escaped = false;
+  const stack: string[] = [];
   const candidates: string[] = [];
   for (let i = 0; i < raw.length; i++) {
-    const c = raw[i];
+    const c = raw[i]!;
     if (start < 0) {
-      if (c === "{") {
+      if (c === "{" || c === "[") {
         start = i;
-        depth = 1;
+        stack.push(c);
       }
       continue;
     }
@@ -90,15 +90,40 @@ function decodeObject(raw: string): Record<string, unknown> {
       else if (c === "\\") escaped = true;
       else if (c === '"') quoted = false;
     } else if (c === '"') quoted = true;
-    else if (c === "{") depth++;
-    else if (c === "}" && --depth === 0) {
-      candidates.push(raw.slice(start, i + 1));
-      start = -1;
+    else if (c === "{" || c === "[") {
+      stack.push(c);
+      if (stack.length > 12) throw new Error("Output nesting limit");
+    } else if (c === "}" || c === "]") {
+      if (stack.pop() !== (c === "}" ? "{" : "["))
+        throw new Error("Invalid JSON boundaries");
+      if (!stack.length) {
+        candidates.push(raw.slice(start, i + 1));
+        start = -1;
+      }
     }
   }
   if (start >= 0 || candidates.length !== 1)
     throw new Error("Ambiguous output");
   return JSON.parse(candidates[0]!);
+}
+function record(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+const normalizeKey = (key: string) =>
+  key
+    .trim()
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+function normalizeProperties(value: Record<string, unknown>) {
+  const result = Object.create(null) as Record<string, unknown>;
+  for (const [key, item] of Object.entries(value)) {
+    const normalized = normalizeKey(key);
+    if (Object.hasOwn(result, normalized))
+      throw new Error("Ambiguous properties");
+    result[normalized] = item;
+  }
+  return result;
 }
 const aliases: Record<string, ExtractionType | "other"> = {
   employment_contract: "employment_contract",
@@ -123,7 +148,9 @@ export function parseClassification(raw: string, source: string) {
     confidence: "needs_review" as const,
   };
   try {
-    const decoded = decodeObject(raw);
+    const value = decodeValue(raw);
+    if (!record(value)) return unknown;
+    const decoded = normalizeProperties(value);
     if (typeof decoded.type !== "string") return unknown;
     const label = decoded.type
       .trim()
@@ -160,66 +187,97 @@ export function parseClassification(raw: string, source: string) {
     return unknown;
   }
 }
+// Only explicit equivalent names are accepted; aliases still pass the type's allowlist.
+const fieldAliases: Record<string, string> = {
+  employer_name: "employer",
+  employee_name: "employee",
+  job_title: "role",
+  role_title: "role",
+};
 export function parseFields(raw: string, type: ExtractionType, source: string) {
-  const decoded = decodeObject(raw);
-  const sparse = Object.hasOwn(decoded, "fields");
-  if (sparse && !Array.isArray(decoded.fields))
-    throw new Error("Invalid fields");
-  const entries: unknown[] = sparse
-    ? (decoded.fields as unknown[])
-    : Object.entries(decoded).map(([key, value]) =>
-        value && typeof value === "object" ? { ...value, key } : { key },
-      );
+  const decoded = decodeValue(raw);
+  let entries: unknown[];
+  if (Array.isArray(decoded)) entries = decoded;
+  else if (record(decoded)) {
+    const root = normalizeProperties(decoded);
+    if (Object.hasOwn(root, "fields")) {
+      if (Array.isArray(root.fields)) entries = root.fields;
+      else if (record(root.fields)) entries = [root.fields];
+      else throw new Error("Invalid fields");
+    } else if (Object.hasOwn(root, "key")) entries = [root];
+    else
+      entries = Object.entries(root).map(([key, value]) => {
+        if (!record(value)) return null;
+        try {
+          const cell = normalizeProperties(value);
+          // The legacy object's enclosing key is authoritative; never override it
+          // with a conflicting nested key supplied by the model.
+          if (Object.hasOwn(cell, "key")) return null;
+          return { ...cell, key };
+        } catch {
+          return null;
+        }
+      });
+  } else throw new Error("Invalid output");
   if (entries.length > 100) throw new Error("Too many proposals");
   const allowed = fieldLabels[type];
-  const counts = new Map<string, number>();
-  for (const entry of entries) {
-    if (
-      entry &&
-      typeof entry === "object" &&
-      "key" in entry &&
-      typeof entry.key === "string"
-    )
-      counts.set(entry.key, (counts.get(entry.key) ?? 0) + 1);
-  }
   const valid = new Map<string, z.infer<typeof cell>>();
+  const conflicting = new Set<string>();
   let partial = false;
   for (const entry of entries) {
-    const item = z
-      .object({
-        key: z.string(),
-        value: z.unknown(),
-        evidence: z.unknown(),
-        confidence: confidenceSchema.optional(),
-      })
-      .safeParse(entry);
-    if (!item.success) {
+    if (!record(entry)) {
       partial = true;
       continue;
     }
-    const { key, value, evidence, confidence } = item.data;
-    if (
-      !Object.hasOwn(allowed, key) ||
-      counts.get(key) !== 1 ||
-      key === "entries_complete"
-    ) {
-      if (value !== null) partial = true;
+    let item: Record<string, unknown>;
+    try {
+      item = normalizeProperties(entry);
+    } catch {
+      partial = true;
+      continue;
+    }
+    if (typeof item.key !== "string") {
+      partial = true;
+      continue;
+    }
+    const normalized = normalizeKey(item.key);
+    const key = Object.hasOwn(fieldAliases, normalized)
+      ? fieldAliases[normalized]!
+      : normalized;
+    if (!Object.hasOwn(allowed, key) || key === "entries_complete") {
+      if (item.value !== null) partial = true;
       continue;
     }
     const parsed = cell.safeParse({
-      value,
-      evidence,
-      confidence: confidence ?? "needs_review",
+      value: item.value,
+      evidence: item.evidence,
+      confidence: "needs_review",
     });
     if (!parsed.success) {
       partial = true;
       continue;
     }
     const grounded = groundedCell(parsed.data, source);
-    if (grounded.value) valid.set(key, grounded);
-    else if (value !== null || evidence !== null) partial = true;
+    if (!grounded.value) {
+      if (item.value !== null || item.evidence !== null) partial = true;
+      continue;
+    }
+    const previous = valid.get(key);
+    if (
+      previous &&
+      normalizeEvidence(previous.value!) !== normalizeEvidence(grounded.value)
+    ) {
+      conflicting.add(key);
+      valid.delete(key);
+      partial = true;
+    } else if (!conflicting.has(key) && !previous) valid.set(key, grounded);
   }
   if (!valid.size) throw new Error("No grounded proposals");
+  // Partial means coverage is incomplete or proposals were omitted, not that
+  // the remaining values are trusted. Pension completeness is always manual.
+  partial ||=
+    valid.size <
+    Object.keys(allowed).filter((key) => key !== "entries_complete").length;
   const fields = Object.keys(allowed).map((key) => ({
     key,
     ...(valid.get(key) ?? {

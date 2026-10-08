@@ -134,7 +134,7 @@ test("handles model failure, low confidence, malformed output and manual fallbac
     .click();
   for (const [marker, message] of [
     ["FIXTURE_UNAVAILABLE", "AI is unavailable"],
-    ["FIXTURE_MALFORMED", "could not be verified"],
+    ["FIXTURE_MALFORMED", "could not verify enough reliable details"],
   ]) {
     await page
       .getByLabel("Document text (optional)")
@@ -294,7 +294,7 @@ test("review actions show local feedback, block repeated clicks, recover, and hi
     });
     expect(starts).toBe(1);
     await expect(page.getByRole("status")).toContainText(
-      "Processing your document",
+      "This may take up to 90 seconds",
     );
   } finally {
     release();
@@ -368,9 +368,7 @@ for (const width of [320, 1440]) {
     });
     await page.goto(`/documents/${id}/review`);
     await expect(
-      page.getByText("Some suggestions could not be verified", {
-        exact: false,
-      }),
+      page.getByRole("heading", { name: "Some details were extracted" }),
     ).toBeVisible();
     const employer = page.getByRole("region", {
       name: "Employer",
@@ -407,3 +405,192 @@ for (const width of [320, 1440]) {
     ).toBeVisible();
   });
 }
+
+for (const width of [320, 375, 430, 1440]) {
+  test(`attempt history stays secondary and a retry replaces stale failure at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 850 });
+    const id = await createDocument(page);
+    const url = `/api/documents/${id}/extractions`;
+    await page.request.post(url, {
+      headers: { origin },
+      data: { mode: "manual", type: "payslip" },
+    });
+    for (let i = 0; i < 2; i++) {
+      const failed = await page.request.post(url, {
+        headers: { origin },
+        data: {
+          mode: "ai",
+          type: "employment_contract",
+          text: `${contract.text}\nFIXTURE_MALFORMED`,
+        },
+      });
+      expect((await failed.json()).extraction.status).toBe("failed");
+    }
+    await page.goto(`/documents/${id}/review`);
+    const current = page.getByRole("region", {
+      name: "Current attempt",
+      exact: true,
+    });
+    const history = page.getByRole("region", { name: "Attempt history" });
+    await expect(
+      current.getByRole("heading", { name: "Extraction failed" }),
+    ).toBeVisible();
+    await expect(current).toContainText(
+      "Try again or enter the details manually",
+    );
+    const disclosure = history.locator("details");
+    await expect(disclosure).not.toHaveAttribute("open", "");
+    await expect(history.getByRole("button", { name: /^Failed/ })).toHaveCount(
+      0,
+    );
+    await expect(
+      page.getByLabel("Review attempt", { exact: true }),
+    ).toHaveCount(0);
+    await page
+      .getByText("Scanned file or image? Add text from the document", {
+        exact: true,
+      })
+      .click();
+    await page
+      .getByLabel("Document text (optional)")
+      .fill(`${contract.text}\nFIXTURE_SALVAGE`);
+    await page
+      .getByLabel("Document type", { exact: true })
+      .selectOption("employment_contract");
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let starts = 0;
+    await page.route(`**${url}`, async (route) => {
+      if (route.request().method() === "POST") {
+        starts++;
+        await gate;
+      }
+      await route.continue();
+    });
+    try {
+      await page
+        .getByRole("button", { name: "Extract details", exact: true })
+        .click();
+      await expect(
+        current.getByRole("heading", { name: "Extracting details…" }),
+      ).toBeVisible();
+      await expect(current).toContainText("This may take up to 90 seconds");
+      await expect(
+        page.getByRole("heading", { name: "Extraction failed" }),
+      ).toHaveCount(0);
+      await expect(disclosure).not.toHaveAttribute("open", "");
+      await expect(
+        page.getByRole("button", { name: "Extract details", exact: true }),
+      ).toBeDisabled();
+      expect(starts).toBe(1);
+      await page.screenshot({
+        path: `test-results/extraction-retry-${width}.png`,
+      });
+    } finally {
+      release();
+    }
+    await expect(
+      current.getByRole("heading", { name: "Some details were extracted" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Employer", exact: true }),
+    ).toContainText("Harbour Workshop Ltd");
+    expect(starts).toBe(1);
+    await page.unroute(`**${url}`);
+    await history.getByText("View previous attempts", { exact: true }).click();
+    await expect(history.getByRole("button", { name: /^Failed/ })).toHaveCount(
+      2,
+    );
+    await history
+      .getByRole("button", { name: /^Failed/ })
+      .first()
+      .click();
+    const previous = page.getByRole("region", {
+      name: "Previous attempt",
+      exact: true,
+    });
+    await expect(
+      previous.getByRole("heading", { name: "Extraction failed" }),
+    ).toBeVisible();
+    await expect(history).toContainText("Current attempt · Ready for review");
+    await history
+      .getByRole("button", { name: "Return to current attempt" })
+      .click();
+    await expect(
+      current.getByRole("heading", { name: "Some details were extracted" }),
+    ).toBeVisible();
+    await history.getByRole("button", { name: /^Ready for review/ }).click();
+    await expect(previous).toContainText("Details entered manually");
+    await expect(
+      page.getByRole("region", { name: "Net pay", exact: true }),
+    ).toBeVisible();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: `test-results/extraction-history-${width}.png`,
+    });
+    await page.reload();
+    await expect(
+      current.getByRole("heading", { name: "Some details were extracted" }),
+    ).toBeVisible();
+    await expect(disclosure).not.toHaveAttribute("open", "");
+  });
+}
+
+test("an uncertain retry outcome does not restore the previous failure as the new attempt", async ({
+  page,
+}) => {
+  const id = await createDocument(page);
+  const url = `/api/documents/${id}/extractions`;
+  await page.request.post(url, {
+    headers: { origin },
+    data: {
+      mode: "ai",
+      type: "employment_contract",
+      text: `${contract.text}\nFIXTURE_MALFORMED`,
+    },
+  });
+  await page.goto(`/documents/${id}/review`);
+  await page.route(`**${url}`, (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({
+            error: "Extraction is temporarily unavailable.",
+          }),
+        })
+      : route.continue(),
+  );
+  await page
+    .getByRole("button", { name: "Extract details", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Check the latest attempt" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Extraction failed" }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByText("View previous attempts", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Refresh review" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Extraction failed" }),
+  ).toBeVisible();
+  await page.unroute(`**${url}`);
+  await page
+    .getByLabel("Document type", { exact: true })
+    .selectOption("payslip");
+  await page.getByRole("button", { name: "Enter details manually" }).click();
+  await expect(
+    page.getByRole("region", { name: "Net pay", exact: true }),
+  ).toBeVisible();
+});

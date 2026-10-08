@@ -188,7 +188,6 @@ it("expands sparse model proposals without weakening evidence, duplicate, or key
     [],
     [{ ...field, evidence: "invented excerpt" }],
     [{ ...field, value: "invented employer" }],
-    [field, field],
     [{ ...field, key: "legal_entitlement" }],
     [{ key: "employer", value: field.value }],
   ]) {
@@ -257,4 +256,115 @@ it("drops invalid legacy cells, unsupported keys, and all conflicting duplicate 
   );
   expect(mixed.filter((f) => f.value)).toHaveLength(1);
   expect(mixed.partial).toBe(true);
+});
+
+const proposal = {
+  key: "employer",
+  value: "Acme Ltd",
+  evidence: "Employer: Acme Ltd",
+};
+const source = "Employer: Acme Ltd";
+it.each([
+  JSON.stringify({ fields: [proposal] }),
+  `\`\`\`json\n${JSON.stringify({ fields: [proposal] })}\n\`\`\``,
+  `Here are the facts: ${JSON.stringify({ fields: [proposal] })} Review them.`,
+  JSON.stringify([proposal]),
+  `\`\`\`JSON\n${JSON.stringify([proposal])}\n\`\`\``,
+  JSON.stringify(proposal),
+  JSON.stringify({ fields: proposal }),
+  JSON.stringify({
+    FIELDS: [
+      {
+        KEY: " Employer Name ",
+        VALUE: " Acme Ltd ",
+        EVIDENCE: " Employer: Acme Ltd ",
+      },
+    ],
+  }),
+  JSON.stringify({
+    fields: [{ ...proposal, key: "employerName", confidence: "CERTAIN" }],
+  }),
+  JSON.stringify({ fields: [proposal, { ...proposal, key: "EMPLOYER" }] }),
+  JSON.stringify({ fields: [proposal, null, "malformed", { key: "salary" }] }),
+])("salvages a grounded partial proposal without confirming it: %s", (raw) => {
+  const result = parseFields(raw, "employment_contract", source);
+  expect(result.filter((field) => field.value)).toEqual([
+    { ...proposal, confidence: "needs_review" },
+  ]);
+  expect(result.partial).toBe(true);
+});
+it.each([
+  { key: "unsupported" },
+  { value: "" },
+  { value: "  " },
+  { value: "Inferred Company" },
+  { value: 12 },
+  { evidence: undefined },
+  { evidence: "" },
+  { evidence: "Employer: Made-up Ltd" },
+])("retains valid fields beside a rejected candidate: %j", (override) => {
+  const invalid = { ...proposal, ...override };
+  const raw = JSON.stringify({ fields: [proposal, invalid] });
+  expect(
+    parseFields(raw, "employment_contract", source).find(
+      (f) => f.key === "employer",
+    )?.value,
+  ).toBe("Acme Ltd");
+  expect(() =>
+    parseFields(
+      JSON.stringify({ fields: [invalid] }),
+      "employment_contract",
+      source,
+    ),
+  ).toThrow();
+});
+it("deduplicates equivalent grounded values but rejects conflicting normalized keys", () => {
+  const result = parseFields(
+    JSON.stringify({
+      fields: [
+        proposal,
+        { ...proposal, key: "employer_name", evidence: "Acme Ltd" },
+      ],
+    }),
+    "employment_contract",
+    source,
+  );
+  expect(result.filter((f) => f.value)).toHaveLength(1);
+  expect(() =>
+    parseFields(
+      JSON.stringify([
+        proposal,
+        {
+          key: "EMPLOYER_NAME",
+          value: "Other Ltd",
+          evidence: "Employer: Other Ltd",
+        },
+      ]),
+      "employment_contract",
+      source + " Employer: Other Ltd",
+    ),
+  ).toThrow();
+});
+it.each([
+  '{"fields":[{"key":"employer","value":"Acme Ltd","evidence":"Employer: Acme Ltd"}',
+  JSON.stringify(proposal) + JSON.stringify(proposal),
+  JSON.stringify({ fields: [{ ...proposal, KEY: "employee" }] }),
+  JSON.stringify({ fields: [proposal], FIELDS: [proposal] }),
+  JSON.stringify({ fields: Array.from({ length: 101 }, () => proposal) }),
+  "x".repeat(65537),
+])("fails closed on ambiguous, truncated, or unbounded output", (raw) => {
+  expect(() => parseFields(raw, "employment_contract", source)).toThrow();
+});
+it("uses deterministic compact type-specific prompts with no completeness request", () => {
+  for (const type of supportedTypes) {
+    const prompt = extractionPrompt(source, type);
+    expect(prompt).toEqual(extractionPrompt(source, type));
+    expect(prompt.system).toContain("Omit fields you cannot ground");
+    expect(prompt.system).toContain(
+      "Copy value and its containing evidence excerpt exactly",
+    );
+    expect(prompt.system).not.toContain("entries_complete");
+    expect(prompt.system).not.toContain('"confidence":');
+    expect(prompt.maxTokens).toBe(2048);
+  }
 });

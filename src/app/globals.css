@@ -1139,3 +1139,15 @@ button,
   overflow-wrap: normal;
   font-size: 0.95rem;
 }
+
+.attempt-history-list {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0;
+  list-style: none;
+}
+.attempt-history-list button {
+  width: 100%;
+  text-align: left;
+  font-weight: 500;
+}

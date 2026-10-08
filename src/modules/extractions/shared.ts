@@ -167,7 +167,7 @@ export const failureMessages: Record<string, string> = {
   timeout:
     "AI took too long to respond. Try again later or enter fields manually.",
   malformed:
-    "The model response could not be verified. Retry or enter fields manually.",
+    "Treviqo could not verify enough reliable details from this document. Try again or enter the details manually.",
   persistence: "Details could not be saved. Retry or enter fields manually.",
   interrupted: "This attempt was interrupted. Retry or enter fields manually.",
 };

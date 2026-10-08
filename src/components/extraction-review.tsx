@@ -2,7 +2,7 @@
 import { Button } from "./button";
 import { useRouter } from "next/navigation";
 import { uiRequest } from "./ui-request";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { documentTypes } from "@/modules/documents/shared";
 import {
   failureMessages,
@@ -30,12 +30,26 @@ export function ExtractionReview({
   const [text, setText] = useState("");
   const [type, setType] = useState("");
   const [operation, setOperation] = useState("");
-  const current = data.extraction;
+  const [newAttempt, setNewAttempt] = useState<
+    "ai" | "manual" | "uncertain" | null
+  >(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const inFlight = useRef(false);
+  const current = newAttempt ? null : data.extraction;
+  const latest = data.attempts[0];
+  const historical = !!current && !!latest && current.id !== latest.id;
+  const previous = newAttempt ? data.attempts : data.attempts.slice(1);
   async function request(
     method: "GET" | "POST" | "PATCH",
     body?: unknown,
     runId?: string,
   ) {
+    if (inFlight.current) return;
+    inFlight.current = true;
+    if (method === "POST") {
+      setNewAttempt((body as { mode: "ai" | "manual" }).mode);
+      setHistoryOpen(false);
+    }
     setOperation(
       method === "GET"
         ? "Loading the latest review…"
@@ -64,6 +78,7 @@ export function ExtractionReview({
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Please retry.");
       setData(result);
+      setNewAttempt(null);
       // Classification/review can change records in prefetched destinations.
       if (method !== "GET") router.refresh();
       if (method === "PATCH") setMessage("Review saved.");
@@ -72,8 +87,10 @@ export function ExtractionReview({
           "Details are ready for your review. Nothing is confirmed automatically.",
         );
     } catch (error) {
+      if (method === "POST") setNewAttempt("uncertain");
       setError(error instanceof Error ? error.message : "Please retry.");
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
@@ -100,12 +117,12 @@ export function ExtractionReview({
           {message}
         </p>
       )}
-      {busy && (
+      {busy && !newAttempt && (
         <p role="status" className="form-message">
           {operation}
         </p>
       )}
-      {!current && (
+      {!current && !newAttempt && (
         <section className="card">
           <h2>No extracted details yet</h2>
           <p>
@@ -182,43 +199,90 @@ export function ExtractionReview({
           </div>
         </fieldset>
       </section>
-      {data.attempts.length > 0 && (
-        <section className="card employment-form review-attempt">
-          <label htmlFor="attempt">Review attempt</label>
-          <select
-            id="attempt"
-            disabled={busy}
-            value={current?.id ?? ""}
-            onChange={(event) => request("GET", undefined, event.target.value)}
-          >
-            {data.attempts.map((attempt, index) => (
-              <option key={attempt.id} value={attempt.id}>
-                {index === 0 ? "Latest" : `Earlier ${index}`} · {attempt.status}{" "}
-                · {new Date(attempt.createdAt).toLocaleString()}
-              </option>
-            ))}
-          </select>
+      {newAttempt && (
+        <section className="card" aria-label="Current attempt">
+          <h2>
+            {newAttempt === "ai"
+              ? "Extracting details…"
+              : newAttempt === "manual"
+                ? "Preparing manual entry…"
+                : "Check the latest attempt"}
+          </h2>
+          <p role="status">
+            {newAttempt === "ai"
+              ? "This may take up to 90 seconds."
+              : newAttempt === "manual"
+                ? "Preparing fields for your review."
+                : "The new attempt’s outcome could not be confirmed. Refresh the review before trying again. Earlier attempts are in history."}
+          </p>
+        </section>
+      )}
+      {(data.attempts.length > 0 || newAttempt === "uncertain") && (
+        <section
+          className="card employment-form review-attempt"
+          aria-label="Attempt history"
+        >
+          {!newAttempt && latest && (
+            <p>Current attempt · {attemptLabel(latest)}</p>
+          )}
           <Button
             className="secondary"
             disabled={busy}
-            onClick={() => request("GET", undefined, current?.id)}
+            onClick={() => request("GET")}
           >
-            Refresh review
+            {historical ? "Return to current attempt" : "Refresh review"}
           </Button>
+          {previous.length > 0 && (
+            <details
+              open={historyOpen}
+              onToggle={(event) => setHistoryOpen(event.currentTarget.open)}
+            >
+              <summary>View previous attempts</summary>
+              <ul className="attempt-history-list" role="list">
+                {previous.map((attempt) => (
+                  <li key={attempt.id}>
+                    <Button
+                      className="secondary"
+                      disabled={busy}
+                      aria-pressed={current?.id === attempt.id}
+                      onClick={() => request("GET", undefined, attempt.id)}
+                    >
+                      {attemptLabel(attempt)}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
         </section>
       )}
       {current && (
-        <section className="card">
-          <h2>Review status</h2>
+        <section
+          className="card"
+          aria-label={historical ? "Previous attempt" : "Current attempt"}
+        >
+          {historical && (
+            <p className="eyebrow">
+              Previous attempt · {attemptDate(current.createdAt)} WAT
+            </p>
+          )}
+          <h2>
+            {current.status === "failed"
+              ? "Extraction failed"
+              : current.status === "processing"
+                ? "Extracting details…"
+                : current.errorCode === "partial"
+                  ? "Some details were extracted"
+                  : "Review status"}
+          </h2>
           {current.status === "failed" ? (
-            <p role="alert">
+            <p role={historical ? undefined : "alert"}>
               {failureMessages[current.errorCode ?? ""] ??
                 failureMessages.interrupted}
             </p>
           ) : current.status === "processing" ? (
             <p role="status">
-              Extraction in progress. Refresh shortly. If it was interrupted,
-              you can start a new attempt after two minutes.
+              This may take up to 90 seconds. Refresh shortly to see the result.
             </p>
           ) : (
             <p>
@@ -229,8 +293,9 @@ export function ExtractionReview({
           )}
           {current.status === "ready" && current.errorCode === "partial" && (
             <p>
-              Some suggestions could not be verified and were omitted. Review
-              the retained details and enter missing information manually.
+              Review each proposed detail against the original document before
+              confirming it. Some details may be missing; enter them manually if
+              needed.
             </p>
           )}
           {current.status === "ready" && current.fields.length <= 1 && (
@@ -266,6 +331,23 @@ export function ExtractionReview({
       ))}
     </div>
   );
+}
+function attemptDate(date: string) {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "Africa/Lagos",
+  }).format(new Date(date));
+}
+function attemptLabel(attempt: Bundle["attempts"][number]) {
+  const labels: Record<string, string> = {
+    failed: "Failed",
+    ready: "Ready for review",
+    processing: "Extracting",
+  };
+  return `${labels[attempt.status] ?? "Needs review"} · ${attemptDate(attempt.createdAt)} WAT`;
 }
 function FieldCard({
   field,
