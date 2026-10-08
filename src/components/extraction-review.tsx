@@ -505,7 +505,11 @@ function FieldCard({
   busy: boolean;
   save: (action: string, value?: string) => Promise<void>;
 }) {
-  const [value, setValue] = useState(field.value ?? field.proposedValue ?? "");
+  const savedValue = field.value ?? field.proposedValue ?? "";
+  const [value, setValue] = useState(savedValue);
+  const changed = value.trim() !== savedValue.trim();
+  const reviewed =
+    field.reviewState === "confirmed" || field.reviewState === "corrected";
   const label = labelFor(type, field.key);
   const inputId = `field-${field.id}`;
   return (
@@ -567,13 +571,13 @@ function FieldCard({
         )}
         <div className="review-actions">
           <Button
-            disabled={busy || !field.proposedValue}
+            disabled={busy || !field.proposedValue || reviewed || changed}
             onClick={() => save("confirm")}
           >
             Confirm proposal
           </Button>
           <Button
-            disabled={busy || !value.trim()}
+            disabled={busy || !value.trim() || !changed}
             onClick={() => save("correct", value.trim())}
           >
             Save correction

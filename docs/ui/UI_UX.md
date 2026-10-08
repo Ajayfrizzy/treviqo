@@ -242,3 +242,25 @@ refresh, older manual saves updating the cache, and manual entry. No test failur
 occurred. Full unrelated browser/integration suites and live/physical-device checks
 were not rerun for this component-only change. Nothing was committed, pushed or
 deployed; `.env` is unchanged.
+
+### Confirm and correction buttons
+
+Confirm proposal accepts an unedited proposal. Once a field is confirmed or
+corrected, Confirm stays disabled; further edits use Save correction. Confirm also
+disables while the input differs from its saved baseline, avoiding an accidental
+reset to the original proposal when there are unsaved edits.
+
+Save correction enables only for a nonblank value differing from the saved value
+(or original proposal before review), compared after trimming outer whitespace.
+Reverting the edit disables Save; a successful save resets the baseline. Failed
+saves retain the edit and allow retry. The same rules apply to category dropdowns
+and manual-entry fields. Reject/Mark unknown remain available, and an explicitly
+rejected/unknown proposal may still be confirmed again. Backend review semantics,
+optimistic version checks, evidence and revision history are unchanged.
+
+Validation: `npm run validate` passed lint, TypeScript, 316 unit tests, production
+and worker builds. `npm run test:e2e -- tests/e2e/extractions.spec.ts` passed all
+20 cases using disposable local services, including button states at
+320/375/430/768/1440px, category changes, reload, manual entry and failed-save retry.
+Final lint/typecheck, targeted formatting and diff checks passed. No backend,
+production data, environment configuration or dependency changes were made.

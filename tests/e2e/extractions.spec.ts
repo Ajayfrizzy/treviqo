@@ -84,12 +84,41 @@ for (const width of [320, 375, 430, 768, 1440]) {
       exact: true,
     });
     await expect(employer).toContainText("Harbour Workshop Ltd");
+    await expect(
+      employer.getByRole("button", { name: "Save correction" }),
+    ).toBeDisabled();
     await employer.getByRole("button", { name: "Confirm proposal" }).click();
     await expect(
       employer.getByText("confirmed", { exact: true }),
     ).toBeVisible();
+    const confirm = employer.getByRole("button", { name: "Confirm proposal" });
+    const correction = employer.getByRole("button", {
+      name: "Save correction",
+    });
+    const edit = employer.getByLabel("Corrected value");
+    await expect(confirm).toBeDisabled();
+    await expect(correction).toBeDisabled();
+    await edit.fill("Harbour Workshop Ltd ");
+    await expect(correction).toBeDisabled();
+    await edit.fill("Updated employer");
+    await expect(correction).toBeEnabled();
+    await expect(confirm).toBeDisabled();
+    await edit.fill("Harbour Workshop Ltd");
+    await expect(correction).toBeDisabled();
+    await edit.fill("");
+    await expect(correction).toBeDisabled();
+    await edit.fill("Updated employer");
+    await correction.click();
+    await expect(
+      employer.getByText("corrected", { exact: true }),
+    ).toBeVisible();
+    await expect(correction).toBeDisabled();
+    await expect(confirm).toBeDisabled();
     const role = page.getByRole("region", { name: "Role", exact: true });
     await role.getByLabel("Corrected value").fill("Senior designer");
+    await expect(
+      role.getByRole("button", { name: "Confirm proposal" }),
+    ).toBeDisabled();
     await role.getByRole("button", { name: "Save correction" }).click();
     await expect(role.getByText("corrected", { exact: true })).toBeVisible();
     const salary = page.getByRole("region", {
@@ -105,6 +134,9 @@ for (const width of [320, 375, 430, 768, 1440]) {
     await leave.getByRole("button", { name: "Mark unknown" }).click();
     await expect(leave.getByText("unknown", { exact: true })).toBeVisible();
     await page.reload();
+    await expect(correction).toBeDisabled();
+    await expect(confirm).toBeDisabled();
+    await expect(edit).toHaveValue("Updated employer");
     await expect(role.getByLabel("Corrected value")).toHaveValue(
       "Senior designer",
     );
@@ -168,6 +200,9 @@ test("handles model failure, low confidence, malformed output and manual fallbac
   await expect(
     net.getByRole("button", { name: "Confirm proposal" }),
   ).toBeDisabled();
+  await expect(
+    net.getByRole("button", { name: "Save correction" }),
+  ).toBeDisabled();
   await net.getByLabel("Corrected value").fill("NGN 100,000");
   await page.route(`**/api/documents/${id}/extractions`, async (route) => {
     if (route.request().method() === "PATCH")
@@ -182,9 +217,15 @@ test("handles model failure, low confidence, malformed output and manual fallbac
     page.getByRole("alert").filter({ hasText: "Try again" }),
   ).toBeVisible();
   await expect(net.getByLabel("Corrected value")).toHaveValue("NGN 100,000");
+  await expect(
+    net.getByRole("button", { name: "Save correction" }),
+  ).toBeEnabled();
   await page.unroute(`**/api/documents/${id}/extractions`);
   await net.getByRole("button", { name: "Save correction" }).click();
   await expect(net.getByText("corrected", { exact: true })).toBeVisible();
+  await expect(
+    net.getByRole("button", { name: "Save correction" }),
+  ).toBeDisabled();
 });
 test("protects extraction APIs/pages, cross-origin writes and stale field edits", async ({
   page,
@@ -890,4 +931,41 @@ test("saving an older manual review updates its cache without replacing the late
     "8 October 2026",
   );
   expect(reads).toBe(1);
+});
+
+test("category confirmation and correction follow the same edit rules", async ({
+  page,
+}) => {
+  const id = await createDocument(page);
+  await page.goto(`/documents/${id}/review`);
+  await page
+    .getByRole("button", { name: "Extract details", exact: true })
+    .click();
+  const category = page.getByRole("region", {
+    name: "Suggested document category",
+    exact: true,
+  });
+  const confirm = category.getByRole("button", { name: "Confirm proposal" });
+  const save = category.getByRole("button", { name: "Save correction" });
+  const select = category.getByLabel("Correct category");
+  await expect(confirm).toBeEnabled();
+  await expect(save).toBeDisabled();
+  await confirm.click();
+  await expect(confirm).toBeDisabled();
+  await select.selectOption("payslip");
+  await expect(save).toBeEnabled();
+  await expect(confirm).toBeDisabled();
+  await select.selectOption("employment_contract");
+  await expect(save).toBeDisabled();
+  await select.selectOption("payslip");
+  await save.click();
+  await expect(category.getByText("corrected", { exact: true })).toBeVisible();
+  await expect(save).toBeDisabled();
+  await expect(confirm).toBeDisabled();
+  // Explicitly reversing a rejected/unknown decision remains possible.
+  await category.getByRole("button", { name: "Reject", exact: true }).click();
+  await expect(category.getByText("rejected", { exact: true })).toBeVisible();
+  await expect(confirm).toBeEnabled();
+  await confirm.click();
+  await expect(category.getByText("confirmed", { exact: true })).toBeVisible();
 });
