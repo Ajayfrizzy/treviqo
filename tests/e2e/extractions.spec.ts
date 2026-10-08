@@ -434,12 +434,19 @@ for (const width of [320, 375, 430, 1440]) {
       exact: true,
     });
     const history = page.getByRole("region", { name: "Attempt history" });
+    await expect(current).toHaveCount(0);
     await expect(
-      current.getByRole("heading", { name: "Extraction failed" }),
+      page.getByText("Current attempt · Failed", { exact: false }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "Extraction failed" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "Ready for a new attempt" }),
     ).toBeVisible();
-    await expect(current).toContainText(
-      "Try again or enter the details manually",
-    );
+    await expect(
+      page.getByRole("button", { name: "Refresh review" }),
+    ).toHaveCount(0);
     const disclosure = history.locator("details");
     await expect(disclosure).not.toHaveAttribute("open", "");
     await expect(history.getByRole("button", { name: /^Failed/ })).toHaveCount(
@@ -516,14 +523,15 @@ for (const width of [320, 375, 430, 1440]) {
     await expect(
       previous.getByRole("heading", { name: "Extraction failed" }),
     ).toBeVisible();
-    await expect(history).toContainText("Current attempt · Ready for review");
-    await history
-      .getByRole("button", { name: "Return to current attempt" })
-      .click();
+    await expect(history).not.toContainText("Current attempt");
+    await history.getByRole("button", { name: "Back to latest" }).click();
     await expect(
       current.getByRole("heading", { name: "Some details were extracted" }),
     ).toBeVisible();
-    await history.getByRole("button", { name: /^Ready for review/ }).click();
+    await history
+      .getByRole("button", { name: /^Ready for review/ })
+      .last()
+      .click();
     await expect(previous).toContainText("Details entered manually");
     await expect(
       page.getByRole("region", { name: "Net pay", exact: true }),
@@ -538,7 +546,9 @@ for (const width of [320, 375, 430, 1440]) {
     });
     await page.reload();
     await expect(
-      current.getByRole("heading", { name: "Some details were extracted" }),
+      page
+        .getByRole("region", { name: "Latest result", exact: true })
+        .getByRole("heading", { name: "Some details were extracted" }),
     ).toBeVisible();
     await expect(disclosure).not.toHaveAttribute("open", "");
   });
@@ -581,10 +591,28 @@ test("an uncertain retry outcome does not restore the previous failure as the ne
   await expect(
     page.getByText("View previous attempts", { exact: true }),
   ).toBeVisible();
+  await page.getByText("View previous attempts", { exact: true }).click();
+  await page
+    .getByRole("region", { name: "Attempt history" })
+    .getByRole("button", { name: /^Failed/ })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Previous attempt", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Check the latest attempt" }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Back to latest" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Check the latest attempt" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Refresh review" }).click();
   await expect(
-    page.getByRole("heading", { name: "Extraction failed" }),
+    page.getByRole("heading", { name: "Ready for a new attempt" }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Extraction failed" }),
+  ).toHaveCount(0);
   await page.unroute(`**${url}`);
   await page
     .getByLabel("Document type", { exact: true })
@@ -593,4 +621,273 @@ test("an uncertain retry outcome does not restore the previous failure as the ne
   await expect(
     page.getByRole("region", { name: "Net pay", exact: true }),
   ).toBeVisible();
+});
+
+test("history loading is separate, cached, and cannot overwrite a new failed result", async ({
+  page,
+}) => {
+  const id = await createDocument(page);
+  const url = `/api/documents/${id}/extractions`;
+  const failures: string[] = [];
+  for (let i = 0; i < 2; i++) {
+    const response = await page.request.post(url, {
+      headers: { origin },
+      data: {
+        mode: "ai",
+        type: "employment_contract",
+        text: `${contract.text}\nFIXTURE_MALFORMED`,
+      },
+    });
+    failures.push((await response.json()).extraction.id);
+  }
+  await page.goto(`/documents/${id}/review`);
+  await page.getByText("View previous attempts", { exact: true }).click();
+  const history = page.getByRole("region", { name: "Attempt history" });
+  const older = history.getByRole("button", { name: /^Failed/ }).last();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let reads = 0;
+  await page.route(`**${url}?runId=${failures[0]}`, async (route) => {
+    reads++;
+    await gate;
+    await route.continue();
+  });
+  try {
+    await older.click();
+    await expect(page.getByRole("status")).toHaveText(
+      "Loading previous attempt…",
+    );
+    await expect(
+      page.getByRole("heading", { name: "Extracting details…" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Extract details", exact: true }),
+    ).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "Enter details manually" }),
+    ).toBeEnabled();
+    await expect(
+      page.getByLabel("Document type", { exact: true }),
+    ).toBeEnabled();
+  } finally {
+    release();
+  }
+  const previous = page.getByRole("region", {
+    name: "Previous attempt",
+    exact: true,
+  });
+  await expect(
+    previous.getByRole("heading", { name: "Extraction failed" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Refresh review" }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Back to latest" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Ready for a new attempt" }),
+  ).toBeVisible();
+  await older.click();
+  await expect(
+    previous.getByRole("heading", { name: "Extraction failed" }),
+  ).toBeVisible();
+  expect(reads).toBe(1);
+  await page.getByRole("button", { name: "Back to latest" }).click();
+  await page
+    .getByText("Scanned file or image? Add text from the document", {
+      exact: true,
+    })
+    .click();
+  await page
+    .getByLabel("Document type", { exact: true })
+    .selectOption("employment_contract");
+  await page
+    .getByLabel("Document text (optional)")
+    .fill(`${contract.text}\nFIXTURE_MALFORMED`);
+  let finish!: () => void;
+  const starting = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  await page.route(`**${url}`, async (route) => {
+    if (route.request().method() === "POST") await starting;
+    await route.continue();
+  });
+  try {
+    await page
+      .getByRole("button", { name: "Extract details", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Extracting details…" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Extraction failed" }),
+    ).toHaveCount(0);
+  } finally {
+    finish();
+  }
+  const active = page.getByRole("region", {
+    name: "Current attempt",
+    exact: true,
+  });
+  await expect(
+    active.getByRole("heading", { name: "Extraction failed" }),
+  ).toBeVisible();
+  await history.getByText("View previous attempts", { exact: true }).click();
+  await older.click();
+  await expect(
+    previous.getByRole("heading", { name: "Extraction failed" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Back to latest" }).click();
+  await expect(
+    active.getByRole("heading", { name: "Extraction failed" }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Extraction failed" }),
+  ).toHaveCount(0);
+});
+
+test("a late history response cannot replace manual entry started while it loads", async ({
+  page,
+}) => {
+  const id = await createDocument(page);
+  const url = `/api/documents/${id}/extractions`;
+  const old = await page.request.post(url, {
+    headers: { origin },
+    data: { mode: "manual", type: "termination_letter" },
+  });
+  const oldId = (await old.json()).extraction.id;
+  await page.request.post(url, {
+    headers: { origin },
+    data: { mode: "manual", type: "payslip" },
+  });
+  await page.goto(`/documents/${id}/review`);
+  await page.getByText("View previous attempts", { exact: true }).click();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(`**${url}?runId=${oldId}`, async (route) => {
+    await gate;
+    await route.continue();
+  });
+  const response = page.waitForResponse((r) =>
+    r.url().includes(`runId=${oldId}`),
+  );
+  try {
+    await page
+      .getByRole("region", { name: "Attempt history" })
+      .getByRole("button", { name: /^Ready for review/ })
+      .last()
+      .click();
+    await expect(page.getByRole("status")).toHaveText(
+      "Loading previous attempt…",
+    );
+    await page
+      .getByLabel("Document type", { exact: true })
+      .selectOption("employment_contract");
+    await page.getByRole("button", { name: "Enter details manually" }).click();
+    await expect(
+      page.getByRole("region", { name: "Employer", exact: true }),
+    ).toBeVisible();
+  } finally {
+    release();
+  }
+  await response;
+  await expect(
+    page.getByRole("region", { name: "Previous attempt", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("region", { name: "Employer", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Effective date", exact: true }),
+  ).toHaveCount(0);
+});
+
+test("an already-processing attempt can be refreshed without presenting old failures as active", async ({
+  page,
+}) => {
+  const id = await createDocument(page);
+  const doc = await db.employmentDocument.findUniqueOrThrow({ where: { id } });
+  const run = await db.documentExtraction.create({
+    data: {
+      documentId: id,
+      userId: doc.userId,
+      sourceKind: "pdf_text",
+      model: "fixture",
+      promptVersion: "fixture",
+      schemaVersion: "fixture",
+    },
+  });
+  await page.goto(`/documents/${id}/review`);
+  const active = page.getByRole("region", {
+    name: "Current attempt",
+    exact: true,
+  });
+  await expect(
+    active.getByRole("heading", { name: "Extracting details…" }),
+  ).toBeVisible();
+  await db.documentExtraction.update({
+    where: { id: run.id },
+    data: { status: "failed", errorCode: "malformed" },
+  });
+  await page.getByRole("button", { name: "Refresh review" }).click();
+  await expect(
+    active.getByRole("heading", { name: "Extraction failed" }),
+  ).toBeVisible();
+  await page.reload();
+  await expect(
+    page.getByRole("heading", { name: "Extraction failed" }),
+  ).toHaveCount(0);
+});
+
+test("saving an older manual review updates its cache without replacing the latest context", async ({
+  page,
+}) => {
+  const id = await createDocument(page);
+  const url = `/api/documents/${id}/extractions`;
+  const old = await page.request.post(url, {
+    headers: { origin },
+    data: { mode: "manual", type: "termination_letter" },
+  });
+  const oldId = (await old.json()).extraction.id;
+  await page.request.post(url, {
+    headers: { origin },
+    data: { mode: "manual", type: "payslip" },
+  });
+  await page.goto(`/documents/${id}/review`);
+  let reads = 0;
+  page.on("request", (request) => {
+    if (request.url().includes(`runId=${oldId}`)) reads++;
+  });
+  await page.getByText("View previous attempts", { exact: true }).click();
+  const entry = page
+    .getByRole("region", { name: "Attempt history" })
+    .getByRole("button", { name: /^Ready for review/ })
+    .last();
+  await entry.click();
+  const field = page.getByRole("region", {
+    name: "Effective date",
+    exact: true,
+  });
+  await field.getByLabel("Corrected value").fill("8 October 2026");
+  await field.getByRole("button", { name: "Save correction" }).click();
+  await expect(field.getByText("corrected", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Previous attempt", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Back to latest" }).click();
+  await expect(
+    page.getByRole("region", { name: "Latest result", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Net pay", exact: true }),
+  ).toBeVisible();
+  await entry.click();
+  await expect(field.getByLabel("Corrected value")).toHaveValue(
+    "8 October 2026",
+  );
+  expect(reads).toBe(1);
 });

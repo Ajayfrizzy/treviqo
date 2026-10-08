@@ -24,7 +24,10 @@ export function ExtractionReview({
 }) {
   const router = useRouter();
   const [data, setData] = useState(initial);
-  const [busy, setBusy] = useState(false);
+  const [pending, setPending] = useState<
+    "starting" | "saving" | "refreshing" | null
+  >(null);
+  const busy = pending !== null;
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [text, setText] = useState("");
@@ -35,21 +38,96 @@ export function ExtractionReview({
   >(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const inFlight = useRef(false);
-  const current = newAttempt ? null : data.extraction;
-  const latest = data.attempts[0];
-  const historical = !!current && !!latest && current.id !== latest.id;
-  const previous = newAttempt ? data.attempts : data.attempts.slice(1);
-  async function request(
-    method: "GET" | "POST" | "PATCH",
-    body?: unknown,
-    runId?: string,
-  ) {
+  const [interactionId, setInteractionId] = useState<string | null>(
+    initial.extraction?.status === "processing" ? initial.extraction.id : null,
+  );
+  const [selected, setSelected] = useState<ExtractionRecord | null>(null);
+  const [historyLoading, setHistoryLoading] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState("");
+  const historySequence = useRef(0);
+  const historyCache = useRef(
+    new Map<string, ExtractionRecord>(
+      initial.extraction && initial.extraction.status !== "processing"
+        ? [[initial.extraction.id, initial.extraction]]
+        : [],
+    ),
+  );
+  const historical = selected !== null;
+  const latestResult = data.extraction;
+  const latestVisible =
+    latestResult &&
+    (latestResult.status !== "failed" || latestResult.id === interactionId);
+  const current = historyLoading
+    ? null
+    : (selected ?? (newAttempt ? null : latestVisible ? latestResult : null));
+  const active =
+    !historical &&
+    !!current &&
+    (current.id === interactionId || current.status === "processing");
+  const previous = data.attempts;
+  function closeHistory() {
+    historySequence.current++;
+    setSelected(null);
+    setHistoryLoading(null);
+    setHistoryError("");
+    setError("");
+    setMessage("");
+  }
+  function cache(record: ExtractionRecord | null) {
+    if (!record) return;
+    // Processing snapshots can change without a review; always reread them.
+    if (record.status === "processing") historyCache.current.delete(record.id);
+    else historyCache.current.set(record.id, record);
+    while (historyCache.current.size > 20)
+      historyCache.current.delete(historyCache.current.keys().next().value!);
+  }
+  async function loadHistory(runId: string) {
+    const sequence = ++historySequence.current;
+    setSelected(null);
+    setHistoryError("");
+    setError("");
+    setMessage("");
+    const cached = historyCache.current.get(runId);
+    if (cached) {
+      setSelected(cached);
+      setHistoryLoading(null);
+      return;
+    }
+    setHistoryLoading(runId);
+    try {
+      const response = await uiRequest(
+        `/api/documents/${documentId}/extractions?runId=${encodeURIComponent(runId)}`,
+        { method: "GET" },
+        120000,
+      );
+      const result: Bundle & { error?: string } = await response.json();
+      if (!response.ok || !result.extraction)
+        throw new Error(
+          result.error || "Previous attempt could not be loaded. Try again.",
+        );
+      if (sequence !== historySequence.current) return;
+      cache(result.extraction);
+      setSelected(result.extraction);
+    } catch (error) {
+      if (sequence === historySequence.current)
+        setHistoryError(
+          error instanceof Error
+            ? error.message
+            : "Previous attempt could not be loaded. Try again.",
+        );
+    } finally {
+      if (sequence === historySequence.current) setHistoryLoading(null);
+    }
+  }
+  async function request(method: "GET" | "POST" | "PATCH", body?: unknown) {
     if (inFlight.current) return;
     inFlight.current = true;
     if (method === "POST") {
       setNewAttempt((body as { mode: "ai" | "manual" }).mode);
       setHistoryOpen(false);
+      closeHistory();
     }
+    if (method === "GET") closeHistory();
     setOperation(
       method === "GET"
         ? "Loading the latest review…"
@@ -59,12 +137,18 @@ export function ExtractionReview({
             ? "Preparing fields for manual entry…"
             : "Processing your document. Extraction can take up to 90 seconds. Keep this page open, or return later and refresh the review.",
     );
-    setBusy(true);
+    setPending(
+      method === "POST"
+        ? "starting"
+        : method === "PATCH"
+          ? "saving"
+          : "refreshing",
+    );
     setError("");
     setMessage("");
     try {
       const response = await uiRequest(
-        `/api/documents/${documentId}/extractions${runId ? `?runId=${encodeURIComponent(runId)}` : ""}`,
+        `/api/documents/${documentId}/extractions`,
         {
           method,
           headers:
@@ -77,8 +161,30 @@ export function ExtractionReview({
       );
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Please retry.");
-      setData(result);
-      setNewAttempt(null);
+      cache(result.extraction);
+      if (method === "PATCH") {
+        setData((previous) => ({
+          ...previous,
+          attempts: result.attempts,
+          extraction:
+            previous.extraction?.id === result.extraction?.id
+              ? result.extraction
+              : previous.extraction,
+        }));
+        setSelected((previous) =>
+          previous?.id === result.extraction?.id ? result.extraction : previous,
+        );
+      } else {
+        setData(result);
+        // Refreshing an uncertain POST only promotes a genuinely new record.
+        if (
+          method === "POST" ||
+          (newAttempt === "uncertain" &&
+            result.extraction?.id !== data.extraction?.id)
+        )
+          setInteractionId(result.extraction?.id ?? null);
+      }
+      if (method !== "PATCH") setNewAttempt(null);
       // Classification/review can change records in prefetched destinations.
       if (method !== "GET") router.refresh();
       if (method === "PATCH") setMessage("Review saved.");
@@ -91,14 +197,14 @@ export function ExtractionReview({
       setError(error instanceof Error ? error.message : "Please retry.");
     } finally {
       inFlight.current = false;
-      setBusy(false);
+      setPending(null);
     }
   }
   const remaining =
     current?.fields.filter((field) => field.reviewState === "proposed")
       .length ?? 0;
   return (
-    <div className="extraction-flow" aria-busy={busy}>
+    <div className="extraction-flow">
       <section className="card">
         <h2>Your evidence, your confirmation</h2>
         <p>
@@ -122,16 +228,23 @@ export function ExtractionReview({
           {operation}
         </p>
       )}
-      {!current && !newAttempt && (
+      {!current && !newAttempt && !historyLoading && (
         <section className="card">
-          <h2>No extracted details yet</h2>
+          <h2>
+            {data.attempts.length
+              ? "Ready for a new attempt"
+              : "No extracted details yet"}
+          </h2>
           <p>
             Extract proposals from a text-based PDF, or choose a document type
             and enter the details yourself.
           </p>
         </section>
       )}
-      <section className="card employment-form">
+      <section
+        className="card employment-form"
+        aria-busy={pending === "starting"}
+      >
         <h2>{current ? "New attempt or manual entry" : "Start your review"}</h2>
         <p>
           Extraction sends readable text to Rumpty AI. Contracts, payslips,
@@ -199,7 +312,7 @@ export function ExtractionReview({
           </div>
         </fieldset>
       </section>
-      {newAttempt && (
+      {newAttempt && !historical && !historyLoading && (
         <section className="card" aria-label="Current attempt">
           <h2>
             {newAttempt === "ai"
@@ -222,16 +335,27 @@ export function ExtractionReview({
           className="card employment-form review-attempt"
           aria-label="Attempt history"
         >
-          {!newAttempt && latest && (
-            <p>Current attempt · {attemptLabel(latest)}</p>
+          {(historical || historyLoading || historyError) && (
+            <Button
+              className="secondary"
+              disabled={busy}
+              onClick={closeHistory}
+            >
+              Back to latest
+            </Button>
           )}
-          <Button
-            className="secondary"
-            disabled={busy}
-            onClick={() => request("GET")}
-          >
-            {historical ? "Return to current attempt" : "Refresh review"}
-          </Button>
+          {!historical &&
+            !historyLoading &&
+            (latestVisible || newAttempt === "uncertain") && (
+              <Button
+                className="secondary"
+                disabled={busy}
+                onClick={() => request("GET")}
+              >
+                Refresh review
+              </Button>
+            )}
+          {historyError && <p role="alert">{historyError}</p>}
           {previous.length > 0 && (
             <details
               open={historyOpen}
@@ -245,7 +369,7 @@ export function ExtractionReview({
                       className="secondary"
                       disabled={busy}
                       aria-pressed={current?.id === attempt.id}
-                      onClick={() => request("GET", undefined, attempt.id)}
+                      onClick={() => loadHistory(attempt.id)}
                     >
                       {attemptLabel(attempt)}
                     </Button>
@@ -256,21 +380,40 @@ export function ExtractionReview({
           )}
         </section>
       )}
+      {historyLoading && (
+        <section
+          className="card"
+          aria-label="Previous attempt"
+          aria-busy="true"
+        >
+          <p role="status">Loading previous attempt…</p>
+        </section>
+      )}
       {current && (
         <section
           className="card"
-          aria-label={historical ? "Previous attempt" : "Current attempt"}
+          aria-label={
+            historical
+              ? "Previous attempt"
+              : active
+                ? "Current attempt"
+                : "Latest result"
+          }
+          aria-busy={pending === "saving" || pending === "refreshing"}
         >
-          {historical && (
+          {!active && (
             <p className="eyebrow">
-              Previous attempt · {attemptDate(current.createdAt)} WAT
+              {historical ? "Previous attempt" : "Latest result"} ·{" "}
+              {attemptDate(current.createdAt)} WAT
             </p>
           )}
           <h2>
             {current.status === "failed"
               ? "Extraction failed"
               : current.status === "processing"
-                ? "Extracting details…"
+                ? historical
+                  ? "Recorded as processing"
+                  : "Extracting details…"
                 : current.errorCode === "partial"
                   ? "Some details were extracted"
                   : "Review status"}
@@ -282,7 +425,9 @@ export function ExtractionReview({
             </p>
           ) : current.status === "processing" ? (
             <p role="status">
-              This may take up to 90 seconds. Refresh shortly to see the result.
+              {historical
+                ? "This saved attempt was processing when read. Back to latest shows the latest review context."
+                : "This may take up to 90 seconds. Refresh shortly to see the result."}
             </p>
           ) : (
             <p>

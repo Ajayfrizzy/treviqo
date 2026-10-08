@@ -181,26 +181,64 @@ scheduled actions; cancellation asks for credentials again. After the deadline,
 only processing/disabled information is shown. Unknown email and wrong password
 share identical copy; infrastructure errors have distinct temporary-unavailable copy.
 
-## Extraction attempts — 8 October 2026
+## Extraction review context — 8 October 2026
 
-The latest attempt is the default review. Earlier attempts remain stored and are
-available through a collapsed **View previous attempts** disclosure, with concise
-status/date buttons in Africa/Lagos time (WAT). Selecting one labels it **Previous
-attempt**; **Return to current attempt** restores the latest record. The old
-prominent Latest/Earlier selector is removed.
+The review distinguishes persisted history from activity in the current interaction.
+On initial load, a saved failed attempt is only in collapsed **View previous attempts**
+and the form is ready for a new attempt. A saved successful/manual review remains
+available as **Latest result**, never **Current attempt**. An actually processing
+record may show **Extracting details…** and a refresh action.
 
-Starting extraction immediately replaces the old status and fields with
-**Extracting details… / This may take up to 90 seconds.** Earlier results stay in
-history, never appearing as the outcome of the running request. Manual setup has
-its own pending copy. An uncertain request outcome asks the user to refresh actual
-server state before retrying; it does not restore the old failure as a new result.
-No automatic retry occurs. Request controls prevent overlapping actions.
+Starting extraction or manual entry immediately hides the old result and shows the
+new operation. The returned result becomes the active result for that interaction;
+a new failure therefore shows **Extraction failed**, while historical failures do
+not reappear as active on reload. The uncertain-outcome state asks for a refresh.
+If refresh only finds the pre-existing failed record, it remains historical.
 
-Current unverifiable output reads **Extraction failed** and explains that Treviqo
-could not verify enough reliable details, with retry and manual entry available.
-Partial output reads **Some details were extracted** and asks the user to compare
-every proposal with the original before confirming it. Missing fields stay editable;
-source excerpts, review actions and prior corrections remain available. Confidence
-is application-assigned Needs review for newly extracted proposals, never automatic
-confirmation. Partial coverage does not claim that all omitted fields exist in the
-source document.
+All available attempt entries are under a collapsed **View previous attempts**
+disclosure, with status/date buttons in Africa/Lagos time (WAT). Selecting a record
+uses **Loading previous attempt…**, followed by **Previous attempt**, regardless of
+its position in the list. **Back to latest** closes historical viewing and restores
+the prior latest/new/uncertain context without a request. History selection never
+starts extraction or changes the active result.
+
+History reads have separate busy/error states. The document type, transcription,
+extraction and manual-entry controls remain usable while history loads. Starting a
+new operation, closing history, or selecting another entry invalidates an older read
+so its late response cannot overwrite the chosen context. Saving still blocks
+conflicting actions and announces **Saving your review…** separately.
+
+Up to 20 terminal history records are cached in component memory, including an
+already-loaded initial result. Re-selection avoids another GET. Processing records
+are not cached; successful saves update cached details and preserve latest context.
+No history is deleted or stored in browser storage. The cache is not a live feed of
+other tabs' edits; latest refresh or a page reload obtains fresh server state, and
+existing version checks still protect review writes.
+
+**Refresh review** is offered for the latest visible result, processing record or
+uncertain new attempt, not as the primary action on a static failed history entry.
+Partial results, original evidence, explicit confirmation/correction, and manual
+entry retain their existing behavior. Prompts, parsing, persistence and backend
+extraction behavior are unchanged by this UI correction.
+
+### Review context validation
+
+This UI-only correction changes `src/components/extraction-review.tsx`, its browser
+regressions in `tests/e2e/extractions.spec.ts`, and UI/extraction documentation.
+No API, prompts, parsing, persistence, schema, rate limits or production data changed.
+
+Checks used disposable loopback PostgreSQL/Redis and synthetic AI/storage:
+
+- `npm run validate`: lint, TypeScript, 316 unit tests, production build and worker build.
+- `npm run test:integration -- tests/extractions.integration.test.ts`: 27 passed.
+- `npm run test:e2e -- tests/e2e/extractions.spec.ts`: 17 passed, including responsive review/history checks at 320/375/430/768/1440px as applicable.
+- `npx playwright test tests/e2e/extractions.spec.ts --grep 'already-processing|saving an older manual'`: two additional cases passed (19 distinct browser cases overall).
+- Targeted Prettier and `git diff --check`: passed.
+
+Coverage includes initial hidden failures, default-collapsed history, new active
+processing/failure, restored latest/uncertain context, cached selection, distinct
+history loading, editable unrelated controls, late-read rejection, processing
+refresh, older manual saves updating the cache, and manual entry. No test failures
+occurred. Full unrelated browser/integration suites and live/physical-device checks
+were not rerun for this component-only change. Nothing was committed, pushed or
+deployed; `.env` is unchanged.

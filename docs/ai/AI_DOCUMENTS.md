@@ -195,3 +195,16 @@ is saved ready/partial, with all other review fields null. Zero usable fields re
 failed. Retries are explicit, deterministic, rate limited and preserve history. See
 [the current diagnosis](../deployment/AI_EXTRACTION_DIAGNOSIS.md) and
 [attempt-history UX](../ui/UI_UX.md) for current behavior and validation.
+
+## Review context correction (UI only)
+
+Persisted failures are historical on initial load, not active extraction state.
+Only processing records or a newly started interaction use the active attempt UI;
+saved successful/manual data is labelled Latest result. Historical selection uses
+its own loading state and Previous attempt label. Back to latest restores the
+previous context. A component-local cache avoids repeated reads of terminal history
+records; late reads cannot replace newer interactions. All stored attempts remain
+available through collapsed history. See [the state model](../ui/UI_UX.md#extraction-review-context--8-october-2026).
+
+This correction changes no prompts, parser, persistence, APIs, rate limits or AI
+behavior. Protocol versions remain evidence-v5 / fields-v5.
