@@ -168,6 +168,7 @@ export const failureMessages: Record<string, string> = {
     "AI took too long to respond. Try again later or enter fields manually.",
   malformed:
     "The model response could not be verified. Retry or enter fields manually.",
+  persistence: "Details could not be saved. Retry or enter fields manually.",
   interrupted: "This attempt was interrupted. Retry or enter fields manually.",
 };
 export function labelFor(type: string | null, key: string) {

@@ -23,13 +23,9 @@ const mod = (p) => import(pathToFileURL(process.cwd() + "/dist-worker/" + p));
 const { classificationPrompt, extractionPrompt } = await mod(
   "modules/extractions/prompts.js",
 );
-const {
-  parseClassification,
-  parseFields,
-  fieldsSchema,
-  proposalsSchema,
-  normalizeEvidence,
-} = await mod("modules/extractions/schema.js");
+const { parseClassification, parseFields } = await mod(
+  "modules/extractions/schema.js",
+);
 const { getDocumentAI, INFERENCE_TIMEOUT_MS } = await mod(
   "server/ai/client.js",
 );
@@ -40,70 +36,26 @@ const fixture = async (name) =>
 const minimal = await fixture("employment_contract"),
   realistic = await fixture("realistic_payslip");
 function accuracy(raw, f) {
-  let parsed;
+  let fields;
   try {
-    parsed = JSON.parse(raw);
+    fields = parseFields(raw, f.type, f.text);
   } catch {
-    return { passed: false, jsonValid: false };
+    return { passed: false, usableOutput: false };
   }
-  const sparse =
-    parsed && typeof parsed === "object" && Object.hasOwn(parsed, "fields");
-  const validation = (
-    sparse ? proposalsSchema(f.type) : fieldsSchema(f.type)
-  ).safeParse(parsed);
-  if (!validation.success)
-    return {
-      passed: false,
-      jsonValid: true,
-      schemaValid: false,
-      issueCodes: [...new Set(validation.error.issues.map((i) => i.code))],
-      issues: validation.error.issues.map((issue) => ({
-        path: issue.path.map((part) =>
-          typeof part === "number" ||
-          [
-            "fields",
-            "key",
-            "value",
-            "evidence",
-            "confidence",
-            ...Object.keys(f.fields),
-          ].includes(String(part))
-            ? part
-            : "unknown",
-        ),
-        received: (() => {
-          const value = issue.path.reduce((value, key) => value?.[key], parsed);
-          return value === null
-            ? "null"
-            : Array.isArray(value)
-              ? "array"
-              : typeof value;
-        })(),
-      })),
-    };
-  const fields = parseFields(raw, f.type, f.text);
   const expected = Object.entries(f.fields).filter(
     ([, cell]) => cell.value !== null,
   );
   const correct = expected.filter(
     ([key, cell]) => fields.find((v) => v.key === key)?.value === cell.value,
   ).length;
-  const ungrounded = (sparse ? parsed.fields : Object.values(parsed)).filter(
-    (cell) =>
-      cell?.value &&
-      (!cell.evidence ||
-        !normalizeEvidence(f.text).includes(normalizeEvidence(cell.evidence)) ||
-        !normalizeEvidence(cell.evidence).includes(
-          normalizeEvidence(cell.value),
-        )),
-  ).length;
   return {
-    passed: correct === expected.length && ungrounded === 0,
-    schemaValid: true,
+    // Accepting a partial review is not provider-accuracy acceptance.
+    passed: correct === expected.length && !fields.partial,
+    usableOutput: true,
+    partial: fields.partial,
     expectedFields: expected.length,
     correctFields: correct,
     groundedProposals: fields.filter((v) => v.value !== null).length,
-    ungroundedProposals: ungrounded,
   };
 }
 const stages = [

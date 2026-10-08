@@ -227,6 +227,12 @@ export function ExtractionReview({
                 : "Review complete. Rejected and unknown fields are not trusted values."}
             </p>
           )}
+          {current.status === "ready" && current.errorCode === "partial" && (
+            <p>
+              Some suggestions could not be verified and were omitted. Review
+              the retained details and enter missing information manually.
+            </p>
+          )}
           {current.status === "ready" && current.fields.length <= 1 && (
             <p>
               Choose the correct supported document type above and start a new

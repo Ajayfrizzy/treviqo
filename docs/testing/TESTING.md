@@ -203,3 +203,19 @@ To check reliability, run the production command with `--repeat-each=3`. Repeat
 with `NAVIGATION_SLOW_NETWORK=1` to add 100 ms latency and limit download/upload
 to 200/100 KiB per second during sign-in and prefetch observation. No automatic
 retries are enabled, and all navigation, freshness, and logout assertions remain.
+
+## Extraction compatibility and persistence follow-up
+
+`extraction.test.ts` covers minimal classification, fences/prose/aliases,
+ambiguity, partial grounded proposals, malformed/unsupported/missing-evidence
+cells, duplicate keys and zero usable fields. `extractions.integration.test.ts`
+adds real Prisma expiration injected after reservation, fresh failure persistence,
+double-failure recovery, atomic constraint rollback, concurrent/expired attempts,
+no document lock held across inference, and unattended worker expiry. Browser
+extraction checks add partial results and manual fallback at 320/1440px.
+
+Use disposable PostgreSQL/Redis and fixture AI/storage for all checks. Run
+`npm run validate`, `npm run test:integration`, and `npm run test:e2e`. The worker
+now includes `extraction_cleanup` alongside the existing jobs; keep scheduler tests
+independent of unrelated job ordering. See the [diagnosis report](../deployment/AI_EXTRACTION_DIAGNOSIS.md)
+for exact results and remaining live acceptance requirements.

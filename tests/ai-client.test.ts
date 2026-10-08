@@ -50,9 +50,10 @@ it("uses bounded non-streaming JSON requests with no redirects, tools, or fallba
     model: "fixture-model",
     temperature: 0,
     max_tokens: 256,
-    response_format: { type: "json_object" },
     stream: false,
   });
+  expect(body.response_format).toBeUndefined();
+  expect(body.messages[0].content).toBe(task.system);
   expect(body.tools).toBeUndefined();
 });
 it("rejects provider failures, truncated output, malformed envelopes and excessive responses", async () => {

@@ -2,6 +2,7 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import type Redis from "ioredis";
+import { reapExpiredAttempts } from "@/modules/extractions/persistence";
 import { accountDeletionService } from "@/modules/account/service";
 import { reminderService } from "@/modules/reminders/service";
 import { getDb } from "@/server/db/client";
@@ -34,6 +35,8 @@ export function jobRunner(
   clock = () => new Date(),
 ) {
   async function perform(id: JobId, cursor: string | null) {
+    if (id === "extraction_cleanup")
+      return { cursor: null, more: await reapExpiredAttempts(db, clock()) };
     if (id === "account_cleanup")
       return {
         cursor: null,

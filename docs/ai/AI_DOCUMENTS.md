@@ -152,3 +152,24 @@ The model must never sum rows, infer contribution month from posting date, or as
 ## October 7 production extraction diagnosis
 
 The current candidate uses `evidence-v3` / `fields-v3`: a bounded sparse list of present `{key,value,evidence}` facts, expanded server-side to all review fields. Unknown/duplicate keys and missing evidence fail validation. Every sparse proposal starts `needs_review` / Proposed; no value becomes trusted automatically. Legacy complete cell responses retain strict validation. Classification requests 256 output tokens, extraction 2048, with the unchanged 25-second deadline and 64 KiB response cap. Live Rumpty currently does not reliably honor JSON structure/evidence requirements; manual entry remains necessary on failure. See [measured compatibility, failure-path analysis and validation](../deployment/AI_EXTRACTION_DIAGNOSIS.md). Earlier milestone protocol descriptions are historical.
+
+## 8 October 2026 compatibility and persistence update
+
+The current protocol is `evidence-v4` / `fields-v4`; this supersedes earlier
+strict-response and all-or-nothing parsing descriptions above. Classification
+asks only for type/evidence through ordinary chat messages, without provider
+structured-output options or appended schema text. One fenced/prose-wrapped JSON
+object and explicit equivalent labels are recoverable; ambiguity pauses as
+Other / Needs review. Grounding remains mandatory.
+
+Field parsing retains independently valid grounded proposals and drops invalid
+ones. Ready attempts with dropped proposals carry `errorCode=partial` and visible
+review guidance; zero usable proposals fail with manual entry available. Missing
+fields remain null. Nothing is automatically confirmed. The existing metadata
+column is reused, so there is no schema migration.
+
+Result/failure writes are atomic PostgreSQL statements outside interactive
+transactions. Ownership, document locking, live leases and audit atomicity remain.
+Expired attempts are reconciled on read/start and by the existing worker's new
+`extraction_cleanup` job. See the [current diagnosis and validation report](../deployment/AI_EXTRACTION_DIAGNOSIS.md)
+for evidence, limitations and production follow-up.

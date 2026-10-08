@@ -55,9 +55,20 @@ const handler = async (request, response) => {
         };
     if (source.includes("FIXTURE_LOW") && classify)
       result = { ...fixture.classification, confidence: "low" };
-    const content = source.includes("FIXTURE_MALFORMED")
-      ? "not JSON"
-      : JSON.stringify(result);
+    if (source.includes("FIXTURE_PARTIAL") && !classify) {
+      result.fields.push({
+        key: "legal_entitlement",
+        value: "invented",
+        evidence: "invented",
+      });
+      result.fields.push({ key: "invalid" });
+    }
+    if (source.includes("FIXTURE_CLASSIFICATION_INVALID") && classify)
+      result = { type: "ambiguous" };
+    const content =
+      source.includes("FIXTURE_MALFORMED") && !classify
+        ? "not JSON"
+        : JSON.stringify(result);
     response.setHeader("content-type", "application/json");
     response.end(
       JSON.stringify({

@@ -47,14 +47,13 @@ export function getDocumentAI(): DocumentAI {
             messages: [
               {
                 role: "system",
-                content: `${task.system}\n${JSON.stringify(task.schema)}`,
+                content: task.system,
               },
               {
                 role: "user",
                 content: JSON.stringify({ documentText: task.source }),
               },
             ],
-            response_format: { type: "json_object" },
             stream: false,
           }),
         });

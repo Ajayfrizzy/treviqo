@@ -347,3 +347,63 @@ test("review actions show local feedback, block repeated clicks, recover, and hi
   await confirm.click();
   await expect(employer.getByText("confirmed", { exact: true })).toBeVisible();
 });
+
+for (const width of [320, 1440]) {
+  test(`partial extraction and ambiguous classification retain manual fallback at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 850 });
+    const id = await createDocument(page);
+    const response = await page.request.post(
+      `/api/documents/${id}/extractions`,
+      {
+        headers: { origin },
+        data: { mode: "ai", text: `${contract.text}\nFIXTURE_PARTIAL` },
+      },
+    );
+    expect(response.status()).toBe(200);
+    expect((await response.json()).extraction).toMatchObject({
+      status: "ready",
+      errorCode: "partial",
+    });
+    await page.goto(`/documents/${id}/review`);
+    await expect(
+      page.getByText("Some suggestions could not be verified", {
+        exact: false,
+      }),
+    ).toBeVisible();
+    const employer = page.getByRole("region", {
+      name: "Employer",
+      exact: true,
+    });
+    await expect(employer).toContainText("Harbour Workshop Ltd");
+    await expect(
+      employer.getByRole("button", { name: "Confirm proposal" }),
+    ).toBeEnabled();
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    ).toBe(true);
+    await page.request.post(`/api/documents/${id}/extractions`, {
+      headers: { origin },
+      data: {
+        mode: "ai",
+        text: `${contract.text}\nFIXTURE_CLASSIFICATION_INVALID`,
+      },
+    });
+    await page.reload();
+    await expect(
+      page.getByText("Choose the correct supported document type above", {
+        exact: false,
+      }),
+    ).toBeVisible();
+    await page
+      .getByLabel("Document type", { exact: true })
+      .selectOption("payslip");
+    await page.getByRole("button", { name: "Enter details manually" }).click();
+    await expect(
+      page.getByRole("region", { name: "Net pay", exact: true }),
+    ).toBeVisible();
+  });
+}

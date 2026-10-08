@@ -67,25 +67,32 @@ it("drops hallucinations, mismatched values and missing evidence, including high
       confidence: "needs_review",
     });
 });
-it("rejects malformed JSON, ungrounded classification, unsupported enums and missing keys", () => {
-  expect(() => parseClassification("```json {} ```", "source")).toThrow();
-  expect(() =>
-    parseClassification(
-      JSON.stringify({ type: "payslip", evidence: "fake", confidence: "high" }),
-      "source",
-    ),
-  ).toThrow();
-  expect(() =>
-    parseClassification(
-      JSON.stringify({
-        type: "legal_opinion",
-        evidence: null,
-        confidence: "high",
-      }),
-      "source",
-    ),
-  ).toThrow();
-  expect(() => parseFields("{}", "payslip", "source")).toThrow();
+it.each([
+  '```json\n{"type":"Pay Slip","evidence":"Salary slip"}\n```',
+  'Here is the result: {"type":" PAYSLIP ","evidence":"Salary slip"} Done.',
+  '{"type":"salary-slip","evidence":"Salary slip"}',
+])("recovers harmless classification variations: %s", (raw) => {
+  expect(parseClassification(raw, "Salary slip")).toEqual({
+    type: "payslip",
+    evidence: "Salary slip",
+    confidence: "medium",
+  });
+});
+it.each([
+  "not JSON",
+  "{}",
+  '{"type":"payslip"',
+  '{"type":"legal_opinion","evidence":"source"}',
+  '{"type":"payslip","evidence":"invented"}',
+  '{"type":"payslip or pension_statement","evidence":"source"}',
+  '{"type":"payslip","evidence":"source","confidence":"low"}',
+  '{"type":"payslip","evidence":"source"} {"type":"pension_statement","evidence":"source"}',
+])("pauses ambiguous or malformed classification safely: %s", (raw) => {
+  expect(parseClassification(raw, "source")).toEqual({
+    type: "other",
+    evidence: null,
+    confidence: "needs_review",
+  });
 });
 it("bounds source/review inputs and rejects ownership injection", () => {
   expect(
@@ -177,19 +184,77 @@ it("expands sparse model proposals without weakening evidence, duplicate, or key
     evidence: null,
     confidence: "needs_review",
   });
-  expect(parse([]).every((f) => f.value === null)).toBe(true);
-  expect(
-    parse([{ ...field, evidence: "invented excerpt" }]).every(
-      (f) => f.value === null,
-    ),
-  ).toBe(true);
-  expect(
-    parse([{ ...field, value: "invented employer" }]).every(
-      (f) => f.value === null,
-    ),
-  ).toBe(true);
-  expect(() => parse([field, field])).toThrow();
-  expect(() => parse([{ ...field, key: "legal_entitlement" }])).toThrow();
-  expect(() => parse([{ ...field, confidence: "high" }])).toThrow();
-  expect(() => parse([{ key: "employer", value: field.value }])).toThrow();
+  for (const invalid of [
+    [],
+    [{ ...field, evidence: "invented excerpt" }],
+    [{ ...field, value: "invented employer" }],
+    [field, field],
+    [{ ...field, key: "legal_entitlement" }],
+    [{ key: "employer", value: field.value }],
+  ]) {
+    expect(() => parse(invalid)).toThrow();
+  }
+  expect(parse([{ ...field, confidence: "high" }])[0]?.value).toBe(field.value);
+});
+it("retains six grounded proposals while discarding two invalid ones", () => {
+  const fields = [
+    "employer",
+    "employee",
+    "role",
+    "start_date",
+    "salary",
+    "notice_period",
+  ].map((key) => ({ key, value: "Explicit", evidence: "Explicit source" }));
+  const result = parseFields(
+    JSON.stringify({
+      fields: [
+        ...fields,
+        {
+          key: "legal_entitlement",
+          value: "Explicit",
+          evidence: "Explicit source",
+        },
+        { key: "probation", value: "Explicit" },
+      ],
+    }),
+    "employment_contract",
+    "Explicit source",
+  );
+  expect(result.filter((f) => f.value)).toHaveLength(6);
+  expect(result.partial).toBe(true);
+});
+it("drops invalid legacy cells, unsupported keys, and all conflicting duplicate proposals", () => {
+  const result = parseFields(
+    JSON.stringify({
+      employer: {
+        value: "Acme",
+        evidence: "Employer Acme",
+        confidence: "high",
+      },
+      salary: { value: 42 },
+      legal_entitlement: {
+        value: "Acme",
+        evidence: "Employer Acme",
+        confidence: "high",
+      },
+    }),
+    "payslip",
+    "Employer Acme",
+  );
+  expect(result.filter((f) => f.value)).toHaveLength(1);
+  expect(result.partial).toBe(true);
+  const mixed = parseFields(
+    JSON.stringify({
+      fields: [
+        { key: "employer", value: "Acme", evidence: "Employer Acme" },
+        { key: "tax", value: "100", evidence: "Tax 100" },
+        { key: "tax", value: "200", evidence: "Tax 200" },
+        { key: "net_pay", value: "100", evidence: "invented" },
+      ],
+    }),
+    "payslip",
+    "Employer Acme Tax 100 Tax 200",
+  );
+  expect(mixed.filter((f) => f.value)).toHaveLength(1);
+  expect(mixed.partial).toBe(true);
 });

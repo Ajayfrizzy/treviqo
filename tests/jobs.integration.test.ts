@@ -16,8 +16,11 @@ beforeEach(async () => {
   await db.backgroundJob.deleteMany();
   await redis.del(QUEUE, HEARTBEAT);
   // These scenarios target reminder/session jobs, independently of cleanup order.
-  await db.backgroundJob.create({
-    data: { id: "account_cleanup", dueAt: new Date(Date.now() + 3600000) },
+  await db.backgroundJob.createMany({
+    data: ["account_cleanup", "extraction_cleanup"].map((id) => ({
+      id,
+      dueAt: new Date(Date.now() + 3600000),
+    })),
   });
   a = (await db.user.create({ data: {} })).id;
   b = (await db.user.create({ data: {} })).id;
@@ -235,7 +238,7 @@ it("rejects Redis failure without falsely marking jobs complete; health detects 
     await expect(jobRunner(db, failed).tick()).rejects.toThrow();
     expect(
       await db.backgroundJob.count({
-        where: { id: { not: "account_cleanup" } },
+        where: { id: { notIn: ["account_cleanup", "extraction_cleanup"] } },
       }),
     ).toBe(0);
   } finally {
@@ -302,4 +305,55 @@ it("concurrent workers do not duplicate reminder records or creation audits", as
       where: { exitCaseId: id, action: "reminder_created" },
     }),
   ).toBe(rows.length);
+});
+
+it("dispatches extraction expiry through the durable worker outbox", async () => {
+  const document = await db.employmentDocument.create({
+    data: {
+      userId: a,
+      employmentId: job,
+      originalFilename: "fixture.pdf",
+      sanitizedFilename: "fixture.pdf",
+      objectKey: `fixture-expiry-${a}`,
+      mimeType: "application/pdf",
+      fileSize: 1,
+      checksum: "fixture",
+      status: "ready",
+    },
+  });
+  try {
+    const run = await db.documentExtraction.create({
+      data: {
+        userId: a,
+        documentId: document.id,
+        model: "fixture",
+        sourceKind: "pdf_text",
+        promptVersion: "test",
+        schemaVersion: "test",
+        createdAt: new Date(Date.now() - 121000),
+      },
+    });
+    await db.backgroundJob.createMany({
+      data: ["reminders", "session_cleanup"].map((id) => ({
+        id,
+        dueAt: new Date(Date.now() + 3600000),
+      })),
+      skipDuplicates: true,
+    });
+    await db.backgroundJob.update({
+      where: { id: "extraction_cleanup" },
+      data: { dueAt: new Date(0) },
+    });
+    await jobRunner(db, redis).tick();
+    expect(
+      await db.documentExtraction.findUnique({ where: { id: run.id } }),
+    ).toMatchObject({ status: "failed", errorCode: "interrupted" });
+    expect(
+      await db.backgroundJob.findUnique({
+        where: { id: "extraction_cleanup" },
+      }),
+    ).toMatchObject({ attempts: 0, lastSucceededAt: expect.any(Date) });
+  } finally {
+    await db.employmentDocument.delete({ where: { id: document.id } });
+  }
 });

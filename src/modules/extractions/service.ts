@@ -1,6 +1,11 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import type { PrismaClient, Prisma, DocumentType } from "@prisma/client";
+import type {
+  PrismaClient,
+  Prisma,
+  DocumentType,
+  EmploymentDocument,
+} from "@prisma/client";
 import { getDb } from "@/server/db/client";
 import {
   getObjectStorage,
@@ -30,14 +35,12 @@ import {
 import { classificationPrompt, extractionPrompt } from "./prompts";
 import { allowExtraction } from "./rate-limit";
 import { extractionDatabaseCode } from "./diagnostics";
-const leaseMs = 120000;
+import {
+  persistAttempt,
+  EXTRACTION_LEASE_MS as leaseMs,
+  type Proposal,
+} from "./persistence";
 type Tx = Prisma.TransactionClient;
-type Proposal = {
-  key: string;
-  value: string | null;
-  evidence: string | null;
-  confidence: "high" | "medium" | "low" | "needs_review";
-};
 class ExtractionFailure extends Error {
   constructor(public code: string) {
     super(code);
@@ -104,8 +107,16 @@ export function extractionService(
     lock = false,
   ) {
     if (!userId) throw new DocumentError("Sign in to review documents.", 401);
-    if (lock)
-      await tx.$queryRaw`SELECT "id" FROM "EmploymentDocument" WHERE "id" = ${documentId} AND "userId" = ${userId} FOR UPDATE`;
+    if (lock) {
+      const rows = await tx.$queryRaw<EmploymentDocument[]>`
+        SELECT d.* FROM "EmploymentDocument" d
+        JOIN "Employment" e ON e."id" = d."employmentId" AND e."userId" = d."userId"
+        WHERE d."id" = ${documentId} AND d."userId" = ${userId} AND d."status" = 'ready'
+        FOR UPDATE OF d`;
+      if (!rows[0])
+        throw new DocumentError("Document not found or not ready.", 404);
+      return rows[0];
+    }
     const doc = await tx.employmentDocument.findFirst({
       where: {
         id: documentId,
@@ -138,6 +149,7 @@ export function extractionService(
   return {
     async read(userId: string, documentId: string, runId?: string) {
       await document(db, userId, documentId);
+      await persistAttempt(db, userId, documentId);
       const attempts = await db.documentExtraction.findMany({
         where: { userId, documentId },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -186,10 +198,7 @@ export function extractionService(
               "An extraction is already running. Refresh shortly.",
               409,
             );
-          await tx.documentExtraction.updateMany({
-            where: { documentId, userId, status: "processing" },
-            data: { status: "failed", errorCode: "interrupted" },
-          });
+          await persistAttempt(tx, userId, documentId);
           const created = await tx.documentExtraction.create({
             data: {
               userId,
@@ -214,6 +223,7 @@ export function extractionService(
         try {
           let type: DocumentType;
           let proposals: Proposal[];
+          let partial = false;
           if (input.mode === "manual") {
             type = input.type;
             proposals = Object.keys(fieldLabels[input.type]).map((key) => ({
@@ -314,7 +324,9 @@ export function extractionService(
                 extractionPrompt(source, type),
               );
               try {
-                proposals.push(...parseFields(raw, type, source));
+                const parsed = parseFields(raw, type, source);
+                proposals.push(...parsed);
+                partial = parsed.partial;
               } catch {
                 console.error("extraction_output_invalid", "extraction");
                 throw new ExtractionFailure("malformed");
@@ -322,33 +334,17 @@ export function extractionService(
             }
           }
           stage = "result_persistence";
-          await db.$transaction(async (tx) => {
-            const doc = await document(tx, userId, documentId, true);
-            const changed = await tx.documentExtraction.updateMany({
-              where: {
-                id: run.id,
-                userId,
-                status: "processing",
-                createdAt: { gt: new Date(Date.now() - leaseMs) },
-              },
-              data: { status: "ready", documentType: type, sourceHash, model },
-            });
-            if (!changed.count)
-              throw new DocumentError(
-                "This attempt expired. Refresh and retry.",
-                409,
-              );
-            await tx.extractedField.createMany({
-              data: proposals.map((proposal) => ({
-                extractionId: run.id,
-                key: proposal.key,
-                proposedValue: proposal.value,
-                evidence: proposal.evidence,
-                confidence: proposal.confidence,
-              })),
-            });
-            await audit(tx, doc, "extraction_completed");
+          const saved = await persistAttempt(db, userId, documentId, {
+            runId: run.id,
+            model,
+            sourceHash,
+            result: { type, proposals, partial },
           });
+          if (saved[0]?.status !== "ready")
+            throw new DocumentError(
+              "This attempt expired or the document is no longer available. Refresh and retry.",
+              409,
+            );
         } catch (error) {
           if (error instanceof DocumentError) throw error;
           if (!(
@@ -359,19 +355,29 @@ export function extractionService(
               stage,
               extractionDatabaseCode(error),
             );
-          stage = "failure_persistence";
           const code =
             error instanceof ContentError || error instanceof ExtractionFailure
               ? error.code
-              : "interrupted";
-          await db.$transaction(async (tx) => {
-            const doc = await document(tx, userId, documentId, true);
-            const changed = await tx.documentExtraction.updateMany({
-              where: { id: run.id, status: "processing", userId },
-              data: { status: "failed", errorCode: code, sourceHash, model },
+              : stage === "result_persistence"
+                ? "persistence"
+                : "interrupted";
+          stage = "failure_persistence";
+          try {
+            await persistAttempt(db, userId, documentId, {
+              runId: run.id,
+              model,
+              sourceHash,
+              errorCode: code,
             });
-            if (changed.count) await audit(tx, doc, "extraction_failed");
-          });
+          } catch (persistenceError) {
+            console.error(
+              "extraction_failure_persistence_failed",
+              code,
+              extractionDatabaseCode(error),
+              extractionDatabaseCode(persistenceError),
+            );
+            throw persistenceError;
+          }
         }
         stage = "read_result";
         return await this.read(userId, documentId, run.id);

@@ -6,6 +6,7 @@ export const jobIds = [
   "reminders",
   "session_cleanup",
   "account_cleanup",
+  "extraction_cleanup",
 ] as const;
 export type JobId = (typeof jobIds)[number];
 export const validJob = (id: string): id is JobId =>
