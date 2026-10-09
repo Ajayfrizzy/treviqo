@@ -1,3 +1,4 @@
+import { checkResponsiveActions } from "../helpers/responsive-actions";
 import { expect, test, type Page, type BrowserContext } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -45,10 +46,13 @@ async function create(page: Page) {
   expect(cancelBox.x - saveBox.x - saveBox.width).toBeGreaterThanOrEqual(12);
   expect(
     await save.evaluate((el) => getComputedStyle(el).backgroundColor),
-  ).toBe(await cancel.evaluate((el) => getComputedStyle(el).backgroundColor));
+  ).not.toBe(
+    await cancel.evaluate((el) => getComputedStyle(el).backgroundColor),
+  );
   expect(
     await cancel.evaluate((el) => getComputedStyle(el).borderColor),
   ).not.toBe(await save.evaluate((el) => getComputedStyle(el).borderColor));
+  await checkResponsiveActions(page);
   await page.screenshot({
     path: `test-results/employment-actions-${page.viewportSize()!.width}.png`,
     fullPage: true,
@@ -101,6 +105,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       page.getByText("No current employment recorded.", { exact: false }),
     ).toBeVisible();
     await noOverflow(page);
+    await checkResponsiveActions(page);
     await page.screenshot({
       path: `test-results/employments-${width}.png`,
       fullPage: true,

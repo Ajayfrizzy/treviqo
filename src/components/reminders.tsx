@@ -59,7 +59,12 @@ export function Reminders({ initial }: { initial: Data }) {
         These are in-app prompts, not legal deadlines. Review source records
         before acting. No email or push notification is sent.
       </p>
-      <Button className="secondary" disabled={busy} onClick={() => request()}>
+      <Button
+        pendingLabel="Refreshing…"
+        className="secondary"
+        disabled={busy}
+        onClick={() => request()}
+      >
         Refresh reminders
       </Button>
       {!data.updatesAvailable && (
@@ -69,7 +74,6 @@ export function Reminders({ initial }: { initial: Data }) {
           outstanding actions.
         </p>
       )}
-      {busy && <p role="status">Updating reminders…</p>}
       {success && <p role="status">{success}</p>}
       {error && (
         <p role="alert">
@@ -100,6 +104,7 @@ export function Reminders({ initial }: { initial: Data }) {
               </Link>
               <div className="form-actions">
                 <Button
+                  pendingLabel="Snoozing…"
                   disabled={busy}
                   onClick={() =>
                     request({
@@ -112,6 +117,7 @@ export function Reminders({ initial }: { initial: Data }) {
                   Remind me in 7 days
                 </Button>
                 <Button
+                  pendingLabel="Dismissing…"
                   disabled={busy}
                   className="secondary"
                   onClick={() =>

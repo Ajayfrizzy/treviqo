@@ -32,7 +32,6 @@ export function ExtractionReview({
   const [message, setMessage] = useState("");
   const [text, setText] = useState("");
   const [type, setType] = useState("");
-  const [operation, setOperation] = useState("");
   const [newAttempt, setNewAttempt] = useState<
     "ai" | "manual" | "uncertain" | null
   >(null);
@@ -128,15 +127,6 @@ export function ExtractionReview({
       closeHistory();
     }
     if (method === "GET") closeHistory();
-    setOperation(
-      method === "GET"
-        ? "Loading the latest review…"
-        : method === "PATCH"
-          ? "Saving your review…"
-          : (body as { mode?: string })?.mode === "manual"
-            ? "Preparing fields for manual entry…"
-            : "Processing your document. Extraction can take up to 90 seconds. Keep this page open, or return later and refresh the review.",
-    );
     setPending(
       method === "POST"
         ? "starting"
@@ -223,11 +213,6 @@ export function ExtractionReview({
           {message}
         </p>
       )}
-      {busy && !newAttempt && (
-        <p role="status" className="form-message">
-          {operation}
-        </p>
-      )}
       {!current && !newAttempt && !historyLoading && (
         <section className="card">
           <h2>
@@ -287,6 +272,7 @@ export function ExtractionReview({
           </details>
           <div className="document-actions">
             <Button
+              pendingLabel="Extracting…"
               onClick={() =>
                 request("POST", {
                   mode: "ai",
@@ -298,6 +284,7 @@ export function ExtractionReview({
               Extract details
             </Button>
             <Button
+              pendingLabel="Preparing fields…"
               className="secondary"
               onClick={() => {
                 if (!type) {
@@ -313,7 +300,7 @@ export function ExtractionReview({
         </fieldset>
       </section>
       {newAttempt && !historical && !historyLoading && (
-        <section className="card" aria-label="Current attempt">
+        <section className="card action-status" aria-label="Current attempt">
           <h2>
             {newAttempt === "ai"
               ? "Extracting details…"
@@ -321,6 +308,7 @@ export function ExtractionReview({
                 ? "Preparing manual entry…"
                 : "Check the latest attempt"}
           </h2>
+          {busy && <div className="loading-track" aria-hidden="true" />}
           <p role="status">
             {newAttempt === "ai"
               ? "This may take up to 90 seconds."
@@ -348,6 +336,7 @@ export function ExtractionReview({
             !historyLoading &&
             (latestVisible || newAttempt === "uncertain") && (
               <Button
+                pendingLabel="Refreshing…"
                 className="secondary"
                 disabled={busy}
                 onClick={() => request("GET")}
@@ -571,21 +560,31 @@ function FieldCard({
         )}
         <div className="review-actions">
           <Button
+            pendingLabel="Confirming…"
             disabled={busy || !field.proposedValue || reviewed || changed}
             onClick={() => save("confirm")}
           >
             Confirm proposal
           </Button>
           <Button
+            pendingLabel="Saving…"
             disabled={busy || !value.trim() || !changed}
             onClick={() => save("correct", value.trim())}
           >
             Save correction
           </Button>
-          <Button className="secondary" onClick={() => save("reject")}>
+          <Button
+            pendingLabel="Saving…"
+            className="secondary"
+            onClick={() => save("reject")}
+          >
             Reject
           </Button>
-          <Button className="secondary" onClick={() => save("unknown")}>
+          <Button
+            pendingLabel="Saving…"
+            className="secondary"
+            onClick={() => save("unknown")}
+          >
             Mark unknown
           </Button>
         </div>

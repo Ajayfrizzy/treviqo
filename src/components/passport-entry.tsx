@@ -27,14 +27,8 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
   const [success, setSuccess] = useState("");
   const [unavailable, setUnavailable] = useState(false);
   const [editing, setEditing] = useState<BenefitView | null>(null);
-  const [operation, setOperation] = useState("");
   async function request(command?: unknown) {
     if (busy) return false;
-    setOperation(
-      command
-        ? "Saving your assessment and checking evidence…"
-        : "Refreshing your Passport…",
-    );
     setBusy(true);
     setError("");
     setSuccess("");
@@ -89,11 +83,15 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
           Current source records, not a legal record or employer verification.
           Sensitive identifiers are omitted or masked.
         </p>
-        <Button className="secondary" disabled={busy} onClick={() => request()}>
+        <Button
+          pendingLabel="Refreshing…"
+          className="secondary"
+          disabled={busy}
+          onClick={() => request()}
+        >
           Refresh Passport
         </Button>
       </header>
-      {busy && <p role="status">{operation}</p>}
       {error && (
         <p role="alert" className="form-message">
           {error} Displayed records are from the last successful load; refresh
@@ -263,7 +261,8 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
               )}
               {benefit.version !== null && (
                 <Button
-                  className="secondary"
+                  pendingLabel="Removing…"
+                  className="danger-button"
                   disabled={busy}
                   onClick={() => {
                     if (
@@ -333,24 +332,31 @@ function BenefitForm({
   const [docId, setDoc] = useState(benefit.documentId ?? "");
   const [fieldId, setField] = useState(benefit.fieldId ?? "");
   const [acknowledged, setAcknowledged] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const prefix = benefit.category;
   const source = data.sources.find((source) => source.id === docId);
   const field = source?.fields.find((field) => field.id === fieldId);
   return (
     <form
       className="employment-form"
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault();
-        void save({
-          category: benefit.category,
-          classification,
-          version: benefit.version,
-          contextToken: data.contextToken,
-          documentId: docId || null,
-          fieldId: fieldId || null,
-          fieldVersion: field?.version ?? null,
-          evidenceAcknowledged: acknowledged,
-        });
+        if (busy || submitting) return;
+        setSubmitting(true);
+        try {
+          await save({
+            category: benefit.category,
+            classification,
+            version: benefit.version,
+            contextToken: data.contextToken,
+            documentId: docId || null,
+            fieldId: fieldId || null,
+            fieldVersion: field?.version ?? null,
+            evidenceAcknowledged: acknowledged,
+          });
+        } finally {
+          setSubmitting(false);
+        }
       }}
     >
       <fieldset disabled={busy}>
@@ -437,8 +443,8 @@ function BenefitForm({
           I checked the evidence and it supports this assessment.
         </label>
         <div className="form-actions paired-actions">
-          <Button type="submit" aria-busy={busy}>
-            {busy ? "Saving…" : "Save assessment"}
+          <Button type="submit" aria-busy={submitting}>
+            {submitting ? "Saving…" : "Save assessment"}
           </Button>
           <Button type="button" className="button-cancel" onClick={cancel}>
             Cancel

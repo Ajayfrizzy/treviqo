@@ -219,3 +219,18 @@ Use disposable PostgreSQL/Redis and fixture AI/storage for all checks. Run
 now includes `extraction_cleanup` alongside the existing jobs; keep scheduler tests
 independent of unrelated job ordering. See the [diagnosis report](../deployment/AI_EXTRACTION_DIAGNOSIS.md)
 for exact results and remaining live acceptance requirements.
+
+## Responsive action and pending-state checks — 9 October 2026
+
+Core browser journeys cover 320/375/430/768/1024/1280/1440px, including scheduled
+account deletion. `tests/helpers/responsive-actions.ts` checks visible buttons and
+action links for minimum target dimensions, clipped labels, horizontal overflow,
+and unnecessarily stretched desktop actions. Existing employment checks retain
+balanced equal-width Save/Cancel and spacing assertions, now with distinct primary
+and secondary backgrounds.
+
+Delayed-request regressions cover auth creation/sign-in, uploads, private download
+preparation, document deletion, extraction/review saves, and pension saves. Check
+specific pending labels, one request after repeated clicks, independent safe controls,
+local rather than unrelated saving feedback, and cleanup/retry after failure.
+These use disposable loopback PostgreSQL/Redis plus synthetic S3/AI fixtures.

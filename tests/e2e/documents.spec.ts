@@ -1,3 +1,4 @@
+import { checkResponsiveActions } from "../helpers/responsive-actions";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -70,7 +71,7 @@ test.afterAll(async () => {
   await db.user.deleteMany({ where: { id: { in: ids } } });
   await db.$disconnect();
 });
-for (const width of [320, 375, 430, 768, 1440]) {
+for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
   test(`private vault upload/view/delete at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 850 });
     const employmentId = await account(page);
@@ -85,6 +86,7 @@ for (const width of [320, 375, 430, 768, 1440]) {
         .getByRole("navigation")
         .getByRole("link", { name: "Documents", exact: true }),
     ).toHaveAttribute("aria-current", "page");
+    await checkResponsiveActions(page);
     await page.screenshot({
       path: `test-results/vault-${width}.png`,
       fullPage: true,
@@ -306,3 +308,116 @@ test("expires private links locally and allows explicitly requesting a fresh lin
     page.getByRole("link", { name: "Download document", exact: true }),
   ).toBeVisible();
 });
+
+for (const width of [320, 1440]) {
+  test(`local upload and document pending states recover at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 850 });
+    await account(page);
+    await page.goto("/documents/upload");
+    await page.getByLabel("Choose a file").setInputFiles({
+      name: "Pending.pdf",
+      mimeType: "application/pdf",
+      buffer: pdf,
+    });
+    let release!: () => void;
+    let gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let requests = 0;
+    await page.route("**/api/documents?*", async (route) => {
+      requests++;
+      await gate;
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Synthetic upload unavailable" }),
+      });
+    });
+    try {
+      await page
+        .getByRole("button", { name: "Upload document", exact: true })
+        .click();
+      const pending = page.getByRole("button", {
+        name: "Uploading…",
+        exact: true,
+      });
+      await expect(pending).toBeDisabled();
+      await expect(page.getByRole("progressbar")).toBeVisible();
+      await expect.poll(() => requests).toBe(1);
+      await pending.evaluate((button: HTMLButtonElement) => button.click());
+      expect(requests).toBe(1);
+      await checkResponsiveActions(page);
+    } finally {
+      release();
+    }
+    await expect(page.getByRole("main").getByRole("alert")).toContainText(
+      "Synthetic upload unavailable",
+    );
+    await expect(page.getByRole("progressbar")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Upload document", exact: true }),
+    ).toBeEnabled();
+    await page.unroute("**/api/documents?*");
+    const id = await upload(page);
+    for (const deleting of [false, true]) {
+      if (deleting)
+        await page
+          .getByRole("button", { name: "Delete document", exact: true })
+          .click();
+      const endpoint = deleting
+        ? `**/api/documents/${id}`
+        : `**/api/documents/${id}/access`;
+      gate = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      requests = 0;
+      await page.route(endpoint, async (route) => {
+        requests++;
+        await gate;
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Synthetic document unavailable" }),
+        });
+      });
+      try {
+        await page
+          .getByRole("button", {
+            name: deleting ? "Confirm deletion" : "Open / download",
+            exact: true,
+          })
+          .click();
+        const pending = page.getByRole("button", {
+          name: deleting ? "Deleting…" : "Preparing download…",
+          exact: true,
+        });
+        await expect(pending).toBeDisabled();
+        await expect(pending).toHaveAttribute("aria-busy", "true");
+        await expect.poll(() => requests).toBe(1);
+        await pending.evaluate((button: HTMLButtonElement) => button.click());
+        expect(requests).toBe(1);
+        await checkResponsiveActions(page);
+      } finally {
+        release();
+      }
+      await expect(page.getByRole("main").getByRole("alert")).toContainText(
+        "Synthetic document unavailable",
+      );
+      await expect(
+        page.getByRole("button", {
+          name: deleting ? "Confirm deletion" : "Open / download",
+          exact: true,
+        }),
+      ).toBeEnabled();
+      await expect(page.locator('button[aria-busy="true"]')).toHaveCount(0);
+      await expect(
+        page
+          .getByRole("status")
+          .filter({ hasText: /Preparing your private|Deleting your document/ }),
+      ).toHaveCount(0);
+      await page.unroute(endpoint);
+    }
+  });
+}

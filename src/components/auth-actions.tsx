@@ -271,7 +271,9 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
         {busy
           ? register
             ? "Creating account…"
-            : "Signing in…"
+            : cancelDeletion
+              ? "Cancelling deletion…"
+              : "Signing in…"
           : register
             ? "Create account"
             : cancelDeletion
@@ -280,7 +282,11 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
       </Button>
       {busy && (
         <p role="status" className={register ? undefined : "sr-only"}>
-          {register ? "Creating your personal space…" : "Signing in…"}
+          {register
+            ? "Creating your personal space…"
+            : cancelDeletion
+              ? "Cancelling deletion…"
+              : "Signing in…"}
         </p>
       )}
       <Link

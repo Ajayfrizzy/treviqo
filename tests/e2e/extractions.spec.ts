@@ -1,3 +1,4 @@
+import { checkResponsiveActions } from "../helpers/responsive-actions";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -62,7 +63,7 @@ test.afterAll(async () => {
   await db.user.deleteMany({ where: { id: { in: ids } } });
   await db.$disconnect();
 });
-for (const width of [320, 375, 430, 768, 1440]) {
+for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
   test(`extract and review evidence at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 850 });
     const id = await createDocument(page);
@@ -146,6 +147,7 @@ for (const width of [320, 375, 430, 768, 1440]) {
       ),
     ).toBe(true);
     await role.scrollIntoViewIfNeeded();
+    await checkResponsiveActions(page);
     await page.screenshot({ path: `test-results/extraction-${width}.png` });
     await expect(
       page
@@ -322,8 +324,7 @@ test("review actions show local feedback, block repeated clicks, recover, and hi
     await route.continue();
   });
   const extract = page.getByRole("button", {
-    name: "Extract details",
-    exact: true,
+    name: /^(Extract details|Extracting…)$/,
   });
   try {
     await extract.click();
@@ -367,13 +368,16 @@ test("review actions show local feedback, block repeated clicks, recover, and hi
       body: JSON.stringify({ error: "Review unavailable. Please retry." }),
     });
   });
-  const confirm = employer.getByRole("button", { name: "Confirm proposal" });
+  const confirm = employer.getByRole("button", {
+    name: /^(Confirm proposal|Confirming…)$/,
+  });
   try {
     await confirm.click();
     await expect(confirm).toHaveAttribute("aria-busy", "true");
     await expect(confirm).toBeDisabled();
     await confirm.evaluate((button: HTMLButtonElement) => button.click());
     expect(saves).toBe(1);
+    await checkResponsiveActions(page);
     await page.screenshot({
       path: "test-results/review-button-pending-320.png",
     });
@@ -447,7 +451,7 @@ for (const width of [320, 1440]) {
   });
 }
 
-for (const width of [320, 375, 430, 1440]) {
+for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
   test(`attempt history stays secondary and a retry replaces stale failure at ${width}px`, async ({
     page,
   }) => {
@@ -532,9 +536,10 @@ for (const width of [320, 375, 430, 1440]) {
       ).toHaveCount(0);
       await expect(disclosure).not.toHaveAttribute("open", "");
       await expect(
-        page.getByRole("button", { name: "Extract details", exact: true }),
+        page.getByRole("button", { name: "Extracting…", exact: true }),
       ).toBeDisabled();
       expect(starts).toBe(1);
+      await checkResponsiveActions(page);
       await page.screenshot({
         path: `test-results/extraction-retry-${width}.png`,
       });
@@ -582,6 +587,7 @@ for (const width of [320, 375, 430, 1440]) {
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
+    await checkResponsiveActions(page);
     await page.screenshot({
       path: `test-results/extraction-history-${width}.png`,
     });

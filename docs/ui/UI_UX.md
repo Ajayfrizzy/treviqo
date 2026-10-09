@@ -264,3 +264,41 @@ and worker builds. `npm run test:e2e -- tests/e2e/extractions.spec.ts` passed al
 320/375/430/768/1440px, category changes, reload, manual entry and failed-save retry.
 Final lint/typecheck, targeted formatting and diff checks passed. No backend,
 production data, environment configuration or dependency changes were made.
+
+## Responsive actions and local progress — 9 October 2026
+
+This supersedes the earlier shared green Save/Cancel styling. Primary actions use
+filled green, secondary/Cancel actions use an outline, and confirmed destructive
+actions use the shared red treatment. Buttons and action links use a 48px minimum
+height, consistent horizontal padding, visible focus/disabled states, and wrapping
+labels. The existing password reveal control retains its 44px touch target.
+
+Below 768px, form pairs and document/review actions retain their mobile layouts;
+account-deletion confirmation actions stack. At 768px and above, auth submissions,
+pension saves, document actions, extraction controls/history, Passport assessments,
+and account actions size to their content. Save/Cancel pairs remain equal-width in
+a compact group; other action groups wrap with a 16px gap. Use these responsive
+shared styles rather than separate mobile/desktop components.
+
+The shared Button accepts `pendingLabel` for promise-returning click handlers and
+retains its spinner and repeated-click guard. Forms supply their own pending state.
+Use action-specific labels (Extracting, Preparing fields, Preparing download,
+Deleting, Refreshing, Starting check, Confirming, Saving, Removing, Snoozing,
+Dismissing). Credential-based deletion cancellation says “Cancelling deletion…”.
+Only the submitted settlement/pension/benefit form shows Saving; an unrelated form
+must not claim to be submitting. Conflicting writes remain disabled while safe
+navigation, password reveal, and the existing independent history controls remain
+usable. Local mutations do not show generic page-wide loading text.
+
+Upload transfer/storage progress sits directly below Upload/Cancel. Extraction has
+an adjacent current-attempt status panel with an indeterminate track and the existing
+90-second expectation. Failure removes active progress and restores retry controls;
+uncertain extraction results retain the specific refresh guidance. No simulated
+percentage is shown for extraction. Reduced-motion settings suppress animation.
+
+Affected components: Button, CredentialsForm, DocumentActions, DocumentUpload,
+ExtractionReview, FinanceReview (SettlementForm/PensionForm), PassportEntry
+(BenefitForm), and Reminders. Shared CSS also polishes EmploymentForm, ExitForm,
+DeleteAccount, SignOutButton, DocumentFilter, and action links without changing their
+request logic. Backend behavior, domain rules, AI prompts/inference and product scope
+are unchanged. See [validation report](../milestones/RESPONSIVE_ACTIONS.md).

@@ -3,6 +3,7 @@
 import { useRef, useState, type ComponentProps, type MouseEvent } from "react";
 
 type Props = Omit<ComponentProps<"button">, "onClick"> & {
+  pendingLabel?: string;
   onClick?: (event: MouseEvent<HTMLButtonElement>) => unknown;
 };
 
@@ -11,6 +12,7 @@ export function Button({
   onClick,
   disabled,
   children,
+  pendingLabel,
   "aria-busy": busy,
   ...props
 }: Props) {
@@ -43,7 +45,7 @@ export function Button({
         }
       }}
     >
-      {children}
+      {working && pendingLabel ? pendingLabel : children}
     </button>
   );
 }

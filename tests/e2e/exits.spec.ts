@@ -1,3 +1,4 @@
+import { checkResponsiveActions } from "../helpers/responsive-actions";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -50,7 +51,7 @@ test.afterAll(async () => {
   await db.user.deleteMany({ where: { id: { in: ids } } });
   await db.$disconnect();
 });
-for (const width of [320, 375, 430, 768, 1440])
+for (const width of [320, 375, 430, 768, 1024, 1280, 1440])
   test(`mobile exit steps and checklist at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 850 });
     await account(page);
@@ -130,6 +131,7 @@ for (const width of [320, 375, 430, 768, 1440])
     await page
       .getByRole("region", { name: "Notice and dates", exact: true })
       .scrollIntoViewIfNeeded();
+    await checkResponsiveActions(page);
     await page.screenshot({ path: `test-results/exit-${width}.png` });
     await expect(
       page

@@ -1,3 +1,4 @@
+import { checkResponsiveActions } from "../helpers/responsive-actions";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -107,7 +108,7 @@ async function evidence(page: Page, job: string, type: string) {
   }
   return { doc, run };
 }
-for (const width of [320, 375, 430, 768, 1440])
+for (const width of [320, 375, 430, 768, 1024, 1280, 1440])
   test(`settlement and pension review at ${width}px`, async ({ page }) => {
     test.setTimeout(90000);
     await page.setViewportSize({ width, height: 850 });
@@ -200,6 +201,7 @@ for (const width of [320, 375, 430, 768, 1440])
     await page
       .getByRole("heading", { name: "Pension exit verification" })
       .scrollIntoViewIfNeeded();
+    await checkResponsiveActions(page);
     await page.screenshot({ path: `test-results/finance-${width}.png` });
     const changed = pension.run.fields.find(
       (f: { key: string }) => f.key === "contribution_1_employee_amount",
@@ -280,4 +282,55 @@ test("finance ownership, authentication, Origin and body boundaries", async ({
   } finally {
     await other.close();
   }
+});
+
+test("pension save feedback stays local and clears after failure", async ({
+  page,
+}) => {
+  const { id } = await setup(page);
+  await page.goto(`/exit/${id}/finance`);
+  await page.getByRole("button", { name: "Start pension check" }).click();
+  await expect(
+    page.getByRole("button", { name: "Save pension review" }),
+  ).toBeVisible();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let requests = 0;
+  await page.route(`**/api/exits/${id}/finance`, async (route) => {
+    requests++;
+    await gate;
+    await route.fulfill({
+      status: 503,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "Synthetic review unavailable" }),
+    });
+  });
+  try {
+    await page.getByRole("button", { name: "Save pension review" }).click();
+    const pending = page.getByRole("button", { name: "Saving…", exact: true });
+    await expect(pending).toHaveCount(1);
+    await expect(pending).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Save comparison", exact: true }),
+    ).not.toHaveAttribute("aria-busy", "true");
+    await expect(
+      page.getByRole("link", { name: "Upload evidence" }),
+    ).toBeEnabled();
+    await expect.poll(() => requests).toBe(1);
+    await pending.evaluate((button: HTMLButtonElement) => button.click());
+    expect(requests).toBe(1);
+  } finally {
+    release();
+  }
+  await expect(page.getByRole("main").getByRole("alert")).toContainText(
+    "Synthetic review unavailable",
+  );
+  await expect(
+    page.getByRole("button", { name: "Save pension review" }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "Saving…", exact: true }),
+  ).toHaveCount(0);
 });

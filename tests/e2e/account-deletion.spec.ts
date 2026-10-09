@@ -1,3 +1,4 @@
+import { checkResponsiveActions } from "../helpers/responsive-actions";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -65,7 +66,7 @@ test.afterAll(async () => {
   await db.user.deleteMany({ where: { id: { in: ids } } });
   await db.$disconnect();
 });
-for (const width of [320, 375, 430, 1440])
+for (const width of [320, 375, 430, 768, 1024, 1280, 1440])
   test(`scheduled deletion, cancellation and session clearing at ${width}px`, async ({
     page,
     browser,
@@ -171,6 +172,7 @@ for (const width of [320, 375, 430, 1440])
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
+    await checkResponsiveActions(page);
     await page.screenshot({
       path: `test-results/deletion-pending-${width}.png`,
       fullPage: true,
@@ -179,12 +181,41 @@ for (const width of [320, 375, 430, 1440])
       .getByRole("button", { name: "Cancel account deletion", exact: true })
       .click();
     await page.getByLabel("Password", { exact: true }).fill("wrong password");
-    await page
-      .getByRole("button", { name: "Verify and cancel deletion" })
-      .click();
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let requests = 0;
+    await page.route("**/api/auth/callback/credentials", async (route) => {
+      requests++;
+      await gate;
+      await route.continue();
+    });
+    try {
+      await page
+        .getByRole("button", { name: "Verify and cancel deletion" })
+        .click();
+      const cancelling = page.getByRole("button", {
+        name: "Cancelling deletion…",
+        exact: true,
+      });
+      await expect(cancelling).toBeDisabled();
+      await expect(cancelling).toHaveAttribute("aria-busy", "true");
+      await expect.poll(() => requests).toBe(1);
+      await cancelling.evaluate((button: HTMLButtonElement) => button.click());
+      expect(requests).toBe(1);
+      await checkResponsiveActions(page);
+    } finally {
+      release();
+    }
+
     await expect(page.locator("#auth-error")).toHaveText(
       "Email or password is incorrect.",
     );
+    await expect(
+      page.getByRole("button", { name: "Cancelling deletion…", exact: true }),
+    ).toHaveCount(0);
+    await page.unroute("**/api/auth/callback/credentials");
     await page.getByLabel("Password", { exact: true }).fill(password);
     await page
       .getByRole("button", { name: "Verify and cancel deletion" })

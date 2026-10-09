@@ -1,3 +1,4 @@
+import { checkResponsiveActions } from "../helpers/responsive-actions";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -73,7 +74,7 @@ async function generate(page: Page) {
     );
   return exit;
 }
-for (const width of [320, 375, 430, 768, 1440])
+for (const width of [320, 375, 430, 768, 1024, 1280, 1440])
   test(`worker reminders, snooze and resolution at ${width}px`, async ({
     page,
   }) => {
@@ -136,6 +137,7 @@ for (const width of [320, 375, 430, 768, 1440])
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
+    await checkResponsiveActions(page);
     await page.screenshot({ path: `test-results/reminders-${width}.png` });
   });
 test("reminder ownership and anonymous/Origin/input boundaries", async ({

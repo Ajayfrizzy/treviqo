@@ -1,3 +1,4 @@
+import { checkResponsiveActions } from "../helpers/responsive-actions";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -89,7 +90,7 @@ async function source(page: Page, id: string) {
   ).toBe(200);
   return { doc, fieldId: field.id };
 }
-for (const width of [320, 375, 430, 768, 1440])
+for (const width of [320, 375, 430, 768, 1024, 1280, 1440])
   test(`Passport timeline and benefit assessment at ${width}px`, async ({
     page,
   }) => {
@@ -169,6 +170,7 @@ for (const width of [320, 375, 430, 768, 1440])
       ),
     ).toBe(true);
     await hmo.scrollIntoViewIfNeeded();
+    await checkResponsiveActions(page);
     await page.screenshot({ path: `test-results/passport-${width}.png` });
     const response = await page.request.get(`/api/passport/${employment.id}`);
     expect(response.headers()["cache-control"]).toContain("no-store");

@@ -27,14 +27,8 @@ export function FinanceReview({ initial }: { initial: FinanceView }) {
   const [success, setSuccess] = useState("");
   const [editing, setEditing] = useState<SettlementView | null>(null);
   const [formKey, setFormKey] = useState(0);
-  const [operation, setOperation] = useState("");
   async function request(body?: unknown): Promise<boolean> {
     if (busy) return false;
-    setOperation(
-      body
-        ? "Saving your review and checking current evidence…"
-        : "Refreshing your evidence…",
-    );
     setBusy(true);
     setError("");
     setSuccess("");
@@ -78,7 +72,12 @@ export function FinanceReview({ initial }: { initial: FinanceView }) {
         <Link className="touch-link" href="/documents">
           Open document reviews
         </Link>
-        <Button className="secondary" disabled={busy} onClick={() => request()}>
+        <Button
+          pendingLabel="Refreshing…"
+          className="secondary"
+          disabled={busy}
+          onClick={() => request()}
+        >
           Refresh evidence
         </Button>
       </section>
@@ -92,7 +91,6 @@ export function FinanceReview({ initial }: { initial: FinanceView }) {
           {success}
         </p>
       )}
-      {busy && <p role="status">{operation}</p>}
       <section>
         <h2>Final settlement comparisons</h2>
         <p>
@@ -146,7 +144,8 @@ export function FinanceReview({ initial }: { initial: FinanceView }) {
                   Edit item
                 </Button>
                 <Button
-                  className="secondary"
+                  pendingLabel="Removing…"
+                  className="danger-button"
                   disabled={busy}
                   onClick={() => {
                     if (
@@ -200,6 +199,7 @@ export function FinanceReview({ initial }: { initial: FinanceView }) {
               an exit case creates a waiting check; you can also start one now.
             </p>
             <Button
+              pendingLabel="Starting check…"
               disabled={busy || !data.pensionApplicable}
               onClick={() => request({ action: "pension_start" })}
             >
@@ -238,6 +238,7 @@ export function FinanceReview({ initial }: { initial: FinanceView }) {
               )}
             {data.pension.result.state === "contribution_detected" && (
               <Button
+                pendingLabel="Confirming…"
                 disabled={busy}
                 onClick={() =>
                   request({
@@ -289,25 +290,32 @@ function SettlementForm({
   const [actualPeriod, setActualPeriod] = useState(
     initial?.actualPeriod ?? data.defaultPeriod,
   );
+  const [submitting, setSubmitting] = useState(false);
   const expected = data.fields.find((field) => field.id === expectedId);
   const actual = data.fields.find((field) => field.id === actualId);
   return (
     <form
       className="card employment-form"
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault();
-        void save({
-          ...(initial ? { id: initial.id, version: initial.version } : {}),
-          label,
-          category,
-          documentId: doc,
-          expectedFieldId: expectedId,
-          expectedFieldVersion: expected?.version ?? -1,
-          actualFieldId: actualId || null,
-          actualFieldVersion: actual?.version ?? null,
-          expectedPeriod,
-          actualPeriod,
-        });
+        if (busy || submitting) return;
+        setSubmitting(true);
+        try {
+          await save({
+            ...(initial ? { id: initial.id, version: initial.version } : {}),
+            label,
+            category,
+            documentId: doc,
+            expectedFieldId: expectedId,
+            expectedFieldVersion: expected?.version ?? -1,
+            actualFieldId: actualId || null,
+            actualFieldVersion: actual?.version ?? null,
+            expectedPeriod,
+            actualPeriod,
+          });
+        } finally {
+          setSubmitting(false);
+        }
       }}
     >
       <h2>{initial ? "Edit comparison" : "Add comparison item"}</h2>
@@ -434,8 +442,8 @@ function SettlementForm({
         <div
           className={initial ? "form-actions paired-actions" : "form-actions"}
         >
-          <Button type="submit" aria-busy={busy}>
-            {busy ? "Saving…" : "Save comparison"}
+          <Button type="submit" aria-busy={submitting}>
+            {submitting ? "Saving…" : "Save comparison"}
           </Button>
           {initial && (
             <Button type="button" className="button-cancel" onClick={cancel}>
@@ -461,20 +469,27 @@ function PensionForm({
   const [runId, setRun] = useState(current.statementRunId ?? "");
   const [expectedId, setExpected] = useState(current.expectedFieldId ?? "");
   const [followUp, setFollowUp] = useState(current.followUpDate ?? "");
+  const [submitting, setSubmitting] = useState(false);
   const expected = data.fields.find((field) => field.id === expectedId);
   return (
     <form
       className="employment-form"
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault();
-        void save({
-          version: current.version,
-          targetPeriod: period,
-          statementRunId: runId || null,
-          expectedFieldId: expectedId || null,
-          expectedFieldVersion: expected?.version ?? null,
-          followUpDate: followUp || null,
-        });
+        if (busy || submitting) return;
+        setSubmitting(true);
+        try {
+          await save({
+            version: current.version,
+            targetPeriod: period,
+            statementRunId: runId || null,
+            expectedFieldId: expectedId || null,
+            expectedFieldVersion: expected?.version ?? null,
+            followUpDate: followUp || null,
+          });
+        } finally {
+          setSubmitting(false);
+        }
       }}
     >
       <fieldset disabled={busy || !data.pensionApplicable}>
@@ -548,8 +563,8 @@ function PensionForm({
           value={followUp}
           onChange={(event) => setFollowUp(event.target.value)}
         />
-        <Button type="submit" aria-busy={busy}>
-          {busy ? "Saving…" : "Save pension review"}
+        <Button type="submit" aria-busy={submitting}>
+          {submitting ? "Saving…" : "Save pension review"}
         </Button>
       </fieldset>
     </form>

@@ -11,7 +11,7 @@ export function DocumentActions({ id, ready }: { id: string; ready: boolean }) {
   const [link, setLink] = useState<string | null>(null);
   const [expiresAt, setExpiresAt] = useState<number | null>(null);
   const [refreshing, startRefresh] = useTransition();
-  const [operation, setOperation] = useState("");
+  const [operation, setOperation] = useState<"access" | "delete" | null>(null);
   const [expired, setExpired] = useState(false);
   useEffect(() => {
     if (!link || !expiresAt) return;
@@ -30,11 +30,7 @@ export function DocumentActions({ id, ready }: { id: string; ready: boolean }) {
   }, [link, expiresAt]);
   async function request(action: "access" | "delete") {
     if (busy) return;
-    setOperation(
-      action === "access"
-        ? "Preparing your private download link…"
-        : "Deleting your document…",
-    );
+    setOperation(action);
     const startedAt = Date.now();
     setBusy(true);
     setError("");
@@ -80,7 +76,12 @@ export function DocumentActions({ id, ready }: { id: string; ready: boolean }) {
         </Button>
       )}
       {ready && (
-        <Button disabled={busy} onClick={() => request("access")}>
+        <Button
+          pendingLabel="Preparing download…"
+          aria-busy={busy && operation === "access"}
+          disabled={busy}
+          onClick={() => request("access")}
+        >
           Open / download
         </Button>
       )}
@@ -129,7 +130,13 @@ export function DocumentActions({ id, ready }: { id: string; ready: boolean }) {
         <div className="delete-confirm">
           <h2>Delete this document?</h2>
           <p>The stored file will be removed. This cannot be undone.</p>
-          <Button disabled={busy} onClick={() => request("delete")}>
+          <Button
+            className="danger-button"
+            pendingLabel="Deleting…"
+            aria-busy={busy && operation === "delete"}
+            disabled={busy}
+            onClick={() => request("delete")}
+          >
             Confirm deletion
           </Button>
           <Button
@@ -141,7 +148,13 @@ export function DocumentActions({ id, ready }: { id: string; ready: boolean }) {
           </Button>
         </div>
       )}
-      {busy && <p role="status">{operation}</p>}
+      {busy && (
+        <p role="status">
+          {operation === "access"
+            ? "Preparing your private download link…"
+            : "Deleting your document…"}
+        </p>
+      )}
     </div>
   );
 }

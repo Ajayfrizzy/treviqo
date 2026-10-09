@@ -121,20 +121,6 @@ export function DocumentUpload({
           your evidence.
         </p>
       </fieldset>
-      {busy && (
-        <div role="status">
-          <label htmlFor="upload-progress">
-            {progress < 100
-              ? `Uploading… ${progress}%`
-              : "Upload transferred. Saving your private document…"}
-          </label>
-          <progress
-            id="upload-progress"
-            max={100}
-            value={progress < 100 ? progress : undefined}
-          />
-        </div>
-      )}
       <div className="form-actions paired-actions">
         <Button disabled={busy} aria-busy={busy} type="submit">
           {busy ? "Uploading…" : "Upload document"}
@@ -149,6 +135,20 @@ export function DocumentUpload({
           </Link>
         )}
       </div>
+      {busy && (
+        <div role="status" className="action-status">
+          <label htmlFor="upload-progress">
+            {progress < 100
+              ? `Uploading… ${progress}%`
+              : "Upload transferred. Saving your private document…"}
+          </label>
+          <progress
+            id="upload-progress"
+            max={100}
+            value={progress < 100 ? progress : undefined}
+          />
+        </div>
+      )}
     </form>
   );
 }

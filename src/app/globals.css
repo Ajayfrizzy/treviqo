@@ -22,7 +22,7 @@ button {
   font-weight: 700;
   cursor: pointer;
   min-height: 48px;
-  padding: 0.75rem 1.25rem;
+  padding: 0.7rem 1.25rem;
   border: 1px solid var(--accent);
   border-radius: var(--radius-small);
   background: var(--accent);
@@ -250,7 +250,8 @@ button:disabled {
   align-items: center;
   justify-content: center;
   min-height: 48px;
-  padding: 0.75rem 1rem;
+  padding: 0.7rem 1.25rem;
+  border: 1px solid transparent;
   background: var(--accent);
   color: white;
   border-radius: var(--radius-small);
@@ -709,12 +710,12 @@ input[type="checkbox"] {
   border: 1px solid #aa3535;
   border-top: 4px solid #aa3535;
 }
-.account-danger .danger-button {
+.danger-button {
   background: #922b2b;
   border-color: #922b2b;
   color: #fff;
 }
-.account-danger .danger-button:hover:not(:disabled) {
+.danger-button:hover:not(:disabled) {
   background: #742020;
 }
 .account-danger-actions {
@@ -741,6 +742,8 @@ button:hover:not(:disabled),
   background-color: #205344;
 }
 button.secondary:hover:not(:disabled),
+button.button-cancel:hover:not(:disabled),
+.button-link.button-cancel:hover,
 .button-link.secondary:hover {
   background-color: #e9f1e9;
 }
@@ -992,7 +995,9 @@ button[aria-busy="true"] {
 }
 button,
 .button-link {
-  overflow-wrap: anywhere;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: normal;
 }
 .paired-actions {
   display: grid;
@@ -1006,14 +1011,14 @@ button,
 }
 .button-cancel,
 .button-link.button-cancel {
-  background: var(--accent);
-  color: white;
-  border: 1px solid #9bbcab;
-  box-shadow: inset 0 0 0 1px #9bbcab;
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--border);
   font-weight: 500;
 }
 .form-actions,
 .review-actions,
+.account-danger-actions,
 .document-actions {
   gap: 1rem;
 }
@@ -1135,9 +1140,8 @@ button,
 
 .paired-actions > button,
 .paired-actions > .button-link {
-  padding-inline: 0.5rem;
+  padding-inline: 0.75rem;
   overflow-wrap: normal;
-  font-size: 0.95rem;
 }
 
 .attempt-history-list {
@@ -1150,4 +1154,49 @@ button,
   width: 100%;
   text-align: left;
   font-weight: 500;
+}
+
+/* Actions remain touch-sized; wider screens use the space their labels need. */
+.account-danger-actions > * {
+  flex: 1 1 100%;
+}
+.action-status {
+  margin-top: 0.75rem;
+  margin-bottom: 0;
+}
+@media (min-width: 768px) {
+  .auth-form > button,
+  .employment-form > button,
+  .employment-form fieldset > button,
+  .delete-confirm > button,
+  .review-attempt > button {
+    justify-self: start;
+    width: fit-content;
+  }
+  .form-actions > button,
+  .account-danger-actions > * {
+    flex: 0 1 auto;
+  }
+  .paired-actions {
+    width: fit-content;
+    max-width: 100%;
+  }
+  .paired-actions > button,
+  .paired-actions > .button-link {
+    padding-inline: 1.25rem;
+  }
+  .document-actions,
+  .review-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .document-actions > p,
+  .document-actions > div {
+    flex-basis: 100%;
+  }
+  .passport-flow article > button,
+  .attempt-history-list button {
+    width: fit-content;
+  }
 }
