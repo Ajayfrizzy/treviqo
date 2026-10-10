@@ -45,6 +45,16 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       await expect(
         page.getByRole("heading", { name: title, exact: true }),
       ).toBeVisible();
+    const publicNav = page.getByRole("navigation", {
+      name: "Public",
+      exact: true,
+    });
+    await expect(
+      publicNav.getByRole("link", { name: "Create account", exact: true }),
+    ).toHaveAttribute("href", "/register");
+    await expect(
+      publicNav.getByRole("link", { name: "Sign in", exact: true }),
+    ).toBeVisible();
     await checkResponsiveActions(page);
     await page.screenshot({
       path: `test-results/public-${width}.png`,
@@ -63,9 +73,8 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
         .first()
         .evaluate((el) => getComputedStyle(el).animationName),
     ).toBe("none");
-    await page
-      .getByRole("link", { name: "Create your account", exact: true })
-      .first()
+    await publicNav
+      .getByRole("link", { name: "Create account", exact: true })
       .click();
     await expect(page).toHaveURL("/register");
     await expect(page.getByLabel("Country or territory")).toHaveValue("");
@@ -92,16 +101,6 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
     await page
       .getByRole("button", { name: "Create account", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText(
-      "Welcome to Treviqo, Dee",
-    );
-    await page.getByRole("link", { name: "Sign in to Treviqo" }).click();
-    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Welcome back",
-    );
-    await page.getByLabel("Email", { exact: true }).fill(email);
-    await page.getByLabel("Password", { exact: true }).fill(password);
-    await page.getByRole("button", { name: "Sign in securely" }).click();
     await expect(page).toHaveURL("/home");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Welcome to Treviqo, Dee",
@@ -112,7 +111,16 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
     await expect(page.locator(".onboarding-progress")).toContainText(
       "Create account — complete",
     );
-    await page.getByRole("link", { name: "Explore Treviqo first" }).click();
+    await expect(
+      page.getByRole("region", { name: "What needs your attention" }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "Current employment", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: "Treviqo home", exact: true }),
+    ).toHaveAttribute("href", "/home");
+    await page.getByRole("link", { name: "Explore Treviqo" }).click();
     await expect(
       page.getByRole("heading", { name: "Explore your personal space" }),
     ).toBeVisible();
@@ -164,6 +172,55 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
     ).toBe(201);
     await page.reload();
     await expect(page.locator(".onboarding-card")).toHaveCount(0);
+    const attention = page.getByRole("region", {
+      name: "What needs your attention",
+    });
+    await expect(attention).toContainText("No outstanding actions identified");
+    const attentionBox = (await attention.boundingBox())!;
+    const overviewBox = (await page
+      .getByRole("region", { name: "Working-life overview" })
+      .boundingBox())!;
+    expect(attentionBox.y).toBeLessThan(overviewBox.y);
+    expect(overviewBox.y).toBeLessThan(
+      (await page.locator("#current-employment").boundingBox())!.y,
+    );
+    const user = await db.user.findUniqueOrThrow({ where: { email } });
+    const doc = await db.employmentDocument.findFirstOrThrow({
+      where: { userId: user.id, status: "ready" },
+    });
+    const extraction = await db.documentExtraction.create({
+      data: {
+        documentId: doc.id,
+        userId: user.id,
+        status: "ready",
+        sourceKind: "text",
+        model: "fixture",
+        promptVersion: "fixture",
+        schemaVersion: "fixture",
+        fields: {
+          create: {
+            key: "notice_period",
+            proposedValue: "30 days",
+            confidence: "high",
+          },
+        },
+      },
+    });
+    await page.reload();
+    await expect(
+      attention.getByRole("link", { name: "Review proposals in 1 document" }),
+    ).toHaveAttribute("href", "/documents");
+    await db.extractedField.updateMany({
+      where: { extractionId: extraction.id },
+      data: { reviewState: "confirmed", value: "30 days" },
+    });
+    await page.reload();
+    await expect(attention).toContainText("No outstanding actions identified");
+    await checkResponsiveActions(page);
+    await page.screenshot({
+      path: `test-results/home-mature-${width}.png`,
+      fullPage: true,
+    });
     await expect(
       page.getByRole("region", { name: "Working-life overview" }),
     ).toContainText("Documents to review");
@@ -182,10 +239,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       path: `test-results/profile-personal-${width}.png`,
       fullPage: true,
     });
-    await page
-      .getByRole("navigation", { name: "Primary" })
-      .getByRole("link", { name: "Home", exact: true })
-      .click();
+    await page.getByRole("link", { name: "Treviqo home", exact: true }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
       "Welcome back, Adé",
     );
@@ -253,3 +307,94 @@ test("legacy accounts have a generic greeting and profile edits retain input aft
   await edit.getByRole("button", { name: "Save profile" }).click();
   await expect(edit.getByRole("status")).toHaveText("Profile saved.");
 });
+
+for (const failure of ["credential-error", "network-error"]) {
+  test(`created account has a safe focused fallback after ${failure}`, async ({
+    page,
+  }) => {
+    const email = `auto-sign-in-${randomUUID()}@example.test`;
+    emails.push(email);
+    let registrations = 0;
+    let authentications = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/api/register", async (route) => {
+      registrations++;
+      await route.continue();
+    });
+    await page.route("**/api/auth/callback/credentials", async (route) => {
+      authentications++;
+      await gate;
+      if (failure === "network-error") await route.abort("failed");
+      else
+        await route.fulfill({
+          status: 401,
+          json: { url: `${origin}/sign-in?error=CredentialsSignin` },
+        });
+    });
+    await page.goto("/register");
+    await page.getByLabel("First name", { exact: true }).fill("New");
+    await page.getByLabel("Last name", { exact: true }).fill("Worker");
+    await expect(page.getByLabel("Preferred name")).not.toHaveAttribute(
+      "required",
+    );
+    await expect(page.getByLabel("Country or territory")).toHaveValue("");
+    await page.getByLabel("Email", { exact: true }).fill(email);
+    await page.getByLabel("Password", { exact: true }).fill(password);
+    await page
+      .getByRole("button", { name: "Create account", exact: true })
+      .click();
+    try {
+      const setup = page.getByRole("button", {
+        name: "Setting up your Treviqo space…",
+      });
+      await expect(setup).toBeDisabled();
+      await expect(page.getByRole("status")).toHaveText(
+        "Setting up your Treviqo space…",
+      );
+      await expect(page.getByLabel("Password", { exact: true })).toHaveValue(
+        "",
+      );
+      await page
+        .locator("form")
+        .evaluate((form) =>
+          form.dispatchEvent(
+            new Event("submit", { bubbles: true, cancelable: true }),
+          ),
+        );
+      await expect.poll(() => authentications).toBe(1);
+      expect(registrations).toBe(1);
+    } finally {
+      release();
+    }
+    const fallback = page.getByRole("status");
+    await expect(fallback).toContainText(
+      "Your account was created, but automatic sign-in could not be completed",
+    );
+    await expect(fallback).toBeFocused();
+    await expect(
+      page.getByRole("button", { name: "Create account", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByText("Setting up your Treviqo space…", { exact: true }),
+    ).toHaveCount(0);
+    expect(registrations).toBe(1);
+    expect(await db.user.count({ where: { email } })).toBe(1);
+    await page.unroute("**/api/auth/callback/credentials");
+    await page.keyboard.press("Tab");
+    const signIn = fallback.getByRole("link", { name: "Sign in", exact: true });
+    await expect(signIn).toBeFocused();
+    await signIn.click();
+    await expect(page.getByLabel("Password", { exact: true })).toHaveValue("");
+    await page.getByLabel("Email", { exact: true }).fill(email);
+    await page.getByLabel("Password", { exact: true }).fill(password);
+    await page.getByRole("button", { name: "Sign in securely" }).click();
+    await expect(page).toHaveURL("/home");
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Welcome to Treviqo, New",
+    );
+    expect(registrations).toBe(1);
+  });
+}

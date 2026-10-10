@@ -17,11 +17,7 @@ async function account(page: Page) {
   await page
     .getByRole("button", { name: "Create account", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("Your account is ready");
-  await page.goto("/sign-in");
-  await page.getByLabel("Email", { exact: true }).fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(password);
-  await page.getByRole("button", { name: "Sign in securely" }).click();
+
   await expect(page).toHaveURL("/home");
 }
 async function employment(page: Page) {
@@ -154,8 +150,13 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440])
     ).toContainText("Needs clarification");
     await page.goto("/home");
     await expect(
-      page.getByRole("heading", { name: "Your exit checklists" }),
+      page.getByRole("heading", { name: "Active exit checklists" }),
     ).toBeVisible();
+    await expect(
+      page
+        .getByRole("region", { name: "What needs your attention" })
+        .getByRole("link", { name: /Review exit checklist for/ }),
+    ).toHaveAttribute("href", `/exit/${id}`);
     await page.goto(`/exit/${id}/edit`);
     await page.getByRole("link", { name: "Cancel", exact: true }).click();
     await expect(page).toHaveURL(`/exit/${id}`);

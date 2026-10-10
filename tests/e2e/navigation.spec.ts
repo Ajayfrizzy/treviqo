@@ -40,15 +40,6 @@ for (const width of [375, 1440]) {
     await page
       .getByRole("button", { name: "Create account", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText(
-      "Your account is ready",
-    );
-    await page.getByRole("link", { name: "Sign in to Treviqo" }).click();
-    await page.getByLabel("Email", { exact: true }).fill(email);
-    await page
-      .getByLabel("Password", { exact: true })
-      .fill("Synthetic test password 7!");
-    await page.getByRole("button", { name: "Sign in securely" }).click();
     await expect(page).toHaveURL("/home");
     if (prefetch) {
       try {

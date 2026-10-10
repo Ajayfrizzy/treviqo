@@ -20,7 +20,10 @@ async function register(page: Page) {
   await page
     .getByRole("button", { name: "Create account", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("Your account is ready");
+  await expect(page).toHaveURL("/home");
+  await page.goto("/profile");
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page).toHaveURL("/sign-in");
   return email;
 }
 async function login(page: Page, email: string) {

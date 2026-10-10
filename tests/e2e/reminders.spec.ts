@@ -17,11 +17,7 @@ async function account(page: Page) {
   await page
     .getByRole("button", { name: "Create account", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("Your account is ready");
-  await page.goto("/sign-in");
-  await page.getByLabel("Email", { exact: true }).fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(password);
-  await page.getByRole("button", { name: "Sign in securely" }).click();
+
   await expect(page).toHaveURL("/home");
 }
 test.afterAll(async () => {
@@ -82,11 +78,17 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440])
   }) => {
     await page.setViewportSize({ width, height: 850 });
     await account(page);
-    await page.getByRole("link", { name: "View reminders" }).click();
+    await page.goto("/reminders");
     await expect(
       page.getByRole("heading", { name: "No reminders due" }),
     ).toBeVisible();
     const exit = await generate(page);
+    await page.goto("/home");
+    const due = page
+      .getByRole("region", { name: "What needs your attention" })
+      .getByRole("link", { name: /View [0-9]+ due reminders?/ });
+    await expect(due).toHaveAttribute("href", "/reminders");
+    await due.click();
     await page.getByRole("button", { name: "Refresh reminders" }).click();
     const notice = page.getByRole("article").filter({
       has: page.getByRole("heading", {

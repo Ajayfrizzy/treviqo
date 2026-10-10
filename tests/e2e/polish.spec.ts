@@ -36,22 +36,6 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
     await page
       .getByRole("button", { name: "Create account", exact: true })
       .click();
-    await expect(page.getByRole("status")).toContainText(
-      "Your account is ready",
-    );
-    await page.getByRole("link", { name: "Sign in to Treviqo" }).click();
-    await expect(page.getByLabel("Password", { exact: true })).toHaveAttribute(
-      "autocomplete",
-      "current-password",
-    );
-    await page.getByLabel("Email", { exact: true }).fill(email);
-    await page.getByLabel("Password", { exact: true }).fill("Abcdef1!");
-    await checkResponsiveActions(page);
-    await page.screenshot({
-      path: `test-results/polish-sign-in-${width}.png`,
-      fullPage: true,
-    });
-    await page.getByRole("button", { name: "Sign in securely" }).click();
     await expect(page).toHaveURL("/home");
     const nav = page.getByRole("navigation", { name: "Primary" });
     for (const label of ["Home", "Exit", "Passport", "Documents", "Profile"]) {

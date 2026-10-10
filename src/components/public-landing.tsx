@@ -1,4 +1,5 @@
 import Link from "@/components/action-link";
+import { HeroPreview, JourneyPreview } from "@/components/public-previews";
 const areas = [
   [
     "01",
@@ -50,6 +51,9 @@ export function PublicLanding() {
           <Link className="button-link secondary" href="/sign-in">
             Sign in
           </Link>
+          <Link className="button-link" href="/register">
+            Create account
+          </Link>
         </nav>
       </header>
       <main id="main">
@@ -81,52 +85,7 @@ export function PublicLanding() {
               next chapter.
             </p>
           </div>
-          <div
-            className="record-preview"
-            aria-label="Illustrative personal record"
-          >
-            <div className="preview-top">
-              <span className="preview-mark" aria-hidden="true">
-                t.
-              </span>
-              <span>
-                Your working-life record<small>Illustrative example</small>
-              </span>
-              <span className="preview-dot" aria-hidden="true" />
-            </div>
-            <div className="preview-title">
-              <span className="eyebrow">A little more continuity</span>
-              <h2>
-                Every chapter.
-                <br />
-                One place.
-              </h2>
-            </div>
-            <ol className="preview-timeline">
-              <li>
-                <span className="record-date">Your foundation</span>
-                <strong>Employment history</strong>
-                <small>Roles, dates and the evidence behind them</small>
-              </li>
-              <li>
-                <span className="record-date">Your next step</span>
-                <strong>An exit, with a checklist</strong>
-                <small>Details to review. Actions to follow up.</small>
-              </li>
-              <li>
-                <span className="record-date">Yours to carry forward</span>
-                <strong>Your Benefit Passport</strong>
-                <small>A record that stays with you</small>
-              </li>
-            </ol>
-            <div className="preview-document">
-              <span aria-hidden="true">▤</span>
-              <div>
-                <strong>Contract saved</strong>
-                <small>Private evidence · Ready for your review</small>
-              </div>
-            </div>
-          </div>
+          <HeroPreview />
         </section>
         <section
           className="public-section problem-section reveal"
@@ -203,20 +162,7 @@ export function PublicLanding() {
         >
           <p className="eyebrow">Start small. Build continuity.</p>
           <h2 id="journey-title">One record at a time.</h2>
-          <ol className="public-journey">
-            {[
-              "Add employment",
-              "Save important evidence",
-              "Review extracted details",
-              "Manage an exit when needed",
-              "Keep your employment and benefit history",
-            ].map((step, i) => (
-              <li key={step}>
-                <span aria-hidden="true">0{i + 1}</span>
-                <h3>{step}</h3>
-              </li>
-            ))}
-          </ol>
+          <JourneyPreview />
         </section>
         <section
           className="public-section trust-grid reveal"

@@ -8,7 +8,7 @@ import { deletionDateLabel } from "@/modules/account/shared";
 import { Button } from "./button";
 import { uiRequest } from "./ui-request";
 import { getCsrfToken, signIn } from "next-auth/react";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import Link from "@/components/action-link";
 import { useRouter } from "next/navigation";
 import {
@@ -17,12 +17,13 @@ import {
   passwordRequirements,
 } from "@/modules/auth/validation";
 import { ProfileFields } from "./profile-fields";
-import { displayName } from "@/modules/profile/shared";
 export function CredentialsForm({ register = false }: { register?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [createdName, setCreatedName] = useState<string | null>(null);
+  const submitting = useRef(false);
+  const fallback = useRef<HTMLDivElement>(null);
+  const [settingUp, setSettingUp] = useState(false);
   const [created, setCreated] = useState(false);
   const [pendingDate, setPendingDate] = useState<string | null>(null);
   const [processingDeletion, setProcessingDeletion] = useState(false);
@@ -31,9 +32,12 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
   const [password, setPassword] = useState("");
   const [visible, setVisible] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (created) fallback.current?.focus();
+  }, [created]);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (busy) return;
+    if (submitting.current || created) return;
     setError("");
     setFieldErrors({});
     const form = event.currentTarget;
@@ -58,7 +62,9 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
       )?.focus();
       return;
     }
+    submitting.current = true;
     setBusy(true);
+    let accountCreated = false;
     try {
       if (register) {
         const response = await uiRequest("/api/register", {
@@ -76,15 +82,22 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
           );
           return;
         }
-        setCreatedName(
-          displayName({
-            preferredName: String(values.get("preferredName") ?? ""),
-            firstName: String(values.get("firstName") ?? ""),
-          }),
-        );
+        accountCreated = true;
+        setSettingUp(true);
         form.reset();
         setPassword("");
-        setCreated(true);
+        setVisible(false);
+        const authResponse = await signIn("credentials", {
+          email,
+          password,
+          redirect: false,
+        });
+        if (!authResponse?.ok || authResponse.error) {
+          setCreated(true);
+          return;
+        }
+        router.replace("/home");
+        router.refresh();
       } else {
         const response = await signIn("credentials", {
           email,
@@ -109,13 +122,20 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
         router.refresh();
       }
     } catch {
+      if (accountCreated) {
+        setCreated(true);
+        return;
+      }
       setError(
         register
           ? "We could not complete your request. Please try again."
           : SIGN_IN_UNAVAILABLE,
       );
     } finally {
-      setBusy(false);
+      if (!accountCreated) {
+        submitting.current = false;
+        setBusy(false);
+      }
     }
   }
   if ((pendingDate || processingDeletion) && !cancelDeletion)
@@ -162,17 +182,14 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
     );
   if (created)
     return (
-      <div role="status" className="auth-success">
-        <span className="badge">Account created</span>
-        <h2>Welcome to Treviqo{createdName ? `, ${createdName}` : ""}</h2>
+      <div ref={fallback} tabIndex={-1} role="status" className="auth-success">
+        <h2>Account created</h2>
         <p>
-          Your account is ready. Your working life now has one place to stay.
-        </p>
-        <p>
-          Sign in to add your first employment, or explore your personal space.
+          Your account was created, but automatic sign-in could not be
+          completed. Sign in to continue to your Treviqo space.
         </p>
         <Link className="button-link" href="/sign-in">
-          Sign in to Treviqo
+          Sign in
         </Link>
       </div>
     );
@@ -190,6 +207,7 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
       {register && (
         <ProfileFields
           requiredNames
+          fields="names"
           errors={fieldErrors}
           disabled={busy}
           onChange={(name) =>
@@ -285,31 +303,50 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
           </ul>
         </div>
       )}
+      {register && (
+        <fieldset className="optional-profile" disabled={busy}>
+          <legend>
+            Make it yours <span className="optional">(optional)</span>
+          </legend>
+          <ProfileFields
+            fields="optional"
+            errors={fieldErrors}
+            disabled={busy}
+            onChange={(name) =>
+              setFieldErrors((previous) => ({ ...previous, [name]: "" }))
+            }
+          />
+        </fieldset>
+      )}
       {error && (
         <p id="auth-error" className="form-message" role="alert">
           {error}
         </p>
       )}
       <Button disabled={busy} aria-busy={busy} type="submit">
-        {busy
-          ? register
-            ? "Creating account…"
-            : cancelDeletion
-              ? "Cancelling deletion…"
-              : "Signing in…"
-          : register
-            ? "Create account"
-            : cancelDeletion
-              ? "Verify and cancel deletion"
-              : "Sign in securely"}
+        {settingUp
+          ? "Setting up your Treviqo space…"
+          : busy
+            ? register
+              ? "Creating account…"
+              : cancelDeletion
+                ? "Cancelling deletion…"
+                : "Signing in…"
+            : register
+              ? "Create account"
+              : cancelDeletion
+                ? "Verify and cancel deletion"
+                : "Sign in securely"}
       </Button>
       {busy && (
         <p role="status" className={register ? undefined : "sr-only"}>
-          {register
-            ? "Creating your personal space…"
-            : cancelDeletion
-              ? "Cancelling deletion…"
-              : "Signing in…"}
+          {settingUp
+            ? "Setting up your Treviqo space…"
+            : register
+              ? "Creating your personal space…"
+              : cancelDeletion
+                ? "Cancelling deletion…"
+                : "Signing in…"}
         </p>
       )}
       <Link

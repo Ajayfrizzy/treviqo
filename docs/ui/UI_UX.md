@@ -302,3 +302,20 @@ ExtractionReview, FinanceReview (SettlementForm/PensionForm), PassportEntry
 DeleteAccount, SignOutButton, DocumentFilter, and action links without changing their
 request logic. Backend behavior, domain rules, AI prompts/inference and product scope
 are unchanged. See [validation report](../milestones/RESPONSIVE_ACTIONS.md).
+
+## Interactive landing examples — 10 October 2026
+
+The public hero offers Employment, Documents and Next chapter examples through
+native buttons with pressed states. Panels share a grid footprint so switching
+chapters does not move surrounding content. Inactive examples are hidden from
+assistive technology and inert. How it works uses five expandable steps with
+explicit expanded states and adjacent illustrative explanations. Both interactions
+are local React state; they do not request, create or modify worker records.
+
+Chapter changes use 240ms opacity/position transitions; expanded explanations use
+a 280ms entrance. CTA arrows respond to hover and keyboard focus. Reduced-motion
+preferences disable these effects while preserving every interaction. Controls
+wrap on narrow screens and retain at least 48px targets. There is no auto-cycling,
+scroll interception or new animation dependency.
+
+See [landing interaction validation](../milestones/LANDING_INTERACTIONS.md).

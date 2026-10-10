@@ -1,3 +1,4 @@
+import Link from "@/components/action-link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/modules/auth/session";
 import { Navigation } from "@/components/navigation";
@@ -12,7 +13,9 @@ export default async function AppLayout({
     <div className="app-shell">
       <aside className="sidebar">
         <header className="brand">
-          treviqo<b className="brand-dot">.</b>
+          <Link href="/home" className="brand-home" aria-label="Treviqo home">
+            treviqo<b className="brand-dot">.</b>
+          </Link>
           <span>Your working life, together.</span>
         </header>
         <Navigation />

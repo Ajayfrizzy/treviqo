@@ -18,11 +18,7 @@ async function account(page: Page) {
   await page
     .getByRole("button", { name: "Create account", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("Your account is ready");
-  await page.goto("/sign-in");
-  await page.getByLabel("Email", { exact: true }).fill(email);
-  await page.getByLabel("Password", { exact: true }).fill(password);
-  await page.getByRole("button", { name: "Sign in securely" }).click();
+
   await expect(page).toHaveURL("/home");
   const response = await page.request.post("/api/employments", {
     headers: { origin: "http://127.0.0.1:3100" },
