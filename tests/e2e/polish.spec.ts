@@ -62,6 +62,28 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
         ),
       ).toBe(true);
       await checkResponsiveActions(page);
+      if (label === "Home") {
+        const action = page.getByRole("link", {
+          name: "Add your first employment",
+          exact: true,
+        });
+        // Exercise wrapping with larger font metrics as well as the platform default.
+        await action.evaluate((element) => {
+          element.style.fontSize = "2.5rem";
+        });
+        await checkResponsiveActions(page);
+        const textFits = await action.evaluate((element) => {
+          const outer = element.getBoundingClientRect();
+          const label = element
+            .querySelector(".link-content")!
+            .getBoundingClientRect();
+          return label.left >= outer.left && label.right <= outer.right;
+        });
+        expect(textFits).toBe(true);
+        await action.evaluate((element) => {
+          element.style.removeProperty("font-size");
+        });
+      }
       await page.screenshot({
         path: `test-results/polish-${label.toLowerCase()}-${width}.png`,
         fullPage: true,

@@ -1055,6 +1055,11 @@ button,
 .link-content {
   min-width: 0;
 }
+.button-link > .link-content {
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
 .navigation .link-content {
   display: flex;
   flex-direction: column;
