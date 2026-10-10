@@ -1,3 +1,4 @@
+import { swipeTrack } from "../helpers/touch-swipe";
 import { expect, test } from "@playwright/test";
 import { checkResponsiveActions } from "../helpers/responsive-actions";
 
@@ -92,24 +93,22 @@ test("feature pagination follows native touch scrolling", async ({
   const context = await browser.newContext({
     viewport: { width: 375, height: 900 },
     isMobile: true,
+    reducedMotion: "reduce",
     hasTouch: true,
   });
   const page = await context.newPage();
   await page.goto("/");
   const features = page.locator(".landing-features");
   const track = features.locator(".feature-grid");
-  await track.scrollIntoViewIfNeeded();
-  const box = (await track.boundingBox())!;
-  const session = await context.newCDPSession(page);
-  await session.send("Input.synthesizeScrollGesture", {
-    x: box.x + box.width * 0.8,
-    y: box.y + 80,
-    xDistance: -250,
-    yDistance: 0,
-    gestureSourceType: "touch",
-    speed: 500,
-  });
-  await expect(features.getByRole("status")).not.toHaveText("1 / 7 features");
+  await swipeTrack(page, track, "left");
+  await expect(features.getByRole("status")).toHaveText("2 / 7 features");
+  await swipeTrack(page, track, "right");
+  await expect(features.getByRole("status")).toHaveText("1 / 7 features");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
   await context.close();
 });
 

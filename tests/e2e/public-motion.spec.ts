@@ -1,3 +1,4 @@
+import { swipeTrack } from "../helpers/touch-swipe";
 import { expect, test } from "@playwright/test";
 import { checkResponsiveActions } from "../helpers/responsive-actions";
 
@@ -141,6 +142,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       await expect(carousel.getByRole("status")).toHaveText("Story 1 of 5");
       await page.keyboard.press("ArrowRight");
       await expect(carousel.getByRole("status")).toHaveText("Story 2 of 5");
+      await expect(carousel.locator('[aria-current="step"]')).toHaveCount(1);
       // Native scrolling (the path used by touch swipes) updates the indicators.
       await track.evaluate((node) => {
         node.scrollLeft = node.scrollWidth;
@@ -223,24 +225,17 @@ test("phone story cards follow touch swipes", async ({ browser }) => {
     viewport: { width: 375, height: 900 },
     hasTouch: true,
     isMobile: true,
+    reducedMotion: "reduce",
   });
   const page = await context.newPage();
   await page.goto("/");
   const carousel = page.locator(".mobile-story");
   const track = carousel.locator(".mobile-story-track");
-  await track.scrollIntoViewIfNeeded();
-  const box = (await track.boundingBox())!;
-  const session = await context.newCDPSession(page);
-  await session.send("Input.synthesizeScrollGesture", {
-    x: box.x + box.width * 0.8,
-    y: Math.max(60, box.y + 120),
-    xDistance: -250,
-    yDistance: 0,
-    gestureSourceType: "touch",
-    speed: 500,
-  });
-  await expect(carousel.getByRole("status")).not.toHaveText("Story 1 of 5");
+  await swipeTrack(page, track, "left");
+  await expect(carousel.getByRole("status")).toHaveText("Story 2 of 5");
   await expect(carousel.locator('[aria-current="step"]')).toHaveCount(1);
+  await swipeTrack(page, track, "right");
+  await expect(carousel.getByRole("status")).toHaveText("Story 1 of 5");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
