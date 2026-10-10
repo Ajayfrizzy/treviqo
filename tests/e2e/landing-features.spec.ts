@@ -14,6 +14,27 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
     });
     const cards = features.locator(".feature-card");
     await expect(cards).toHaveCount(7);
+    await expect(
+      features.getByRole("img", { name: /^Illustrative example:/ }),
+    ).toHaveCount(7);
+    // Every illustration fits its panel, including narrow mobile slides offscreen.
+    await expect
+      .poll(() =>
+        features.locator(".feature-preview").evaluateAll((panels) =>
+          panels.every((panel) => {
+            const bounds = panel.getBoundingClientRect();
+            return Array.from(panel.querySelectorAll("*")).every((child) => {
+              const rect = child.getBoundingClientRect();
+              return (
+                child.scrollWidth <= child.clientWidth + 1 &&
+                rect.left >= bounds.left - 1 &&
+                rect.right <= bounds.right + 1
+              );
+            });
+          }),
+        ),
+      )
+      .toBe(true);
     await expect(cards.first().getByRole("heading")).toHaveText(
       "Employment history",
     );
@@ -30,6 +51,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
         await expect(features.getByRole("status")).toHaveText(
           `${index + 1} / 7 features`,
         );
+        await track.scrollIntoViewIfNeeded();
         await expect(cards.nth(index)).toBeInViewport({ ratio: 0.8 });
       }
       await expect(
@@ -123,6 +145,9 @@ test("all feature content remains available without JavaScript", async ({
   await page.goto("/");
   const features = page.locator(".landing-features");
   await expect(features.locator(".feature-card")).toHaveCount(7);
+  await expect(
+    features.getByRole("img", { name: /^Illustrative example:/ }),
+  ).toHaveCount(7);
   await expect(features.getByRole("button")).toHaveCount(0);
   await features.locator(".feature-grid").evaluate((node) => {
     node.scrollLeft = node.scrollWidth;

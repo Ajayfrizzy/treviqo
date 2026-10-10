@@ -50,6 +50,175 @@ const icons = [
   "M5 16V9a7 7 0 0 1 14 0v7l2 2H3ZM9 21h6",
 ];
 
+// Illustrative records only: these panels never read or modify account data.
+function FeaturePreview({ index }: { index: number }) {
+  const headings = [
+    "Your work timeline",
+    "Your document vault",
+    "Proposed details",
+    "Your exit checklist",
+    "Evidence to compare",
+    "Your Benefit Passport",
+    "Next steps",
+  ];
+  return (
+    <div
+      className={`feature-preview feature-preview-${index + 1}`}
+      role="img"
+      aria-label={`Illustrative example: ${headings[index]}`}
+    >
+      <span className="feature-preview-caption" aria-hidden="true">
+        Example preview
+      </span>
+      <div className="feature-preview-sheet" aria-hidden="true">
+        <div className="feature-preview-heading">
+          <strong>{headings[index]}</strong>
+          <svg
+            viewBox="0 0 24 24"
+            width="22"
+            height="22"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d={icons[index]} />
+          </svg>
+        </div>
+        {index === 0 && (
+          <div className="feature-preview-timeline">
+            <div className="feature-preview-entry">
+              <strong>Acme Studio</strong>
+              <span>Product designer</span>
+              <small>2024 – Present</small>
+            </div>
+            <div className="feature-preview-entry">
+              <strong>Bright Solutions</strong>
+              <span>Design associate</span>
+              <small>2021 – 2024</small>
+            </div>
+          </div>
+        )}
+        {index === 1 && (
+          <div className="feature-preview-documents">
+            {["Contract.pdf", "Payslip.pdf", "Exit letter.pdf"].map(
+              (name, i) => (
+                <div className="feature-preview-file" key={name}>
+                  <span
+                    className={`feature-preview-file-icon feature-tone-${i}`}
+                  >
+                    PDF
+                  </span>
+                  <strong>{name}</strong>
+                </div>
+              ),
+            )}
+            <span className="feature-preview-footnote">Private access</span>
+          </div>
+        )}
+        {index === 2 && (
+          <>
+            <div className="feature-preview-row">
+              <span>Employer</span>
+              <strong>Acme Studio</strong>
+            </div>
+            <div className="feature-preview-row">
+              <span>Start date</span>
+              <strong>Jan 2024</strong>
+            </div>
+            <div className="feature-preview-note">From your contract</div>
+            <span className="feature-preview-badge feature-preview-pending">
+              Awaiting your review
+            </span>
+          </>
+        )}
+        {index === 3 && (
+          <div className="feature-preview-checklist">
+            {[
+              "Record exit dates",
+              "Collect exit letter",
+              "Review pension records",
+            ].map((label, i) => (
+              <div className="feature-preview-check" key={label}>
+                <span className={i === 0 ? "is-complete" : ""}>
+                  {i === 0 ? "✓" : ""}
+                </span>
+                <span>
+                  {label}
+                  <small>{i === 0 ? "Complete" : "Needs confirmation"}</small>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+        {index === 4 && (
+          <>
+            <div className="feature-preview-row">
+              <span>Expected amount</span>
+              <strong>₦120,000</strong>
+            </div>
+            <div className="feature-preview-row">
+              <span>Document amount</span>
+              <strong>₦120,000</strong>
+            </div>
+            <div className="feature-preview-note">
+              Reimbursement · reviewed evidence
+            </div>
+            <span className="feature-preview-badge feature-preview-pending">
+              Pension: follow-up needed
+            </span>
+          </>
+        )}
+        {index === 5 && (
+          <>
+            <div className="feature-preview-passport">
+              <span className="feature-preview-monogram">AS</span>
+              <div>
+                <strong>Acme Studio</strong>
+                <small>2021 – 2024 · Closed role</small>
+              </div>
+            </div>
+            <div className="feature-preview-row">
+              <span>Employment record</span>
+              <strong>Saved</strong>
+            </div>
+            <div className="feature-preview-row">
+              <span>Benefit assessment</span>
+              <strong>Recorded</strong>
+            </div>
+            <span className="feature-preview-footnote">
+              Your history, carried forward
+            </span>
+          </>
+        )}
+        {index === 6 && (
+          <div className="feature-preview-reminders">
+            <div className="feature-preview-reminder">
+              <span className="feature-preview-date">
+                12<small>OCT</small>
+              </span>
+              <div>
+                <strong>Upload pension statement</strong>
+                <small>Upcoming follow-up</small>
+              </div>
+            </div>
+            <div className="feature-preview-reminder">
+              <span className="feature-preview-date">
+                18<small>OCT</small>
+              </span>
+              <div>
+                <strong>Review exit letter</strong>
+                <small>Waiting for confirmation</small>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function LandingFeatures() {
   const track = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(0);
@@ -117,25 +286,14 @@ export function LandingFeatures() {
             key={number}
             aria-labelledby={`feature-${number}`}
           >
-            <div className="feature-card-top">
-              <span className="feature-number">{number}</span>
-              <svg
-                className="feature-icon"
-                viewBox="0 0 24 24"
-                width="28"
-                height="28"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <path d={icons[index]} />
-              </svg>
+            <div className="feature-card-copy">
+              <div className="feature-card-top">
+                <span className="feature-number">{number}</span>
+              </div>
+              <h3 id={`feature-${number}`}>{title}</h3>
+              <p>{description}</p>
             </div>
-            <h3 id={`feature-${number}`}>{title}</h3>
-            <p>{description}</p>
+            <FeaturePreview index={index} />
           </article>
         ))}
       </div>
