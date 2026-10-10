@@ -243,3 +243,29 @@ test("phone story cards follow touch swipes", async ({ browser }) => {
   ).toBe(true);
   await context.close();
 });
+
+test("chapter and story pagination hover states remain readable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 375, height: 900 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  const choices = page.getByRole("group", { name: "Explore example chapters" });
+  const documents = choices.getByRole("button", {
+    name: "Documents",
+    exact: true,
+  });
+  await documents.hover();
+  await expect(documents).toHaveCSS("background-color", "rgb(223, 234, 221)");
+  await expect(documents).not.toHaveCSS("color", "rgb(255, 255, 255)");
+  await documents.click();
+  await expect(documents).toHaveCSS("background-color", "rgb(32, 83, 68)");
+  await expect(documents).toHaveCSS("color", "rgb(255, 255, 255)");
+  const dots = page.getByRole("group", { name: "Choose a story" });
+  const next = dots.getByRole("button").nth(1);
+  await next.hover();
+  await expect(next).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await next.click();
+  await expect(next).toHaveAttribute("aria-current", "step");
+  await expect(next).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+});

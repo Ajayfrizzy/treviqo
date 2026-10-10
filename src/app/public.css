@@ -845,6 +845,16 @@
   border-color: var(--accent);
   box-shadow: inset 0 -3px 0 #ffffff55;
 }
+/* Override the global dark button hover, including touch-persisted hover. */
+.preview-choices button:hover:not(:disabled) {
+  background: #dfeadd;
+  color: var(--ink);
+  border-color: #52745e;
+}
+.preview-choices button[aria-pressed="true"]:hover:not(:disabled) {
+  background: #205344;
+  color: #fff;
+}
 .chapter-stack {
   display: grid;
 }
@@ -1366,6 +1376,12 @@
     padding: 0;
     border: 0;
     background: transparent;
+  }
+  .mobile-story-dots button:hover:not(:disabled) {
+    background: transparent;
+  }
+  .mobile-story-dots button:hover:not(:disabled) span {
+    background: var(--accent);
   }
   .mobile-story-dots button span {
     width: 8px;
