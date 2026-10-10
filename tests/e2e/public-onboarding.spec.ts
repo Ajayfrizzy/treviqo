@@ -77,7 +77,8 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       .getByRole("link", { name: "Create account", exact: true })
       .click();
     await expect(page).toHaveURL("/register");
-    await expect(page.getByLabel("Country or territory")).toHaveValue("");
+    await expect(page.getByLabel("Country or territory")).toHaveCount(0);
+    await expect(page.getByLabel("Preferred name")).toHaveCount(0);
     await page
       .getByRole("button", { name: "Create account", exact: true })
       .click();
@@ -89,8 +90,6 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
     emails.push(email);
     await page.getByLabel("First name", { exact: true }).fill("Adé");
     await page.getByLabel("Last name", { exact: true }).fill("Okafor");
-    await page.getByLabel("Preferred name").fill("Dee");
-    await page.getByLabel("Country or territory").selectOption("NG");
     await page.getByLabel("Email", { exact: true }).fill(email);
     await page.getByLabel("Password", { exact: true }).fill(password);
     await checkResponsiveActions(page);
@@ -103,8 +102,23 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       .click();
     await expect(page).toHaveURL("/home");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
-      "Welcome to Treviqo, Dee",
+      "Welcome to Treviqo, Adé",
     );
+    await page.goto("/profile");
+    const personalDetails = page.getByRole("region", {
+      name: "Edit personal details",
+    });
+    await expect(personalDetails.getByLabel("Preferred name")).toHaveValue("");
+    await expect(
+      personalDetails.getByLabel("Country or territory"),
+    ).toHaveValue("");
+    await personalDetails.getByLabel("Preferred name").fill("Dee");
+    await personalDetails.getByLabel("Country or territory").selectOption("NG");
+    await personalDetails.getByRole("button", { name: "Save profile" }).click();
+    await expect(personalDetails.getByRole("status")).toHaveText(
+      "Profile saved.",
+    );
+    await page.goto("/home");
     await expect(
       page.getByRole("region", { name: "Working-life overview" }),
     ).toHaveCount(0);
@@ -337,10 +351,8 @@ for (const failure of ["credential-error", "network-error"]) {
     await page.goto("/register");
     await page.getByLabel("First name", { exact: true }).fill("New");
     await page.getByLabel("Last name", { exact: true }).fill("Worker");
-    await expect(page.getByLabel("Preferred name")).not.toHaveAttribute(
-      "required",
-    );
-    await expect(page.getByLabel("Country or territory")).toHaveValue("");
+    await expect(page.getByLabel("Country or territory")).toHaveCount(0);
+    await expect(page.getByLabel("Preferred name")).toHaveCount(0);
     await page.getByLabel("Email", { exact: true }).fill(email);
     await page.getByLabel("Password", { exact: true }).fill(password);
     await page

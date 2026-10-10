@@ -303,21 +303,6 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
           </ul>
         </div>
       )}
-      {register && (
-        <fieldset className="optional-profile" disabled={busy}>
-          <legend>
-            Make it yours <span className="optional">(optional)</span>
-          </legend>
-          <ProfileFields
-            fields="optional"
-            errors={fieldErrors}
-            disabled={busy}
-            onChange={(name) =>
-              setFieldErrors((previous) => ({ ...previous, [name]: "" }))
-            }
-          />
-        </fieldset>
-      )}
       {error && (
         <p id="auth-error" className="form-message" role="alert">
           {error}
