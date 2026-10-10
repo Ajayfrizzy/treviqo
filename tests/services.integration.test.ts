@@ -28,14 +28,24 @@ beforeAll(() => {
   vi.stubEnv("NEXTAUTH_URL", "http://localhost:3000");
 });
 it("registers only a password hash, and rejects case-insensitive duplicates", async () => {
-  const user = await registerUser({ email, password });
+  const user = await registerUser({
+    email,
+    password,
+    firstName: "Fixture",
+    lastName: "Worker",
+  });
   userId = user.id;
   expect(Object.keys(user)).toEqual(["id"]);
   const row = await getDb().user.findUniqueOrThrow({ where: { id: userId } });
   expect(row.passwordHash).toMatch(/^\$argon2id\$/);
   expect(row.passwordHash).not.toContain(password);
   await expect(
-    registerUser({ email: email.toUpperCase(), password }),
+    registerUser({
+      email: email.toUpperCase(),
+      password,
+      firstName: "Fixture",
+      lastName: "Worker",
+    }),
   ).rejects.toThrow("Unable to create");
 });
 it("authenticates correct credentials and rejects incorrect/unknown accounts", async () => {

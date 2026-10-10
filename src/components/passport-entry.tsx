@@ -65,7 +65,7 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
           Only closed employment appears here. Return to your current employment
           records.
         </p>
-        <Link className="button-link" href="/">
+        <Link className="button-link" href="/home">
           Manage employment
         </Link>
       </section>

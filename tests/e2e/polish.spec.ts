@@ -16,6 +16,8 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
     const email = `polish-${randomUUID()}@example.test`;
     emails.push(email);
     await page.goto("/register");
+    await page.getByLabel("First name", { exact: true }).fill("Fixture");
+    await page.getByLabel("Last name", { exact: true }).fill("Worker");
     await page.getByLabel("Email", { exact: true }).fill(email);
     await page.getByLabel("Password", { exact: true }).fill("Abcdef1!");
     await expect(
@@ -50,7 +52,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       fullPage: true,
     });
     await page.getByRole("button", { name: "Sign in securely" }).click();
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/home");
     const nav = page.getByRole("navigation", { name: "Primary" });
     for (const label of ["Home", "Exit", "Passport", "Documents", "Profile"]) {
       await nav.getByRole("link", { name: label, exact: true }).click();
@@ -62,7 +64,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       ).toHaveText(
         (
           {
-            Home: "Your working life.",
+            Home: "Welcome to Treviqo, Fixture",
             Exit: "Job Exit Checker",
             Passport: "Benefit Passport",
             Documents: "Documents",
@@ -97,6 +99,10 @@ for (const width of [320, 1440]) {
     await page.setViewportSize({ width, height: 850 });
     for (const register of [true, false]) {
       await page.goto(register ? "/register" : "/sign-in");
+      if (register) {
+        await page.getByLabel("First name", { exact: true }).fill("Fixture");
+        await page.getByLabel("Last name", { exact: true }).fill("Worker");
+      }
       await page
         .getByLabel("Email", { exact: true })
         .fill("pending@example.test");

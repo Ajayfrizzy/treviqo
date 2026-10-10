@@ -11,6 +11,8 @@ async function account(page: Page) {
   const email = `delete-browser-${randomUUID()}@example.test`;
   emails.push(email);
   await page.goto("/register");
+  await page.getByLabel("First name", { exact: true }).fill("Fixture");
+  await page.getByLabel("Last name", { exact: true }).fill("Worker");
   await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page
@@ -21,7 +23,7 @@ async function account(page: Page) {
   await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in securely" }).click();
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/home");
   const created = await page.request.post("/api/employments", {
     headers: { origin },
     data: {
@@ -220,7 +222,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440])
     await page
       .getByRole("button", { name: "Verify and cancel deletion" })
       .click();
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/home");
     expect(
       (await db.user.findUniqueOrThrow({ where: { id: owner.userId } }))
         .deletionScheduledFor,

@@ -12,14 +12,17 @@ import { useState, type FormEvent } from "react";
 import Link from "@/components/action-link";
 import { useRouter } from "next/navigation";
 import {
-  credentialsSchema,
+  registrationSchema,
   signInSchema,
   passwordRequirements,
 } from "@/modules/auth/validation";
+import { ProfileFields } from "./profile-fields";
+import { displayName } from "@/modules/profile/shared";
 export function CredentialsForm({ register = false }: { register?: boolean }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [createdName, setCreatedName] = useState<string | null>(null);
   const [created, setCreated] = useState(false);
   const [pendingDate, setPendingDate] = useState<string | null>(null);
   const [processingDeletion, setProcessingDeletion] = useState(false);
@@ -37,10 +40,9 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
     const values = new FormData(form);
     const email = String(values.get("email") ?? "");
     const password = String(values.get("password") ?? "");
-    const parsed = (register ? credentialsSchema : signInSchema).safeParse({
-      email,
-      password,
-    });
+    const parsed = register
+      ? registrationSchema.safeParse(Object.fromEntries(values))
+      : signInSchema.safeParse({ email, password });
     if (!parsed.success) {
       const errors: Record<string, string> = {};
       for (const issue of parsed.error.issues)
@@ -62,7 +64,7 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
         const response = await uiRequest("/api/register", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify(parsed.data),
         });
         if (!response.ok) {
           setError(
@@ -74,6 +76,12 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
           );
           return;
         }
+        setCreatedName(
+          displayName({
+            preferredName: String(values.get("preferredName") ?? ""),
+            firstName: String(values.get("firstName") ?? ""),
+          }),
+        );
         form.reset();
         setPassword("");
         setCreated(true);
@@ -97,7 +105,7 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
           }
           return;
         }
-        router.replace("/");
+        router.replace("/home");
         router.refresh();
       }
     } catch {
@@ -156,8 +164,13 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
     return (
       <div role="status" className="auth-success">
         <span className="badge">Account created</span>
-        <h2>Your account is ready.</h2>
-        <p>Sign in to start keeping your employment records together.</p>
+        <h2>Welcome to Treviqo{createdName ? `, ${createdName}` : ""}</h2>
+        <p>
+          Your account is ready. Your working life now has one place to stay.
+        </p>
+        <p>
+          Sign in to add your first employment, or explore your personal space.
+        </p>
         <Link className="button-link" href="/sign-in">
           Sign in to Treviqo
         </Link>
@@ -173,6 +186,16 @@ export function CredentialsForm({ register = false }: { register?: boolean }) {
             session will be created after verification.
           </p>
         </>
+      )}
+      {register && (
+        <ProfileFields
+          requiredNames
+          errors={fieldErrors}
+          disabled={busy}
+          onChange={(name) =>
+            setFieldErrors((previous) => ({ ...previous, [name]: "" }))
+          }
+        />
       )}
       <div className="form-field">
         <label htmlFor="email">Email</label>

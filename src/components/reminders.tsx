@@ -48,7 +48,7 @@ export function Reminders({ initial }: { initial: Data }) {
   }
   return (
     <>
-      <Link className="touch-link" href="/">
+      <Link className="touch-link" href="/home">
         ← Home
       </Link>
       <h1>Your reminders</h1>

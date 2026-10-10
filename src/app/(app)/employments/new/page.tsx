@@ -5,7 +5,7 @@ export default async function NewEmployment() {
   await employmentPageUser();
   return (
     <>
-      <Link className="touch-link" href="/">
+      <Link className="touch-link" href="/home">
         ← Home
       </Link>
       <p className="eyebrow">Build your record</p>

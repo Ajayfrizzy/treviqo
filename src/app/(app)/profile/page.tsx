@@ -1,14 +1,13 @@
 import { SignOutButton } from "@/components/auth-actions";
 import { employmentPageUser } from "@/modules/employments/page-user";
 import { SESSION_SECONDS } from "@/modules/auth/session-store";
-import { getDb } from "@/server/db/client";
+import { getProfile } from "@/modules/profile/service";
+import { displayName, countries } from "@/modules/profile/shared";
+import { ProfileForm } from "@/components/profile-form";
 import { DeleteAccount } from "@/components/delete-account";
 export default async function Profile() {
   const user = await employmentPageUser();
-  const account = await getDb().user.findUniqueOrThrow({
-    where: { id: user.id },
-    select: { email: true },
-  });
+  const account = await getProfile(user.id);
   return (
     <>
       <p className="eyebrow">Your Treviqo</p>
@@ -21,6 +20,19 @@ export default async function Profile() {
           <span className="badge">Signed in</span>
           <h2>Your account</h2>
           <dl className="employment-details">
+            <dt>Display name</dt>
+            <dd>{displayName(account) ?? "Not specified"}</dd>
+            <dt>First name</dt>
+            <dd>{account.firstName ?? "Not specified"}</dd>
+            <dt>Last name</dt>
+            <dd>{account.lastName ?? "Not specified"}</dd>
+            <dt>Preferred name</dt>
+            <dd>{account.preferredName ?? "Not specified"}</dd>
+            <dt>Country or territory</dt>
+            <dd>
+              {countries.find((country) => country.code === account.country)
+                ?.label ?? "Not specified"}
+            </dd>
             <dt>Signed-in email</dt>
             <dd>{account.email ?? "Email not available"}</dd>
             <dt>Account security</dt>
@@ -47,6 +59,14 @@ export default async function Profile() {
           <SignOutButton />
         </section>
       </div>
+      <section className="card history" aria-labelledby="edit-profile-title">
+        <h2 id="edit-profile-title">Edit personal details</h2>
+        <p>
+          Your preferred name is used for greetings. Email remains your sign-in
+          identifier.
+        </p>
+        <ProfileForm initial={account} />
+      </section>
       <DeleteAccount />
     </>
   );

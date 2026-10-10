@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { personalName, profileSchema } from "@/modules/profile/shared";
 
 // Shared by the browser and server. Never trim or truncate passwords.
 export const passwordRequirements = [
@@ -43,3 +44,12 @@ export const signInSchema = z.object({
     .min(1, "Enter your password.")
     .max(128, "Password must be at most 128 characters."),
 });
+
+export const registrationSchema = z
+  .object({
+    ...profileSchema.shape,
+    firstName: personalName,
+    lastName: personalName,
+    ...credentialsSchema.shape,
+  })
+  .strict();

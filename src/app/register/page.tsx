@@ -1,5 +1,6 @@
 import { CredentialsForm } from "@/components/auth-actions";
 import { authConfigured } from "@/modules/auth/options";
+import { AuthLayout } from "@/components/auth-layout";
 export const dynamic = "force-dynamic";
 export default function Register() {
   let configured = false;
@@ -9,17 +10,11 @@ export default function Register() {
     /* Fail closed without exposing configuration. */
   }
   return (
-    <main id="main" className="welcome">
-      <div className="wordmark">
-        treviqo<span className="brand-dot">.</span>
-      </div>
-      <p className="eyebrow">Your records, your next chapter</p>
-      <h1>Create your account</h1>
-      <p className="intro">
-        Keep your employment and benefits history together, wherever work takes
-        you.
-      </p>
-      <section className="card">
+    <AuthLayout
+      title="Create your account"
+      intro="Keep your employment and benefits history together, wherever work takes you."
+    >
+      <div>
         {configured ? (
           <CredentialsForm register />
         ) : (
@@ -27,7 +22,7 @@ export default function Register() {
             Registration is being prepared. Please check back soon.
           </p>
         )}
-      </section>
-    </main>
+      </div>
+    </AuthLayout>
   );
 }

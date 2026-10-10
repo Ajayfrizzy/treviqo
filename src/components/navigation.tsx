@@ -2,7 +2,7 @@
 import Link from "@/components/action-link";
 import { usePathname } from "next/navigation";
 export const sections = [
-  { href: "/", label: "Home", icon: "home" },
+  { href: "/home", label: "Home", icon: "home" },
   { href: "/exit", label: "Exit", icon: "exit" },
   { href: "/passport", label: "Passport", icon: "passport" },
   { href: "/documents", label: "Documents", icon: "documents" },
@@ -52,7 +52,7 @@ export function Navigation() {
             (section.href === "/documents" && path.startsWith("/documents/")) ||
             (section.href === "/exit" && path.startsWith("/exit/")) ||
             (section.href === "/passport" && path.startsWith("/passport/")) ||
-            (section.href === "/" &&
+            (section.href === "/home" &&
               (path.startsWith("/employments/") || path === "/reminders"))
               ? "page"
               : undefined

@@ -17,6 +17,8 @@ vi.mock("@/modules/auth/password", () => ({ hashPassword: mocks.hash }));
 vi.mock("@/server/db/client", () => ({ getDb: mocks.db }));
 import { POST } from "@/app/api/register/route";
 const input = {
+  firstName: "Fixture",
+  lastName: "Worker",
   email: "private@example.test",
   password: "Private password must never be logged 7!",
 };

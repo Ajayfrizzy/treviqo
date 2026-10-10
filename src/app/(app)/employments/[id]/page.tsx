@@ -20,7 +20,7 @@ export default async function EmploymentDetail({
   const { saved } = await searchParams;
   return (
     <>
-      <Link className="touch-link" href="/">
+      <Link className="touch-link" href="/home">
         ← Home
       </Link>
       {(saved === "created" || saved === "updated") && (

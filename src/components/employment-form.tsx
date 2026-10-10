@@ -210,7 +210,7 @@ export function EmploymentForm({
         ) : (
           <Link
             className="button-link button-cancel"
-            href={employment ? `/employments/${employment.id}` : "/"}
+            href={employment ? `/employments/${employment.id}` : "/home"}
           >
             Cancel
           </Link>

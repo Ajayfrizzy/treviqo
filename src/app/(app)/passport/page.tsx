@@ -26,7 +26,7 @@ export default async function PassportPage() {
             bring its records here. An exit checklist does not close it
             automatically.
           </p>
-          <Link className="button-link" href="/">
+          <Link className="button-link" href="/home">
             Manage employment
           </Link>
         </section>

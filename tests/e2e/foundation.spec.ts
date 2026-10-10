@@ -8,6 +8,8 @@ async function register(page: Page) {
   const email = `e2e-${randomUUID()}@example.test`;
   accounts.push(email);
   await page.goto("/register");
+  await page.getByLabel("First name", { exact: true }).fill("Fixture");
+  await page.getByLabel("Last name", { exact: true }).fill("Worker");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -26,7 +28,7 @@ async function login(page: Page, email: string) {
   await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in securely" }).click();
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/home");
 }
 test.afterAll(async () => {
   await db.user.deleteMany({ where: { email: { in: accounts } } });
@@ -54,7 +56,13 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
   });
 }
 test("all five areas require authentication", async ({ page, request }) => {
-  for (const route of ["/", "/exit", "/passport", "/documents", "/profile"]) {
+  for (const route of [
+    "/home",
+    "/exit",
+    "/passport",
+    "/documents",
+    "/profile",
+  ]) {
     await page.goto(route);
     await expect(page).toHaveURL(/\/sign-in$/);
   }
@@ -80,7 +88,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
     await page.setViewportSize({ width, height: 850 });
     const email = await register(page);
     await login(page, email);
-    await page.goto("/");
+    await page.goto("/home");
     const nav = page.getByRole("navigation", { name: "Primary" });
     await expect(nav).toBeVisible();
     for (const label of ["Exit", "Passport", "Documents", "Profile", "Home"]) {
@@ -129,6 +137,8 @@ test("real registration, generic login failures, persistence and logout invalida
 }) => {
   const email = await register(page);
   await page.goto("/register");
+  await page.getByLabel("First name", { exact: true }).fill("Fixture");
+  await page.getByLabel("Last name", { exact: true }).fill("Worker");
   await page.getByLabel("Email", { exact: true }).fill(email.toUpperCase());
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page
@@ -202,6 +212,8 @@ test("registration shares server policy, shows requirements and supports reveal 
 }) => {
   await page.setViewportSize({ width: 320, height: 850 });
   await page.goto("/register");
+  await page.getByLabel("First name", { exact: true }).fill("Fixture");
+  await page.getByLabel("Last name", { exact: true }).fill("Worker");
   const passwordInput = page.getByLabel("Password", { exact: true });
   await expect(passwordInput).toHaveAttribute("autocomplete", "new-password");
   await expect(page.getByLabel("Email", { exact: true })).toHaveAttribute(

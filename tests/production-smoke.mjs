@@ -39,7 +39,12 @@ try {
       await request("/api/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({
+          email,
+          password,
+          firstName: "Fixture",
+          lastName: "Worker",
+        }),
       })
     ).status,
     201,

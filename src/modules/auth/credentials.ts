@@ -1,5 +1,5 @@
 import "server-only";
-import { credentialsSchema, signInSchema } from "./validation";
+import { registrationSchema, signInSchema } from "./validation";
 export { credentialsSchema } from "./validation";
 import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db/client";
@@ -19,9 +19,10 @@ export class RegistrationError extends Error {
   }
 }
 export async function registerUser(input: unknown): Promise<{ id: string }> {
-  const parsed = credentialsSchema.safeParse(input);
+  const parsed = registrationSchema.safeParse(input);
   if (!parsed.success) throw new RegistrationError();
-  const { email, password } = parsed.data;
+  const { email, password, firstName, lastName, preferredName, country } =
+    parsed.data;
   let allowed: boolean;
   try {
     allowed = await allowCredentialAttempt(email);
@@ -46,7 +47,14 @@ export async function registerUser(input: unknown): Promise<{ id: string }> {
     // Prisma connects lazily: connection errors during the query belong to this stage.
     databaseStage = "registration_database_user_create_failed";
     return await db.user.create({
-      data: { email, passwordHash },
+      data: {
+        email,
+        passwordHash,
+        firstName,
+        lastName,
+        preferredName,
+        country,
+      },
       select: { id: true },
     });
   } catch (error) {

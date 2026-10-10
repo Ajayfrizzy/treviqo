@@ -47,7 +47,12 @@ try {
     401,
   );
   assert.equal(
-    (await request("/api/register", json({ email, password }))).status,
+    (
+      await request(
+        "/api/register",
+        json({ email, password, firstName: "Fixture", lastName: "Worker" }),
+      )
+    ).status,
     201,
   );
   const { csrfToken } = await (await request("/api/auth/csrf")).json();

@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
+import "./public.css";
 export const metadata: Metadata = {
   title: { default: "Treviqo", template: "%s · Treviqo" },
   description: "Your employment and benefits history belongs to you.",

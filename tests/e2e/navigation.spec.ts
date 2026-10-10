@@ -31,6 +31,8 @@ for (const width of [375, 1440]) {
     const email = `navigation-${randomUUID()}@example.test`;
     emails.push(email);
     await page.goto("/register");
+    await page.getByLabel("First name", { exact: true }).fill("Fixture");
+    await page.getByLabel("Last name", { exact: true }).fill("Worker");
     await page.getByLabel("Email", { exact: true }).fill(email);
     await page
       .getByLabel("Password", { exact: true })
@@ -47,7 +49,7 @@ for (const width of [375, 1440]) {
       .getByLabel("Password", { exact: true })
       .fill("Synthetic test password 7!");
     await page.getByRole("button", { name: "Sign in securely" }).click();
-    await expect(page).toHaveURL("/");
+    await expect(page).toHaveURL("/home");
     if (prefetch) {
       try {
         await expect
@@ -71,7 +73,7 @@ for (const width of [375, 1440]) {
       ["Passport", "Benefit Passport"],
       ["Documents", "Documents"],
       ["Profile", "Profile"],
-      ["Home", "Your working life."],
+      ["Home", "Welcome to Treviqo, Fixture"],
     ]) {
       const start = performance.now();
       await nav.getByRole("link", { name: label, exact: true }).click();

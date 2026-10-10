@@ -11,6 +11,8 @@ async function account(page: Page) {
   emails.push(email);
   const password = "Synthetic vault test passphrase 7!";
   await page.goto("/register");
+  await page.getByLabel("First name", { exact: true }).fill("Fixture");
+  await page.getByLabel("Last name", { exact: true }).fill("Worker");
   await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page
@@ -21,7 +23,7 @@ async function account(page: Page) {
   await page.getByLabel("Email", { exact: true }).fill(email);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Sign in securely" }).click();
-  await expect(page).toHaveURL("/");
+  await expect(page).toHaveURL("/home");
   const response = await page.request.post("/api/employments", {
     headers: { origin: "http://127.0.0.1:3100" },
     data: {
