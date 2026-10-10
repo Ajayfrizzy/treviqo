@@ -1,43 +1,7 @@
 import Link from "@/components/action-link";
 import { HeroPreview } from "@/components/public-previews";
 import { StoryJourney } from "@/components/story-journey";
-const areas = [
-  [
-    "01",
-    "Employment history",
-    "Your roles, dates and employers, kept in one continuous record.",
-  ],
-  [
-    "02",
-    "Secure documents",
-    "Save contracts, payslips and other evidence with private access.",
-  ],
-  [
-    "03",
-    "AI-assisted document review",
-    "Get proposed details from your documents. Confirm or correct every important field.",
-  ],
-  [
-    "04",
-    "Job Exit Checker",
-    "Turn your dates, evidence and answers into a practical exit checklist.",
-  ],
-  [
-    "05",
-    "Settlement and pension review",
-    "Compare reviewed amounts and track pension items that need follow-up.",
-  ],
-  [
-    "06",
-    "Benefit Passport",
-    "Keep your closed employment history and benefit assessments together.",
-  ],
-  [
-    "07",
-    "Reminders",
-    "See outstanding actions and in-app prompts for your next step.",
-  ],
-];
+import { LandingFeatures } from "@/components/landing-features";
 export function PublicLanding() {
   return (
     <div className="public-site">
@@ -142,19 +106,7 @@ export function PublicLanding() {
               carrying your history forward.
             </p>
           </div>
-          <div className="feature-grid">
-            {areas.map(([number, title, description], index) => (
-              <article
-                className="feature-card"
-                key={number}
-                style={{ "--reveal-order": index } as React.CSSProperties}
-              >
-                <span className="feature-number">{number}</span>
-                <h3>{title}</h3>
-                <p>{description}</p>
-              </article>
-            ))}
-          </div>
+          <LandingFeatures />
         </section>
         <section
           id="how-it-works"

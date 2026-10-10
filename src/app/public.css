@@ -219,38 +219,123 @@
   max-width: 580px;
   margin-bottom: 2.5rem;
 }
+/* One set of feature cards: a phone scroll track and a wider-screen grid. */
+.landing-features {
+  min-width: 0;
+}
 .feature-grid {
+  position: relative;
   display: grid;
   gap: 1rem;
+  border-radius: 1rem;
 }
 .feature-card {
-  border: 1px solid var(--border);
+  min-width: 0;
+  border: 1px solid #d5dfd3;
   padding: 1.5rem;
   border-radius: 1rem;
-  background: white;
+  background: #fff;
   transition:
-    transform 0.2s,
-    border-color 0.2s;
+    border-color 200ms ease,
+    box-shadow 200ms ease;
 }
-.feature-card:hover {
-  transform: translateY(-3px);
-  border-color: #819b86;
+.feature-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
 }
 .feature-number {
-  display: block;
+  display: inline-grid;
+  place-items: center;
+  min-width: 38px;
+  height: 32px;
+  padding-inline: 0.5rem;
+  border-radius: 0.65rem;
+  background: #e5efe2;
+  color: #28573b;
   font-size: 0.8rem;
-  font-weight: 600;
-  color: #7c5d32;
-  margin-bottom: 1.75rem;
+  font-weight: 700;
+}
+.feature-icon {
+  color: #52745e;
 }
 .feature-card h3 {
-  font-size: 1.15rem;
-  margin: 0 0 0.65rem;
+  font-size: 1.2rem;
+  line-height: 1.3;
+  margin: 0 0 0.75rem;
   letter-spacing: -0.025em;
+  max-width: 27ch;
 }
 .feature-card p {
-  margin-bottom: 0;
+  margin: 0;
+  max-width: 45ch;
   font-size: 0.9rem;
+  line-height: 1.65;
+}
+.feature-swipe-hint,
+.feature-pagination {
+  display: none;
+}
+@media (hover: hover) {
+  .feature-card:hover {
+    border-color: #819b86;
+    box-shadow: 0 6px 20px #123f3508;
+  }
+}
+@media (max-width: 599px) {
+  .feature-swipe-hint {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    font-size: 0.8rem;
+    margin: 0 0 0.75rem;
+  }
+  .feature-grid {
+    display: flex;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    overscroll-behavior-x: contain;
+    gap: 0.75rem;
+    padding-bottom: 0.75rem;
+    scrollbar-width: thin;
+    scrollbar-color: #a5b9a7 transparent;
+  }
+  .feature-card {
+    flex: 0 0 calc(100% - 1.25rem);
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+    padding: 1.25rem;
+    min-height: 250px;
+  }
+  .feature-card:last-child {
+    margin-right: 1.25rem;
+  }
+  .feature-card-top {
+    margin-bottom: 1.75rem;
+  }
+  .feature-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 1.5rem;
+    margin-top: 0.5rem;
+  }
+  .feature-pagination button {
+    width: 48px;
+    min-height: 48px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 1.15rem;
+  }
+  .feature-pagination p {
+    margin: 0;
+    font-size: 0.8rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .feature-pagination strong {
+    color: var(--accent);
+  }
 }
 .journey-section {
   background: #edf1e9;
@@ -391,14 +476,10 @@
     animation: public-enter 0.9s 0.25s both;
   }
   @supports (animation-timeline: view()) {
-    .reveal,
-    .feature-card {
+    .reveal {
       animation: public-enter linear both;
       animation-timeline: view();
       animation-range: entry 0% entry 20%;
-    }
-    .feature-card {
-      animation-range: entry 0% entry calc(20% + var(--reveal-order) * 2%);
     }
   }
 }
@@ -414,6 +495,9 @@
   .feature-grid,
   .home-overview {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .feature-card:last-child {
+    grid-column: 1 / -1;
   }
   .public-actions > .button-link,
   .public-actions > .touch-link {
@@ -448,10 +532,13 @@
     gap: 5rem;
   }
   .feature-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
-  .feature-card:last-child {
+  .feature-card {
     grid-column: span 2;
+  }
+  .feature-card:nth-child(n + 4) {
+    grid-column: span 3;
   }
   .trust-grid {
     grid-template-columns: 1fr 1fr;
@@ -961,5 +1048,125 @@
   .story-panel:not([hidden]) .story-preview-row {
     animation: public-enter 320ms ease both;
     animation-delay: calc(var(--story-order) * 55ms);
+  }
+}
+
+/* Option A is phone-only. The existing storybook rules above stay unchanged. */
+.mobile-story {
+  display: none;
+}
+@media (max-width: 599px) {
+  .story-steps,
+  .story-navigation-hint,
+  .story-panels {
+    display: none !important;
+  }
+  .mobile-story {
+    display: block;
+    min-width: 0;
+  }
+  .mobile-story-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+  }
+  .mobile-story-controls p {
+    margin: 0 auto 0 0;
+    font-size: 0.8rem;
+  }
+  .mobile-story-controls button {
+    flex: 0 0 48px;
+    width: 48px;
+    padding: 0;
+    border-radius: 50%;
+    font-size: 1.25rem;
+  }
+  .mobile-story-track {
+    position: relative;
+    display: flex;
+    gap: 0.75rem;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x mandatory;
+    padding: 0.25rem 0 0.75rem;
+    scrollbar-width: thin;
+    scrollbar-color: #a5b9a7 transparent;
+  }
+  .mobile-story-card {
+    flex: 0 0 calc(100% - 1.25rem);
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid #d6dfd2;
+    border-radius: 1rem;
+    background: #fff;
+    scroll-snap-align: start;
+    scroll-snap-stop: always;
+  }
+  .mobile-story-card:last-child {
+    margin-right: 1.25rem;
+  }
+  .mobile-story-card[data-active="true"] {
+    border-color: #52745e;
+    background: #f8fcf6;
+  }
+  .mobile-story-card .story-copy h3 {
+    font-size: 1.2rem;
+  }
+  .mobile-story-card .story-copy > p {
+    font-size: 0.85rem;
+    margin-bottom: 0;
+  }
+  .mobile-story-card .story-copy ul {
+    display: none;
+  }
+  .mobile-story-card .story-kicker {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 2rem;
+    background: #dfeedd;
+  }
+  .mobile-story-card .story-visual {
+    margin-top: auto;
+    padding-inline: 0.5rem;
+  }
+  .mobile-story-card .story-mockup {
+    padding: 0.8rem;
+  }
+  .mobile-story-dots {
+    display: flex;
+    justify-content: center;
+    margin-top: 0.25rem;
+  }
+  .mobile-story-dots button {
+    display: grid;
+    place-items: center;
+    width: 48px;
+    min-height: 48px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .mobile-story-dots button span {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #b6c5b7;
+  }
+  .mobile-story-dots button[aria-current="step"] span {
+    background: var(--accent);
+    width: 20px;
+    border-radius: 1rem;
+  }
+  .mobile-story-position {
+    text-align: center;
+    font-size: 0.75rem;
+    margin: 0 0 1.25rem;
+  }
+  .mobile-story-cta {
+    width: 100%;
   }
 }

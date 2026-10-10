@@ -215,59 +215,200 @@ export function StoryJourney() {
             tabIndex={0}
             hidden={selected !== index}
           >
-            <div className="story-copy">
-              <span className="story-kicker">Chapter 0{index + 1}</span>
-              <h3>{step.title}</h3>
-              <p>{step.description}</p>
-              <ul>
-                {step.points.map((point) => (
-                  <li key={point}>
-                    <span aria-hidden="true">✓</span>
-                    {point}
-                  </li>
-                ))}
-              </ul>
-              {index === 4 && (
-                <Link className="button-link" href="/register">
-                  Create your account <span aria-hidden="true">→</span>
-                </Link>
-              )}
-            </div>
-            <figure className={`story-visual story-visual-${step.id}`}>
-              <span className="story-icon">
-                <StoryIcon kind={step.id} />
-              </span>
-              <div className="story-mockup">
-                <p className="story-example">Illustrative example</p>
-                <h4>{step.previewTitle}</h4>
-                {step.id === "evidence" && (
-                  <p className="story-private">Private document storage</p>
-                )}
-                <dl>
-                  {step.rows.map(([label, value], row) => (
-                    <div
-                      key={label}
-                      className="story-preview-row"
-                      style={{ "--story-order": row } as React.CSSProperties}
-                    >
-                      <dt>{label}</dt>
-                      <dd>{value}</dd>
-                    </div>
-                  ))}
-                </dl>
-                {step.id === "review" && (
-                  <p className="story-review-note">
-                    Waiting for your confirmation or correction
-                  </p>
-                )}
-              </div>
-              <figcaption>{step.caption}</figcaption>
-            </figure>
+            <StoryContent step={step} index={index} />
           </div>
         ))}
       </div>
+      <MobileStoryCarousel />
       <noscript>
         <style>{`.story-steps { display: none; } .story-panel[hidden] { display: grid; } .story-panels { display: grid; gap: 1rem; }`}</style>
+      </noscript>
+    </div>
+  );
+}
+
+function StoryContent({
+  step,
+  index,
+  mobile = false,
+}: {
+  step: (typeof journeySteps)[number];
+  index: number;
+  mobile?: boolean;
+}) {
+  return (
+    <>
+      {" "}
+      <div className="story-copy">
+        <span className="story-kicker">Chapter 0{index + 1}</span>
+        <h3>{step.title}</h3>
+        <p>{step.description}</p>
+        <ul>
+          {step.points.map((point) => (
+            <li key={point}>
+              <span aria-hidden="true">✓</span>
+              {point}
+            </li>
+          ))}
+        </ul>
+        {index === 4 && !mobile && (
+          <Link className="button-link" href="/register">
+            Create your account <span aria-hidden="true">→</span>
+          </Link>
+        )}
+      </div>
+      <figure className={`story-visual story-visual-${step.id}`}>
+        <span className="story-icon">
+          <StoryIcon kind={step.id} />
+        </span>
+        <div className="story-mockup">
+          <p className="story-example">Illustrative example</p>
+          <h4>{step.previewTitle}</h4>
+          {step.id === "evidence" && (
+            <p className="story-private">Private document storage</p>
+          )}
+          <dl>
+            {step.rows.map(([label, value], row) => (
+              <div
+                key={label}
+                className="story-preview-row"
+                style={{ "--story-order": row } as React.CSSProperties}
+              >
+                <dt>{label}</dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
+          {step.id === "review" && (
+            <p className="story-review-note">
+              Waiting for your confirmation or correction
+            </p>
+          )}
+        </div>
+        <figcaption>{step.caption}</figcaption>
+      </figure>
+    </>
+  );
+}
+
+function MobileStoryCarousel() {
+  const [active, setActive] = useState(0);
+  const track = useRef<HTMLDivElement>(null);
+  function move(index: number) {
+    const container = track.current;
+    const card = container?.children[index] as HTMLElement | undefined;
+    if (!container || !card) return;
+    container.scrollTo({
+      left: card.offsetLeft - (container.children[0] as HTMLElement).offsetLeft,
+      behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+        ? "instant"
+        : "smooth",
+    });
+  }
+  function updatePosition() {
+    const container = track.current;
+    if (!container) return;
+    const first = (container.children[0] as HTMLElement).offsetLeft;
+    let nearest = 0;
+    let distance = Infinity;
+    Array.from(container.children).forEach((node, index) => {
+      const delta = Math.abs(
+        (node as HTMLElement).offsetLeft - first - container.scrollLeft,
+      );
+      if (delta < distance) {
+        nearest = index;
+        distance = delta;
+      }
+    });
+    setActive(nearest);
+  }
+  return (
+    <div
+      className="mobile-story"
+      role="region"
+      aria-roledescription="carousel"
+      aria-label="Your working-life story cards"
+    >
+      <div className="mobile-story-controls">
+        <p>Swipe to explore your next chapter</p>
+        <button
+          type="button"
+          className="secondary"
+          aria-label="Previous story"
+          disabled={active === 0}
+          onClick={() => move(active - 1)}
+        >
+          ←
+        </button>
+        <button
+          type="button"
+          aria-label="Next story"
+          disabled={active === journeySteps.length - 1}
+          onClick={() => move(active + 1)}
+        >
+          →
+        </button>
+      </div>
+      <div
+        className="mobile-story-track"
+        ref={track}
+        onScroll={updatePosition}
+        tabIndex={0}
+        aria-label="Scroll through five story cards"
+        onKeyDown={(event) => {
+          const next =
+            event.key === "ArrowRight"
+              ? Math.min(active + 1, 4)
+              : event.key === "ArrowLeft"
+                ? Math.max(active - 1, 0)
+                : event.key === "Home"
+                  ? 0
+                  : event.key === "End"
+                    ? 4
+                    : null;
+          if (next !== null) {
+            event.preventDefault();
+            move(next);
+          }
+        }}
+      >
+        {journeySteps.map((step, index) => (
+          <article
+            key={step.id}
+            className="mobile-story-card"
+            data-active={active === index}
+            aria-roledescription="slide"
+            aria-label={`${index + 1} of 5: ${step.title}`}
+          >
+            <StoryContent step={step} index={index} mobile />
+          </article>
+        ))}
+      </div>
+      <div
+        className="mobile-story-dots"
+        role="group"
+        aria-label="Choose a story"
+      >
+        {journeySteps.map((step, index) => (
+          <button
+            type="button"
+            key={step.id}
+            aria-label={`Show story ${index + 1}: ${step.title}`}
+            aria-current={active === index ? "step" : undefined}
+            onClick={() => move(index)}
+          >
+            <span aria-hidden="true" />
+          </button>
+        ))}
+      </div>
+      <p className="mobile-story-position" role="status">
+        Story {active + 1} of 5
+      </p>
+      <Link className="button-link mobile-story-cta" href="/register">
+        Create your account <span aria-hidden="true">→</span>
+      </Link>
+      <noscript>
+        <style>{`.mobile-story-controls, .mobile-story-dots, .mobile-story-position { display: none; }`}</style>
       </noscript>
     </div>
   );

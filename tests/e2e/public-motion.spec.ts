@@ -54,55 +54,99 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       "Manage an exit",
       "Keep your history",
     ];
-    await expect(journey.getByRole("tabpanel")).toHaveAccessibleName(
-      "Add employment",
-    );
-    await expect(journey.getByRole("tabpanel")).toContainText(
-      "Example Company",
-    );
-    await expect(
-      journey.locator("[aria-expanded], .journey-toggle, .interactive-journey"),
-    ).toHaveCount(0);
-    for (const label of labels) {
-      const tab = journey.getByRole("tab", { name: label, exact: true });
-      await expect(tab).toBeVisible();
-      await tab.click();
-      await expect(tab).toHaveAttribute("aria-selected", "true");
-      await expect(journey.getByRole("tabpanel")).toHaveCount(1);
-      await expect(journey.getByRole("tabpanel")).toHaveAccessibleName(label);
-      await expect(journey.getByRole("tabpanel")).toContainText(
-        "Illustrative example",
+    if (width >= 600) {
+      await expect(journey.getByRole("tabpanel")).toHaveAccessibleName(
+        "Add employment",
       );
-      await checkResponsiveActions(page);
-      if (width === 375 || width === 1440) {
-        await journey.screenshot({
-          path: `test-results/story-${width}-${labels.indexOf(label) + 1}.png`,
-          animations: "disabled",
-        });
+      await expect(journey.getByRole("tabpanel")).toContainText(
+        "Example Company",
+      );
+      await expect(
+        journey.locator(
+          "[aria-expanded], .journey-toggle, .interactive-journey",
+        ),
+      ).toHaveCount(0);
+      for (const label of labels) {
+        const tab = journey.getByRole("tab", { name: label, exact: true });
+        await expect(tab).toBeVisible();
+        await tab.click();
+        await expect(tab).toHaveAttribute("aria-selected", "true");
+        await expect(journey.getByRole("tabpanel")).toHaveCount(1);
+        await expect(journey.getByRole("tabpanel")).toHaveAccessibleName(label);
+        await expect(journey.getByRole("tabpanel")).toContainText(
+          "Illustrative example",
+        );
+        await checkResponsiveActions(page);
+        if (width === 375 || width === 1440) {
+          await journey.screenshot({
+            path: `test-results/story-${width}-${labels.indexOf(label) + 1}.png`,
+            animations: "disabled",
+          });
+        }
       }
+      await expect(
+        journey.getByRole("link", { name: "Create your account" }),
+      ).toHaveAttribute("href", "/register");
+      await journey.getByRole("tab").last().focus();
+      await page.keyboard.press("Home");
+      await expect(journey.getByRole("tab").first()).toBeFocused();
+      await page.keyboard.press("ArrowRight");
+      await expect(journey.getByRole("tab").nth(1)).toBeFocused();
+      await expect(journey.getByRole("tab").nth(1)).toHaveAttribute(
+        "aria-selected",
+        "true",
+      );
+      await page.keyboard.press("ArrowLeft");
+      await expect(journey.getByRole("tab").first()).toBeFocused();
+      await page.keyboard.press("ArrowDown");
+      await expect(journey.getByRole("tab").nth(1)).toBeFocused();
+      await page.keyboard.press("ArrowUp");
+      await expect(journey.getByRole("tab").first()).toBeFocused();
+      await page.keyboard.press("End");
+      await expect(journey.getByRole("tab").last()).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(journey.getByRole("tabpanel")).toBeFocused();
+    } else {
+      const carousel = journey.getByRole("region", {
+        name: "Your working-life story cards",
+      });
+      await expect(journey.getByRole("tablist")).toHaveCount(0);
+      await expect(carousel.getByRole("article")).toHaveCount(5);
+      await expect(carousel.getByRole("status")).toHaveText("Story 1 of 5");
+      await expect(
+        carousel.getByRole("button", { name: "Previous story" }),
+      ).toBeDisabled();
+      for (let index = 0; index < labels.length; index++) {
+        await carousel
+          .getByRole("button", {
+            name: `Show story ${index + 1}: ${labels[index]}`,
+          })
+          .click();
+        await expect(carousel.getByRole("status")).toHaveText(
+          `Story ${index + 1} of 5`,
+        );
+        const card = carousel.getByRole("article").nth(index);
+        await expect(card).toHaveAttribute("data-active", "true");
+        await expect(card).toBeInViewport({ ratio: 0.5 });
+        await checkResponsiveActions(page);
+      }
+      await expect(
+        carousel.getByRole("button", { name: "Next story" }),
+      ).toBeDisabled();
+      await carousel.getByRole("button", { name: "Previous story" }).click();
+      await expect(carousel.getByRole("status")).toHaveText("Story 4 of 5");
+      const track = carousel.locator(".mobile-story-track");
+      await track.focus();
+      await page.keyboard.press("Home");
+      await expect(carousel.getByRole("status")).toHaveText("Story 1 of 5");
+      await page.keyboard.press("ArrowRight");
+      await expect(carousel.getByRole("status")).toHaveText("Story 2 of 5");
+      // Native scrolling (the path used by touch swipes) updates the indicators.
+      await track.evaluate((node) => {
+        node.scrollLeft = node.scrollWidth;
+      });
+      await expect(carousel.getByRole("status")).toHaveText("Story 5 of 5");
     }
-    await expect(
-      journey.getByRole("link", { name: "Create your account" }),
-    ).toHaveAttribute("href", "/register");
-    await journey.getByRole("tab").last().focus();
-    await page.keyboard.press("Home");
-    await expect(journey.getByRole("tab").first()).toBeFocused();
-    await page.keyboard.press("ArrowRight");
-    await expect(journey.getByRole("tab").nth(1)).toBeFocused();
-    await expect(journey.getByRole("tab").nth(1)).toHaveAttribute(
-      "aria-selected",
-      "true",
-    );
-    await page.keyboard.press("ArrowLeft");
-    await expect(journey.getByRole("tab").first()).toBeFocused();
-    await page.keyboard.press("ArrowDown");
-    await expect(journey.getByRole("tab").nth(1)).toBeFocused();
-    await page.keyboard.press("ArrowUp");
-    await expect(journey.getByRole("tab").first()).toBeFocused();
-    await page.keyboard.press("End");
-    await expect(journey.getByRole("tab").last()).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(journey.getByRole("tabpanel")).toBeFocused();
     await page.emulateMedia({ reducedMotion: "reduce" });
     await choices
       .getByRole("button", { name: "Documents", exact: true })
@@ -114,10 +158,20 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
     ).toBe("0s");
     expect(
       await journey
-        .locator(".story-panel:not([hidden]) .story-copy")
+        .locator(
+          width >= 600
+            ? ".story-panel:not([hidden]) .story-copy"
+            : ".mobile-story-card[data-active=true] .story-copy",
+        )
         .evaluate((el) => getComputedStyle(el).animationName),
     ).toBe("none");
-    await journey.getByRole("tab").first().click();
+    if (width >= 600) await journey.getByRole("tab").first().click();
+    else {
+      await journey
+        .getByRole("button", { name: "Show story 1: Add employment" })
+        .click();
+      await expect(journey.getByRole("status")).toHaveText("Story 1 of 5");
+    }
     await journey.screenshot({
       path: `test-results/story-journey-${width}.png`,
       animations: "disabled",
@@ -127,7 +181,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       fullPage: true,
       animations: "disabled",
     });
-    await journey.getByRole("tab").last().click();
+    if (width >= 600) await journey.getByRole("tab").last().click();
     await journey.getByRole("link", { name: "Create your account" }).click();
     await expect(page).toHaveURL("/register");
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(
@@ -151,11 +205,42 @@ test("journey stories are readable without JavaScript", async ({ browser }) => {
   const page = await context.newPage();
   await page.goto("/");
   const journey = page.locator("#how-it-works");
-  await expect(journey.locator(".story-panel:visible")).toHaveCount(5);
+  await expect(journey.locator(".mobile-story-card:visible")).toHaveCount(5);
   await expect(journey.getByRole("tablist")).toHaveCount(0);
   await expect(
     journey.getByRole("link", { name: "Create your account" }),
   ).toHaveAttribute("href", "/register");
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await context.close();
+});
+
+test("phone story cards follow touch swipes", async ({ browser }) => {
+  const context = await browser.newContext({
+    viewport: { width: 375, height: 900 },
+    hasTouch: true,
+    isMobile: true,
+  });
+  const page = await context.newPage();
+  await page.goto("/");
+  const carousel = page.locator(".mobile-story");
+  const track = carousel.locator(".mobile-story-track");
+  await track.scrollIntoViewIfNeeded();
+  const box = (await track.boundingBox())!;
+  const session = await context.newCDPSession(page);
+  await session.send("Input.synthesizeScrollGesture", {
+    x: box.x + box.width * 0.8,
+    y: Math.max(60, box.y + 120),
+    xDistance: -250,
+    yDistance: 0,
+    gestureSourceType: "touch",
+    speed: 500,
+  });
+  await expect(carousel.getByRole("status")).not.toHaveText("Story 1 of 5");
+  await expect(carousel.locator('[aria-current="step"]')).toHaveCount(1);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
