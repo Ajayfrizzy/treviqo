@@ -1,5 +1,6 @@
 import Link from "@/components/action-link";
-import { HeroPreview, JourneyPreview } from "@/components/public-previews";
+import { HeroPreview } from "@/components/public-previews";
+import { StoryJourney } from "@/components/story-journey";
 const areas = [
   [
     "01",
@@ -160,9 +161,7 @@ export function PublicLanding() {
           className="public-section journey-section reveal"
           aria-labelledby="journey-title"
         >
-          <p className="eyebrow">Start small. Build continuity.</p>
-          <h2 id="journey-title">One record at a time.</h2>
-          <JourneyPreview />
+          <StoryJourney />
         </section>
         <section
           className="public-section trust-grid reveal"
