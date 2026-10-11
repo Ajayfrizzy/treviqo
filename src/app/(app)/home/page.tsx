@@ -174,7 +174,10 @@ async function EmploymentOverview({
                 ))}
               </div>
             ) : (
-              <p>No previous employment recorded yet.</p>
+              <p>
+                No closed employment records yet. Your active roles appear
+                above.
+              </p>
             )}
           </section>
         </>
