@@ -5,17 +5,17 @@ const worker = {
   APP_URL: "https://treviqo.example.test",
   DATABASE_URL: "postgresql://user:password@db.private/treviqo",
   REDIS_URL: "rediss://:password@redis.private:6379",
+  S3_ENDPOINT: "https://objects.example.test",
+  S3_BUCKET: "private",
+  S3_REGION: "region",
+  S3_ACCESS_KEY_ID: "key",
+  S3_SECRET_ACCESS_KEY: "secret",
 };
 const web = {
   ...worker,
   NEXTAUTH_URL: worker.APP_URL,
   SESSION_SECRET:
     "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
-  S3_ENDPOINT: "https://objects.example.test",
-  S3_BUCKET: "private",
-  S3_REGION: "region",
-  S3_ACCESS_KEY_ID: "key",
-  S3_SECRET_ACCESS_KEY: "secret",
 };
 it("separates worker secrets from web requirements without weakening production readiness", () => {
   expect(deploymentEnv(worker, "worker").DATABASE_URL).toBe(
@@ -68,4 +68,11 @@ it("requires production mode and a generated session secret, with no value discl
       "web",
     ),
   ).toThrow("Incomplete environment group");
+});
+
+it("requires worker storage configuration for scheduled document deletion", () => {
+  const minimal = Object.fromEntries(
+    Object.entries(worker).filter(([key]) => !key.startsWith("S3_")),
+  );
+  expect(() => deploymentEnv(minimal, "worker")).toThrow("S3_ENDPOINT");
 });

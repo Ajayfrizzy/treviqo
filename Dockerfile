@@ -34,6 +34,7 @@ COPY --from=build --chown=treviqo:treviqo /app/package.json ./package.json
 COPY --from=build --chown=treviqo:treviqo /app/prisma ./prisma
 COPY --from=build --chown=treviqo:treviqo /app/tests/fixtures/intelligence ./tests/fixtures/intelligence
 USER treviqo
+EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s CMD node --conditions=react-server dist-worker/worker/health.js
 CMD ["node", "--conditions=react-server", "dist-worker/worker/main.js"]
 

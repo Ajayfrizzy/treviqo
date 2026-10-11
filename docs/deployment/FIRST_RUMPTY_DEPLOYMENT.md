@@ -11,7 +11,7 @@ Existing architecture remains web + worker + migration release job, with Rumpty 
 | Process | Required configuration |
 | --- | --- |
 | Web | NODE_ENV=production; APP_URL/NEXTAUTH_URL identical canonical HTTPS origin; generated SESSION_SECRET; DATABASE_URL; REDIS_URL; all five S3 variables; WORKER_REQUIRED=true |
-| Worker | NODE_ENV=production; APP_URL canonical HTTPS origin; DATABASE_URL; REDIS_URL. No session/storage/AI secrets required. |
+| Worker | NODE_ENV=production; APP_URL canonical HTTPS origin; DATABASE_URL; REDIS_URL; all five S3 variables for scheduled account/document deletion. Rumpty injects PORT for GET /health. No session/AI secrets required. |
 | Migration release job | DATABASE_URL for the selected target database, using a direct migration-capable connection. |
 | Operator probes | Web configuration for full checks; complete AI group for `--ai`. Uses same trust/network access as the application. |
 

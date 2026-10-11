@@ -11,7 +11,15 @@ export function deploymentEnv(
     throw new Error("NODE_ENV must be production");
   const required =
     role === "worker"
-      ? (["DATABASE_URL", "REDIS_URL"] as const)
+      ? ([
+          "DATABASE_URL",
+          "REDIS_URL",
+          "S3_ENDPOINT",
+          "S3_REGION",
+          "S3_BUCKET",
+          "S3_ACCESS_KEY_ID",
+          "S3_SECRET_ACCESS_KEY",
+        ] as const)
       : ([
           "DATABASE_URL",
           "REDIS_URL",

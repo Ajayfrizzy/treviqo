@@ -216,7 +216,7 @@ Historical Milestone 5/6 notes above describe saved dates before scheduling exis
 ### Worker release and monitoring
 
 1. Build explicit targets: `docker build --target runtime -t treviqo-web .`, `docker build --target worker -t treviqo-worker .`, and `docker build --target migrate -t treviqo-migrate .`. Run the migration release job against Rumpty PostgreSQL before starting the new versions. The default Docker target remains web.
-2. Run worker as an always-on, non-public Rumpty process using its image CMD. Configure private PostgreSQL and Redis URLs, a production HTTPS APP_URL, TLS trust and bounded database pools. No S3/AI credentials are needed by the worker itself. Use least privilege, persistent/noeviction Redis settings, a restart policy and at least a 90-second health start grace. Allow shutdown long enough for an in-flight bounded batch (two-minute lease); interrupted work is retried.
+2. Run worker as an always-on, non-public Rumpty process using its image CMD. Configure private PostgreSQL and Redis URLs, a production HTTPS APP_URL, TLS trust and bounded database pools. S3 credentials are required by scheduled account deletion; AI credentials are not needed. See the current worker deployment section below. Use least privilege, persistent/noeviction Redis settings, a restart policy and at least a 90-second health start grace. Allow more than 10 seconds for shutdown; interrupted work is recovered through the two-minute job lease.
 3. Run `npm run worker:health` or the image health command. Alert on missing heartbeat, attempts >=5, oldest due job >5 minutes, no completed sweep within two hours, database/Redis failures and failed container health. Inspect only BackgroundJob IDs, cursor, attempts and generic errorCode; never log document payloads or connection strings. Fix poisoned evidence/code/configuration and allow retry; do not delete domain records to unblock a batch.
 4. Keep production `WORKER_REQUIRED=true` (default); false is only a deliberate degraded/manual operating mode. Configure load balancer readiness at `/api/ready` and process liveness at `/api/health`. A worker outage affects readiness while liveness stays available. Do not restart a healthy web process merely for external dependency failure.
 5. Redis queue loss repairs itself from PostgreSQL, but rate-limit counters do not. Configure ingress rate/concurrency/body limits and Redis persistence. Test restart, network interruption, TLS and realistic job volume on Rumpty before release. No live AI calls are made by readiness or worker ticks.
@@ -261,3 +261,69 @@ requires exact-version listing/deletion support and permissions. Do not configur
 unversioned mode for a bucket retaining historical versions. Local fixtures do not
 establish live Rumpty versioning or retention behavior. See the
 [deletion specification](../security/ACCOUNT_DELETION.md).
+
+## Worker deployment when Rumpty cannot select Docker targets
+
+The root Dockerfile still ends with `FROM runtime AS default`, so the normal
+branch continues to deploy the web application. The existing `worker` target
+contains production dependencies (including the generated Prisma client/runtime),
+`dist-worker`, the Prisma schema/migrations, and deployment-check fixtures. Build
+output remains ignored by Git and Docker; it is generated inside the build stage.
+
+Create a separate branch **after the source changes have been reviewed and committed**.
+Use the same source revision as the web release. These commands are operator steps,
+not something the application runs:
+
+```sh
+git switch -c deploy/worker <web-release-commit>
+python3 - <<'PY'
+from pathlib import Path
+path = Path('Dockerfile')
+text = path.read_text()
+assert text.count('FROM runtime AS default') == 1
+path.write_text(text.replace('FROM runtime AS default', 'FROM worker AS default'))
+PY
+git diff -- Dockerfile
+git add Dockerfile
+git commit -m "Select worker as Rumpty default Docker target"
+git push -u origin deploy/worker
+```
+
+Connect a second Rumpty deployment to `deploy/worker`. Use its normal Docker build,
+without a command override. Set its HTTP health-check path to `/health`. Configure
+always-on execution (at least one worker instance); do not use scale-to-zero. Give
+startup health checks a 90-second grace period, matching the Docker worker check,
+and shutdown a grace period longer than 10 seconds. Future releases must update
+this branch from the matching web revision while retaining only this one-line
+Dockerfile stage difference. Do not merge the worker stage selection into main.
+
+The continuous worker listens on `0.0.0.0:$PORT`, or port `3001` if `PORT` is absent.
+Only `GET /health` is supported. It returns minimal, non-cacheable JSON with HTTP
+200 (`{"status":"ok"}`) or 503 (`{"status":"unhealthy"}`). Startup is unhealthy
+until the first successful tick and existing heartbeat/job-health check. Requests
+read an in-memory snapshot; they never query services or run jobs. A snapshot
+expires after 45 seconds without healthy local progress, even if a different
+worker continues updating the shared heartbeat. Other methods/paths return 404.
+
+SIGTERM/SIGINT stop HTTP immediately, interrupt the loop's wait, allow an in-flight
+tick to finish, and disconnect Redis/Prisma. A 10-second deadline forces a nonzero
+exit if an unabortable dependency call or cleanup stalls; durable job leases recover
+on restart. `--once` remains HTTP-free. `npm run worker:health` remains the existing
+independent heartbeat/durable-job CLI probe and Docker health check.
+
+Required worker environment:
+
+- `NODE_ENV=production`, `APP_URL=<canonical HTTPS web URL>`
+- `DATABASE_URL`, `REDIS_URL` pointing to the same services as the web deployment
+- `PORT` injected by Rumpty (no need to hardcode it)
+- `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`
+  for the existing account-cleanup job, which purges private documents before
+  deleting accounts; match the web bucket and appropriate deletion permissions
+- `S3_VERSIONING` and `S3_FORCE_PATH_STYLE` if the bucket requires non-default values
+
+No `SESSION_SECRET`, `NEXTAUTH_URL`, or AI variables are required. The core loop can
+start with database/Redis only, but document-bearing account deletion cannot finish
+without storage; production worker deployment preflight therefore requires S3.
+Run `npm run deployment:check -- --worker` with those variables to validate config,
+and add `--services --runtime` to check database/Redis and job health. Storage
+permissions/versioning still require the existing private-bucket acceptance checks.
