@@ -39,4 +39,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=90s CMD node --conditions
 CMD ["node", "--conditions=react-server", "dist-worker/worker/main.js"]
 
 # Preserve the web application as the default build target.
-FROM runtime AS default
+FROM worker AS default
