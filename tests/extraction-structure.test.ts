@@ -65,7 +65,9 @@ it("uses only a compact structural shape without concrete examples", () => {
     expect(prompt).toContain(
       "Return exactly one JSON object and nothing before or after it.",
     );
-    expect(prompt).toContain("Evidence must be an exact source excerpt.");
+    expect(prompt).toContain(
+      "Evidence is required and must be an exact source excerpt containing the value.",
+    );
     expect(prompt).toContain(
       "Copy the value exactly as it appears inside the evidence excerpt.",
     );

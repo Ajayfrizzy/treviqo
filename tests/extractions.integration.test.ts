@@ -82,8 +82,8 @@ it("persists only proposed grounded fields with source/model/version metadata, w
     documentType: "employment_contract",
     model: "fixture-model",
     sourceKind: "pdf_text",
-    promptVersion: "evidence-v7",
-    schemaVersion: "fields-v7",
+    promptVersion: "evidence-v8",
+    schemaVersion: "fields-v8",
   });
   expect(
     extraction!.fields.every(
@@ -1044,4 +1044,106 @@ it("persists a single grounded object followed by plain text as partial", async 
     value: null,
     confidence: "needs_review",
   });
+});
+
+it("persists recovered resignation evidence as unconfirmed partial and logs only counters", async () => {
+  const log = vi.spyOn(console, "info").mockImplementation(() => {});
+  ai.complete = async () =>
+    JSON.stringify({
+      fields: [
+        { key: "letter_date", value: "01 September 2026" },
+        { key: "proposed_last_day", value: "30 September 2026" },
+        { key: "notice_period", value: "30 days" },
+      ],
+    });
+  const result = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "resignation_letter",
+    text: "1 September 2026\nmy intended last working day is 30 September 2026\nin line with my notice requirement",
+  });
+  expect(result.extraction).toMatchObject({
+    status: "ready",
+    errorCode: "partial",
+  });
+  expect(
+    result.extraction?.fields.find((f) => f.key === "letter_date"),
+  ).toMatchObject({
+    proposedValue: "01 September 2026",
+    evidence: "1 September 2026",
+    value: null,
+    confidence: "needs_review",
+    reviewState: "proposed",
+  });
+  expect(log.mock.calls).toEqual([
+    [
+      "extraction_parse_partial missing_evidence=1 evidence_recovered=2 evidence_not_found=1",
+    ],
+  ]);
+});
+it("persists a contextual pension row while rejecting ambiguous repeated amounts", async () => {
+  const log = vi.spyOn(console, "info").mockImplementation(() => {});
+  const row = "August 2026 | 1 September 2026 | NGN 36,000.00 | NGN 45,000.00";
+  ai.complete = async () =>
+    JSON.stringify({
+      fields: [
+        { key: "contribution_1_period", value: "August 2026" },
+        { key: "contribution_1_date", value: "1 September 2026" },
+        { key: "contribution_1_employee_amount", value: "NGN 36,000" },
+        { key: "contribution_2_employer_amount", value: "NGN 45,000" },
+      ],
+    });
+  const result = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "pension_statement",
+    text:
+      row + "\nSeptember 2026 | 1 October 2026 | NGN 36,000.00 | NGN 45,000.00",
+  });
+  expect(result.extraction).toMatchObject({
+    status: "ready",
+    errorCode: "partial",
+  });
+  expect(
+    result.extraction?.fields.find(
+      (f) => f.key === "contribution_1_employee_amount",
+    ),
+  ).toMatchObject({
+    proposedValue: "NGN 36,000",
+    evidence: row,
+    value: null,
+    confidence: "needs_review",
+  });
+  expect(
+    result.extraction?.fields.find(
+      (f) => f.key === "contribution_2_employer_amount",
+    )?.proposedValue,
+  ).toBeNull();
+  expect(log.mock.calls).toEqual([
+    [
+      "extraction_parse_partial missing_evidence=1 evidence_recovered=3 evidence_ambiguous=1",
+    ],
+  ]);
+});
+it("logs only recovery failure counters when no evidence can be safely recovered", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  ai.complete = async () =>
+    JSON.stringify({
+      fields: [
+        { key: "letter_date", value: "1 September 2026" },
+        { key: "notice_period", value: "30 days" },
+      ],
+    });
+  const result = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "resignation_letter",
+    text: "1 September 2026\n1 September 2026",
+  });
+  expect(result.extraction).toMatchObject({
+    status: "failed",
+    errorCode: "malformed",
+  });
+  expect(log.mock.calls).toEqual([
+    [
+      "extraction_parse_rejected no_grounded_fields missing_evidence=2 evidence_ambiguous=1 evidence_not_found=1",
+    ],
+  ]);
 });

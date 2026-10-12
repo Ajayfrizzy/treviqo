@@ -189,7 +189,6 @@ it("expands sparse model proposals without weakening evidence, duplicate, or key
     [{ ...field, evidence: "invented excerpt" }],
     [{ ...field, value: "invented employer" }],
     [{ ...field, key: "legal_entitlement" }],
-    [{ key: "employer", value: field.value }],
   ]) {
     expect(() => parse(invalid)).toThrow();
   }
@@ -213,7 +212,7 @@ it("retains six grounded proposals while discarding two invalid ones", () => {
           value: "Explicit",
           evidence: "Explicit source",
         },
-        { key: "probation", value: "Explicit" },
+        { key: "probation", value: "Unstated" },
       ],
     }),
     "employment_contract",
@@ -305,8 +304,6 @@ it.each([
   { value: "  " },
   { value: "Inferred Company" },
   { value: 12 },
-  { evidence: undefined },
-  { evidence: "" },
   { evidence: "Employer: Made-up Ltd" },
 ])("retains valid fields beside a rejected candidate: %j", (override) => {
   const invalid = { ...proposal, ...override };

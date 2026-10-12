@@ -1,4 +1,4 @@
-import { valueGrounded } from "./grounding";
+import { deriveEvidenceFromSource, valueGrounded } from "./grounding";
 import { z } from "zod";
 import {
   confidenceSchema,
@@ -6,8 +6,8 @@ import {
   supportedTypes,
   type ExtractionType,
 } from "./shared";
-export const PROMPT_VERSION = "evidence-v7";
-export const SCHEMA_VERSION = "fields-v7";
+export const PROMPT_VERSION = "evidence-v8";
+export const SCHEMA_VERSION = "fields-v8";
 const cell = z
   .object({
     value: z.string().min(1).max(1000).nullable(),
@@ -225,6 +225,9 @@ export function parseFields(raw: string, type: ExtractionType, source: string) {
     invalid_structure: 0,
     unsupported_key: 0,
     missing_evidence: 0,
+    evidence_recovered: 0,
+    evidence_ambiguous: 0,
+    evidence_not_found: 0,
     evidence_mismatch: 0,
     value_mismatch: 0,
     conflicting_duplicate: 0,
@@ -310,6 +313,61 @@ function parseFieldEntries(
       }
       continue;
     }
+    if (
+      typeof item.value === "string" &&
+      item.value.trim() &&
+      item.value.length <= 1000 &&
+      (item.evidence == null ||
+        (typeof item.evidence === "string" && !item.evidence.trim()))
+    ) {
+      const prefix = /^(contribution_[1-3])_/.exec(key)?.[1];
+      // Use only explicitly proposed sibling context, never inferred context or
+      // another row's fields. Conflicting duplicates cannot disambiguate a row.
+      const contexts = new Map<string, string>();
+      let conflict = false;
+      if (prefix)
+        for (const candidate of entries) {
+          if (!record(candidate)) continue;
+          let sibling: Record<string, unknown>;
+          try {
+            sibling = normalizeProperties(candidate);
+          } catch {
+            continue;
+          }
+          if (typeof sibling.key !== "string") continue;
+          const siblingKey = normalizeKey(sibling.key);
+          if (
+            ![
+              `${prefix}_period`,
+              `${prefix}_date`,
+              `${prefix}_employer`,
+            ].includes(siblingKey)
+          )
+            continue;
+          if (
+            typeof sibling.value !== "string" ||
+            !sibling.value.trim() ||
+            sibling.value.length > 1000
+          )
+            continue;
+          if (
+            contexts.has(siblingKey) &&
+            contexts.get(siblingKey) !== sibling.value
+          )
+            conflict = true;
+          contexts.set(siblingKey, sibling.value);
+        }
+      const recovery = conflict
+        ? { evidence: null, reason: "evidence_ambiguous" as const }
+        : deriveEvidenceFromSource(
+            key,
+            item.value,
+            source,
+            [...contexts].map(([key, value]) => ({ key, value })),
+          );
+      counts[recovery.reason]!++;
+      if (recovery.evidence !== null) item.evidence = recovery.evidence;
+    }
     const parsed = cell.safeParse({
       value: item.value,
       evidence: item.evidence,
@@ -366,5 +424,5 @@ function parseFieldEntries(
       confidence: "needs_review" as const,
     }),
   }));
-  return Object.assign(fields, { partial });
+  return Object.assign(fields, { partial, counts });
 }

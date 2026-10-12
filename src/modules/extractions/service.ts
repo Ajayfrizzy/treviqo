@@ -328,6 +328,16 @@ export function extractionService(
                 const parsed = parseFields(raw, type, source);
                 proposals.push(...parsed);
                 partial = parsed.partial;
+                if (
+                  parsed.partial &&
+                  Object.values(parsed.counts).some(Boolean)
+                ) {
+                  const counters = Object.entries(parsed.counts)
+                    .filter(([, count]) => count > 0)
+                    .map(([label, count]) => `${label}=${count}`)
+                    .join(" ");
+                  console.info(`extraction_parse_partial ${counters}`);
+                }
               } catch (error) {
                 if (error instanceof ExtractionParseError) {
                   const counters = Object.entries(error.counts)

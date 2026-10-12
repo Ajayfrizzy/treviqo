@@ -81,39 +81,83 @@ function dateForm(value: string) {
     ? `${year}-${month}-${day}`
     : null;
 }
-function contains(value: string, evidence: string) {
-  if (!value) return false;
+function occurrences(value: string, evidence: string) {
+  if (!value) return 0;
   const escaped = value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return new RegExp(
-    `(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`,
-    "u",
-  ).test(evidence);
+  return [
+    ...evidence.matchAll(
+      new RegExp(`(?<![\\p{L}\\p{N}])(?=${escaped}(?![\\p{L}\\p{N}]))`, "gu"),
+    ),
+  ].length;
 }
-export function valueGrounded(key: string, proposed: string, excerpt: string) {
+function matchCount(key: string, proposed: string, excerpt: string) {
   const value = space(proposed),
     evidence = space(excerpt);
   if (isMoney(key)) {
     const canonical = moneyForm(value);
     if (canonical !== null)
-      return [...evidence.matchAll(moneyPattern)].some(
+      return [...evidence.matchAll(moneyPattern)].filter(
         ([token]) => moneyForm(token) === canonical,
-      );
+      ).length;
     // Clauses or unsupported formats still require an exact, bounded excerpt.
-    return contains(value, evidence);
+    return occurrences(value, evidence);
   }
   if (isDate(key)) {
     const full = [...value.matchAll(datePattern)];
     if (full.length === 1 && full[0]![0] === value) {
       const canonical = dateForm(value);
-      return (
-        canonical !== null &&
-        [...evidence.matchAll(datePattern)].some(
-          ([token]) => dateForm(token) === canonical,
-        )
-      );
+      return canonical !== null
+        ? [...evidence.matchAll(datePattern)].filter(
+            ([token]) => dateForm(token) === canonical,
+          ).length
+        : 0;
     }
     // Ambiguous numeric dates are never interpreted or reformatted.
-    return contains(value, evidence);
+    return occurrences(value, evidence);
   }
-  return contains(textForm(value), textForm(evidence));
+  return occurrences(textForm(value), textForm(evidence));
+}
+
+export function valueGrounded(key: string, proposed: string, excerpt: string) {
+  return matchCount(key, proposed, excerpt) > 0;
+}
+
+type Context = { key: string; value: string };
+export function deriveEvidenceFromSource(
+  key: string,
+  value: string,
+  source: string,
+  context: Context[] = [],
+):
+  | { evidence: string; reason: "evidence_recovered" }
+  | {
+      evidence: null;
+      reason: "evidence_ambiguous" | "evidence_not_found";
+    } {
+  const total = matchCount(key, value, source);
+  if (!total) return { evidence: null, reason: "evidence_not_found" };
+  const pensionAmount =
+    /^contribution_[1-3]_(employee_amount|employer_amount)$/.test(key);
+  // A model row index is not source context. Require explicit sibling context
+  // even for unique pension amounts; never guess a contribution row/column.
+  if (pensionAmount && !context.length)
+    return { evidence: null, reason: "evidence_ambiguous" };
+  if (!pensionAmount && total !== 1)
+    return { evidence: null, reason: "evidence_ambiguous" };
+  // Only recover within a physical source line. Flattened/wrapped tables that
+  // cannot identify one row fail closed; never join lines or synthesize evidence.
+  const lines = source
+    .split(/\r\n|\n|\r/)
+    .filter(
+      (line) =>
+        matchCount(key, value, line) > 0 &&
+        (!pensionAmount ||
+          context.every((item) => valueGrounded(item.key, item.value, line))),
+    );
+  if (lines.length !== 1 || matchCount(key, value, lines[0]!) !== 1)
+    return { evidence: null, reason: "evidence_ambiguous" };
+  const evidence = lines[0]!;
+  if (evidence.length > 1600)
+    return { evidence: null, reason: "evidence_not_found" };
+  return { evidence, reason: "evidence_recovered" };
 }
