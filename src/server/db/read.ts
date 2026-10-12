@@ -1,11 +1,12 @@
 import "server-only";
+import { readDatabase } from "./retry";
 import { DocumentError } from "@/modules/documents/validation";
 
 // Preserve domain/ownership errors, but never propagate provider diagnostics
 // into page rendering or API error messages. Existing retry boundaries handle 503.
 export async function readRecords<T>(read: () => Promise<T>): Promise<T> {
   try {
-    return await read();
+    return await readDatabase(read);
   } catch (error) {
     if (error instanceof DocumentError) throw error;
     throw new DocumentError(

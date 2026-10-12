@@ -1,11 +1,17 @@
 import "server-only";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type {
   PrismaClient,
   Prisma,
   DocumentType,
   EmploymentDocument,
 } from "@prisma/client";
+import {
+  readDatabase,
+  transientDatabaseError,
+  DatabaseUnavailableError,
+} from "@/server/db/retry";
+import { reserveExtraction } from "./reservation";
 import { getDb } from "@/server/db/client";
 import {
   getObjectStorage,
@@ -31,18 +37,13 @@ import {
   parseClassification,
   parseFields,
   ExtractionParseError,
-  PROMPT_VERSION,
   SCHEMA_VERSION,
 } from "./schema";
 import { chooseClassification, typeAnchors } from "./classification";
 import { classificationPrompt, extractionPrompt } from "./prompts";
 import { allowExtraction } from "./rate-limit";
 import { extractionDatabaseCode } from "./diagnostics";
-import {
-  persistAttempt,
-  EXTRACTION_LEASE_MS as leaseMs,
-  type Proposal,
-} from "./persistence";
+import { persistAttempt, type Proposal } from "./persistence";
 type Tx = Prisma.TransactionClient;
 class ExtractionFailure extends Error {
   constructor(public code: string) {
@@ -149,14 +150,16 @@ export function extractionService(
         throw new DocumentError("Document not found or not ready.", 404);
       return rows[0];
     }
-    const doc = await tx.employmentDocument.findFirst({
-      where: {
-        id: documentId,
-        userId,
-        status: "ready",
-        employment: { userId },
-      },
-    });
+    const doc = await readDatabase(() =>
+      tx.employmentDocument.findFirst({
+        where: {
+          id: documentId,
+          userId,
+          status: "ready",
+          employment: { userId },
+        },
+      }),
+    );
     if (!doc) throw new DocumentError("Document not found or not ready.", 404);
     return doc;
   }
@@ -182,17 +185,21 @@ export function extractionService(
     async read(userId: string, documentId: string, runId?: string) {
       await document(db, userId, documentId);
       await persistAttempt(db, userId, documentId);
-      const attempts = await db.documentExtraction.findMany({
-        where: { userId, documentId },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 20,
-        select: { id: true, status: true, createdAt: true },
-      });
-      const current = await db.documentExtraction.findFirst({
-        where: { userId, documentId, ...(runId ? { id: runId } : {}) },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        select: selection,
-      });
+      const attempts = await readDatabase(() =>
+        db.documentExtraction.findMany({
+          where: { userId, documentId },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 20,
+          select: { id: true, status: true, createdAt: true },
+        }),
+      );
+      const current = await readDatabase(() =>
+        db.documentExtraction.findFirst({
+          where: { userId, documentId, ...(runId ? { id: runId } : {}) },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          select: selection,
+        }),
+      );
       if (runId && !current)
         throw new DocumentError("Extraction not found.", 404);
       return {
@@ -215,40 +222,34 @@ export function extractionService(
             429,
           );
         stage = "reservation";
-        const run = await db.$transaction(async (tx) => {
-          const doc = await document(tx, userId, documentId, true);
-          const active = await tx.documentExtraction.findFirst({
-            where: {
-              documentId,
-              userId,
-              status: "processing",
-              createdAt: { gt: new Date(Date.now() - leaseMs) },
-            },
+        let run: { id: string; model: string };
+        try {
+          run = await reserveExtraction(db, {
+            id: randomUUID(),
+            userId,
+            documentId,
+            sourceKind:
+              input.mode === "manual"
+                ? "manual"
+                : input.text
+                  ? "user_transcript"
+                  : "pdf_text",
+            model: input.mode === "manual" ? "manual" : "unconfigured",
           });
-          if (active)
+        } catch (error) {
+          if (transientDatabaseError(error)) {
+            console.error("extraction_reservation_db_unavailable");
+            throw new DatabaseUnavailableError();
+          }
+          if (!(error instanceof DocumentError)) {
+            console.error("extraction_reservation_transaction_failed");
             throw new DocumentError(
-              "An extraction is already running. Refresh shortly.",
-              409,
+              "Extraction could not be started. Refresh and retry.",
+              503,
             );
-          await persistAttempt(tx, userId, documentId);
-          const created = await tx.documentExtraction.create({
-            data: {
-              userId,
-              documentId,
-              sourceKind:
-                input.mode === "manual"
-                  ? "manual"
-                  : input.text
-                    ? "user_transcript"
-                    : "pdf_text",
-              model: input.mode === "manual" ? "manual" : "unconfigured",
-              promptVersion: PROMPT_VERSION,
-              schemaVersion: SCHEMA_VERSION,
-            },
-          });
-          await audit(tx, doc, "extraction_started");
-          return created;
-        });
+          }
+          throw error;
+        }
         stage = "preparation";
         let model = run.model;
         let sourceHash: string | null = null;

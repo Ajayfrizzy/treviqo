@@ -1345,3 +1345,99 @@ it("persistence rejects cross-schema proposals before any writes", async () => {
   ).rejects.toThrow("Extraction schema mismatch");
   expect(raw).not.toHaveBeenCalled();
 });
+
+it("reserves and completes manual extraction without any interactive transaction", async () => {
+  const transaction = vi
+    .spyOn(db, "$transaction")
+    .mockRejectedValue(new Error("interactive transaction forbidden"));
+  const result = await service().start(userId, documentId, {
+    mode: "manual",
+    type: "payslip",
+  });
+  expect(result.extraction?.status).toBe("ready");
+  expect(transaction).not.toHaveBeenCalled();
+});
+it("retries a lost reservation acknowledgement using the same attempt ID and one audit", async () => {
+  const { reserveExtraction } =
+    await import("@/modules/extractions/reservation");
+  const { Prisma } = await import("@prisma/client");
+  const raw = db.$queryRaw.bind(db);
+  const query = vi.spyOn(db, "$queryRaw").mockImplementationOnce((async (
+    ...args: Parameters<typeof db.$queryRaw>
+  ) => {
+    await raw(...args);
+    throw new Prisma.PrismaClientKnownRequestError(
+      "private database endpoint",
+      { code: "P1001", clientVersion: "test" },
+    );
+  }) as typeof db.$queryRaw);
+  const id = crypto.randomUUID();
+  expect(
+    await reserveExtraction(db, {
+      id,
+      userId,
+      documentId,
+      model: "manual",
+      sourceKind: "manual",
+    }),
+  ).toEqual({ id, model: "manual" });
+  expect(query).toHaveBeenCalledTimes(2);
+  expect(await db.documentExtraction.count({ where: { documentId } })).toBe(1);
+  expect(
+    await db.auditEvent.count({
+      where: { documentId, action: "extraction_started" },
+    }),
+  ).toBe(1);
+});
+it("returns safe reservation outage diagnostics after one bounded retry", async () => {
+  const { Prisma } = await import("@prisma/client");
+  const query = vi.spyOn(db, "$queryRaw").mockRejectedValue(
+    new Prisma.PrismaClientKnownRequestError("private-host", {
+      code: "P1001",
+      clientVersion: "test",
+    }),
+  );
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  await expect(
+    service().start(userId, documentId, { mode: "manual", type: "payslip" }),
+  ).rejects.toMatchObject({
+    status: 503,
+    message:
+      "Treviqo temporarily lost connection to the database. Please retry.",
+  });
+  expect(query).toHaveBeenCalledTimes(2);
+  expect(log.mock.calls).toEqual([["extraction_reservation_db_unavailable"]]);
+});
+it("does not retry P2028 and reports only a safe reservation transaction diagnostic", async () => {
+  const { Prisma } = await import("@prisma/client");
+  const query = vi.spyOn(db, "$queryRaw").mockRejectedValue(
+    new Prisma.PrismaClientKnownRequestError("private transaction", {
+      code: "P2028",
+      clientVersion: "test",
+    }),
+  );
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  await expect(
+    service().start(userId, documentId, { mode: "manual", type: "payslip" }),
+  ).rejects.toMatchObject({
+    status: 503,
+    message: "Extraction could not be started. Refresh and retry.",
+  });
+  expect(query).toHaveBeenCalledTimes(1);
+  expect(log.mock.calls).toEqual([
+    ["extraction_reservation_transaction_failed"],
+  ]);
+});
+it("reservation leaves document metadata unchanged for Passport evidence freshness", async () => {
+  const before = await db.employmentDocument.findUniqueOrThrow({
+    where: { id: documentId },
+  });
+  await service().start(userId, documentId, {
+    mode: "manual",
+    type: "payslip",
+  });
+  const after = await db.employmentDocument.findUniqueOrThrow({
+    where: { id: documentId },
+  });
+  expect(after).toEqual(before);
+});
