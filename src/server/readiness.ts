@@ -19,19 +19,19 @@ async function bounded(check: () => Promise<unknown>) {
   }
 }
 export async function isReady() {
-  const checks = await Promise.allSettled([
-    bounded(async () => {
+  const checks = {
+    database: async () => {
       await getDb().user.findFirst({ select: { id: true } });
       await getDb().reminder.findFirst({ select: { id: true } });
       await getDb().backgroundJob.findFirst({ select: { id: true } });
-    }),
-    bounded(async () => {
+    },
+    redis: async () => {
       await getRedis().ping();
-    }),
-    bounded(async () => {
+    },
+    storage: async () => {
       await getObjectStorage().checkConnection();
-    }),
-    bounded(async () => {
+    },
+    worker: async () => {
       const env = getEnv();
       if (
         (env.WORKER_REQUIRED ??
@@ -39,10 +39,19 @@ export async function isReady() {
         !(await workerHealthy())
       )
         throw new Error("Worker unavailable");
-    }),
-    bounded(async () => {
+    },
+    auth: async () => {
       if (!authConfigured()) throw new Error("Auth unavailable");
-    }),
-  ]);
-  return checks.every((check) => check.status === "fulfilled");
+    },
+  };
+  const entries = Object.entries(checks);
+  const results = await Promise.allSettled(
+    entries.map(([, check]) => bounded(check)),
+  );
+  const failed = entries
+    .filter((_, index) => results[index]?.status !== "fulfilled")
+    .map(([label]) => label);
+  // Only these fixed labels reach logs; never serialize rejection reasons.
+  if (failed.length) console.error(`readiness_failed ${failed.join(",")}`);
+  return failed.length === 0;
 }
