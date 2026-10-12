@@ -1,4 +1,5 @@
 import "server-only";
+import { readRecords } from "@/server/db/read";
 import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { getDb } from "@/server/db/client";
@@ -51,6 +52,12 @@ export function financeService(db: PrismaClient = getDb()) {
         userId,
         status: "ready",
         documentId: { in: docs.map((doc) => doc.id) },
+        document: {
+          userId,
+          employmentId,
+          status: "ready",
+          employment: { userId },
+        },
       },
       include: { fields: true },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
@@ -239,9 +246,8 @@ export function financeService(db: PrismaClient = getDb()) {
     // Reuse the same authorized projection inside another domain snapshot.
     readInTransaction: view,
     read(userId: string, id: string) {
-      return db.$transaction((tx) => view(tx, userId, id), {
-        isolationLevel: "RepeatableRead",
-      });
+      // Display reads need no transaction snapshot; mutations revalidate atomically.
+      return readRecords(() => view(db, userId, id));
     },
     async command(userId: string, id: string, raw: unknown) {
       const command = commandSchema.parse(raw);

@@ -1,4 +1,4 @@
-import { beforeEach, afterEach, afterAll, expect, it } from "vitest";
+import { beforeEach, afterEach, afterAll, expect, it, vi } from "vitest";
 import type { DocumentType } from "@prisma/client";
 import { getDb } from "@/server/db/client";
 import { passportService } from "@/modules/passport/service";
@@ -480,4 +480,27 @@ it("never promotes proposed provider evidence and does not substitute an unselec
   });
   await source("pension_statement", { provider: "Different reviewed PFA" });
   expect((await service.read(a, job)).pension.provider).toBeNull();
+});
+
+it("reads nested Exit/Finance/Passport evidence without interactive transactions", async () => {
+  const exit = await exitService(db).create(a, {
+    employmentId: job,
+    answers: { exitType: "resignation", lastWorkingDate: "2026-10-30" },
+  });
+  await source();
+  const transaction = vi
+    .spyOn(db, "$transaction")
+    .mockRejectedValue(new Error("P2028 Transaction not found"));
+  try {
+    expect((await exitService(db).evidence(a, job)).documents).toHaveLength(1);
+    expect((await exitService(db).detail(a, exit.id)).id).toBe(exit.id);
+    expect((await financeService(db).read(a, exit.id)).exitCaseId).toBe(
+      exit.id,
+    );
+    expect((await service.read(a, job)).exit?.id).toBe(exit.id);
+    await expect(service.read(b, job)).rejects.toMatchObject({ status: 404 });
+    expect(transaction).not.toHaveBeenCalled();
+  } finally {
+    transaction.mockRestore();
+  }
 });

@@ -6,6 +6,7 @@ import { extractionService } from "@/modules/extractions/service";
 import {
   persistAttempt,
   reapExpiredAttempts,
+  EXTRACTION_LEASE_MS,
 } from "@/modules/extractions/persistence";
 import { FakeStorage } from "./helpers/fake-storage";
 import { InferenceError, type DocumentAI } from "@/server/ai/client";
@@ -277,7 +278,7 @@ it("guards concurrent attempts and permits stale attempt recovery", async () => 
   ).rejects.toMatchObject({ status: 409 });
   await db.documentExtraction.updateMany({
     where: { documentId },
-    data: { createdAt: new Date(Date.now() - 121000) },
+    data: { createdAt: new Date(Date.now() - (EXTRACTION_LEASE_MS + 1000)) },
   });
   await service().start(userId, documentId, {
     mode: "manual",
@@ -552,7 +553,7 @@ it("reconciles an expired run after both result and failure persistence are unav
   vi.restoreAllMocks();
   await db.documentExtraction.updateMany({
     where: { documentId },
-    data: { createdAt: new Date(Date.now() - 121000) },
+    data: { createdAt: new Date(Date.now() - (EXTRACTION_LEASE_MS + 1000)) },
   });
   const read = await service().read(userId, documentId);
   expect(read.extraction).toMatchObject({
@@ -591,7 +592,7 @@ it("marks an expired completion failed and never overwrites a newer attempt", as
   ai.complete = async () => {
     await db.documentExtraction.updateMany({
       where: { documentId, status: "processing" },
-      data: { createdAt: new Date(Date.now() - 121000) },
+      data: { createdAt: new Date(Date.now() - (EXTRACTION_LEASE_MS + 1000)) },
     });
     newer = (
       await service().start(userId, documentId, {
@@ -622,7 +623,7 @@ it("expires a late completion even without a newer attempt", async () => {
   ai.complete = async () => {
     await db.documentExtraction.updateMany({
       where: { documentId },
-      data: { createdAt: new Date(Date.now() - 121000) },
+      data: { createdAt: new Date(Date.now() - (EXTRACTION_LEASE_MS + 1000)) },
     });
     return JSON.stringify(fixture.fields);
   };
@@ -709,7 +710,10 @@ it("worker expiry reconciles abandoned attempts once without user visits", async
     schemaVersion: "test",
   };
   const old = await db.documentExtraction.create({
-    data: { ...common, createdAt: new Date(now.getTime() - 121000) },
+    data: {
+      ...common,
+      createdAt: new Date(now.getTime() - (EXTRACTION_LEASE_MS + 1000)),
+    },
   });
   const active = await db.documentExtraction.create({ data: common });
   expect(await reapExpiredAttempts(db, now)).toBe(false);
@@ -736,7 +740,7 @@ it("checks the lease after waiting for the document lock", async () => {
       sourceKind: "pdf_text",
       promptVersion: "test",
       schemaVersion: "test",
-      createdAt: new Date(Date.now() - 119700),
+      createdAt: new Date(Date.now() - (EXTRACTION_LEASE_MS - 300)),
     },
   });
   let locked!: () => void;
@@ -901,4 +905,20 @@ it("uses the same prompt only on explicit retry and preserves the failed attempt
   expect(
     (await service().read(userId, documentId, first.id)).extraction,
   ).toMatchObject({ status: "failed", errorCode: "malformed", fields: [] });
+});
+
+it("persists a valid slower inference result beyond the former two-minute lease", async () => {
+  const complete = ai.complete;
+  ai.complete = async (task) => {
+    await db.documentExtraction.updateMany({
+      where: { documentId, status: "processing" },
+      data: { createdAt: new Date(Date.now() - 150000) },
+    });
+    return complete(task);
+  };
+  const result = await service().start(userId, documentId, {
+    mode: "ai",
+    text: fixture.text,
+  });
+  expect(result.extraction?.status).toBe("ready");
 });

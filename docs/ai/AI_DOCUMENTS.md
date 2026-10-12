@@ -151,7 +151,7 @@ The model must never sum rows, infer contribution month from posting date, or as
 
 ## October 7 production extraction diagnosis
 
-The current candidate uses `evidence-v3` / `fields-v3`: a bounded sparse list of present `{key,value,evidence}` facts, expanded server-side to all review fields. Unknown/duplicate keys and missing evidence fail validation. Every sparse proposal starts `needs_review` / Proposed; no value becomes trusted automatically. Legacy complete cell responses retain strict validation. Classification requests 256 output tokens, extraction 2048, with the unchanged 25-second deadline and 64 KiB response cap. Live Rumpty currently does not reliably honor JSON structure/evidence requirements; manual entry remains necessary on failure. See [measured compatibility, failure-path analysis and validation](../deployment/AI_EXTRACTION_DIAGNOSIS.md). Earlier milestone protocol descriptions are historical.
+The current candidate uses `evidence-v3` / `fields-v3`: a bounded sparse list of present `{key,value,evidence}` facts, expanded server-side to all review fields. Unknown/duplicate keys and missing evidence fail validation. Every sparse proposal starts `needs_review` / Proposed; no value becomes trusted automatically. Legacy complete cell responses retain strict validation. Classification requests 256 output tokens, extraction 2048, with a configurable bounded deadline (see below) and 64 KiB response cap. Live Rumpty currently does not reliably honor JSON structure/evidence requirements; manual entry remains necessary on failure. See [measured compatibility, failure-path analysis and validation](../deployment/AI_EXTRACTION_DIAGNOSIS.md). Earlier milestone protocol descriptions are historical.
 
 ## 8 October 2026 compatibility and persistence update
 
@@ -208,3 +208,24 @@ available through collapsed history. See [the state model](../ui/UI_UX.md#extrac
 
 This correction changes no prompts, parser, persistence, APIs, rate limits or AI
 behavior. Protocol versions remain evidence-v5 / fields-v5.
+
+
+## Bounded inference timing
+
+`RUMPTY_AI_TIMEOUT_MS` defaults to 60000; accepted values are integers from
+10000 through 90000. Classification and extraction each receive this bound,
+including response-body reads, without automatic retries. Token budgets remain
+256 for classification and 2048 for extraction. Timeout errors retain the existing
+safe retry/manual-entry flow; provider responses are never logged.
+
+The extraction reservation and browser wait allow four minutes, accommodating two
+maximum-length calls plus preparation/persistence. This is an extraction attempt
+lifetime, not a change to the worker schedule. Deploy matching web/worker artifacts
+so their shared extraction-expiry constant agrees. Existing expiry locking and
+atomic result/failure persistence are retained.
+
+Exit evidence/detail, Finance detail, Passport detail, and reminder display reads
+use ordinary owner-filtered queries rather than long interactive transactions.
+These displays are not a single cross-query snapshot; mutations still recheck
+current evidence and versions inside their existing atomic transactions. Temporary
+read failures become generic typed 503 errors for existing retry/error boundaries.

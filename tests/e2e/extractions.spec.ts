@@ -334,7 +334,7 @@ test("review actions show local feedback, block repeated clicks, recover, and hi
     });
     expect(starts).toBe(1);
     await expect(page.getByRole("status")).toContainText(
-      "This may take up to 90 seconds",
+      "This may take a few minutes",
     );
   } finally {
     release();
@@ -528,7 +528,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       await expect(
         current.getByRole("heading", { name: "Extracting details…" }),
       ).toBeVisible();
-      await expect(current).toContainText("This may take up to 90 seconds");
+      await expect(current).toContainText("This may take a few minutes");
       await expect(
         page.getByRole("heading", { name: "Extraction failed" }),
       ).toHaveCount(0);

@@ -97,7 +97,7 @@ export function ExtractionReview({
       const response = await uiRequest(
         `/api/documents/${documentId}/extractions?runId=${encodeURIComponent(runId)}`,
         { method: "GET" },
-        120000,
+        240000,
       );
       const result: Bundle & { error?: string } = await response.json();
       if (!response.ok || !result.extraction)
@@ -147,7 +147,7 @@ export function ExtractionReview({
               : undefined,
           body: body ? JSON.stringify(body) : undefined,
         },
-        120000,
+        240000,
       );
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "Please retry.");
@@ -311,7 +311,7 @@ export function ExtractionReview({
           {busy && <div className="loading-track" aria-hidden="true" />}
           <p role="status">
             {newAttempt === "ai"
-              ? "This may take up to 90 seconds."
+              ? "This may take a few minutes."
               : newAttempt === "manual"
                 ? "Preparing fields for your review."
                 : "The new attempt’s outcome could not be confirmed. Refresh the review before trying again. Earlier attempts are in history."}
@@ -416,7 +416,7 @@ export function ExtractionReview({
             <p role="status">
               {historical
                 ? "This saved attempt was processing when read. Back to latest shows the latest review context."
-                : "This may take up to 90 seconds. Refresh shortly to see the result."}
+                : "This may take a few minutes. Refresh shortly to see the result."}
             </p>
           ) : (
             <p>

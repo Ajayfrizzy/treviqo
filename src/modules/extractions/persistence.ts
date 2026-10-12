@@ -2,7 +2,8 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient, type DocumentType } from "@prisma/client";
 
-export const EXTRACTION_LEASE_MS = 120000;
+// Two bounded 90s inference calls plus preparation/persistence headroom.
+export const EXTRACTION_LEASE_MS = 240000;
 export type Proposal = {
   key: string;
   value: string | null;

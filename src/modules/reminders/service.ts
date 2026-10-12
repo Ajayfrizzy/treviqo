@@ -1,4 +1,5 @@
 import "server-only";
+import { readRecords } from "@/server/db/read";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { z } from "zod";
 import { getDb } from "@/server/db/client";
@@ -101,50 +102,47 @@ export function reminderService(db: PrismaClient = getDb()) {
     },
     async list(userId: string, now = new Date()) {
       if (!userId) throw new DocumentError("Sign in to view reminders.", 401);
-      return db.$transaction(
-        async (tx) => {
-          // Group by owned cases so a resolved/snoozed backlog cannot conceal newer cases.
-          const exits = await tx.exitCase.findMany({
-            where: { userId },
-            select: { id: true },
-            orderBy: { id: "asc" },
+      return readRecords(async () => {
+        const tx = db; // Display-only; reconciliation and commands retain transactions.
+        // Group by owned cases so a resolved/snoozed backlog cannot conceal newer cases.
+        const exits = await tx.exitCase.findMany({
+          where: { userId },
+          select: { id: true },
+          orderBy: { id: "asc" },
+        });
+        const result: {
+          id: string;
+          version: number;
+          kind: string;
+          title: string;
+          message: string;
+          href: string;
+          dueAt: string;
+        }[] = [];
+        for (const exit of exits) {
+          const saved = await tx.reminder.findMany({
+            where: { userId, exitCaseId: exit.id },
           });
-          const result: {
-            id: string;
-            version: number;
-            kind: string;
-            title: string;
-            message: string;
-            href: string;
-            dueAt: string;
-          }[] = [];
-          for (const exit of exits) {
-            const saved = await tx.reminder.findMany({
-              where: { userId, exitCaseId: exit.id },
-            });
-            if (!saved.length) continue;
-            const { items } = await candidates(tx, userId, exit.id, now);
-            for (const row of saved) {
-              const item = items.find((item) => item.key === row.key);
-              if (item && reminderVisible(row, item, now))
-                result.push({
-                  id: row.id,
-                  version: row.version,
-                  kind: item.kind,
-                  title: item.title,
-                  message: item.message,
-                  href: item.href,
-                  dueAt: item.dueAt.toISOString(),
-                });
-            }
+          if (!saved.length) continue;
+          const { items } = await candidates(tx, userId, exit.id, now);
+          for (const row of saved) {
+            const item = items.find((item) => item.key === row.key);
+            if (item && reminderVisible(row, item, now))
+              result.push({
+                id: row.id,
+                version: row.version,
+                kind: item.kind,
+                title: item.title,
+                message: item.message,
+                href: item.href,
+                dueAt: item.dueAt.toISOString(),
+              });
           }
-          return result.sort(
-            (a, b) =>
-              a.dueAt.localeCompare(b.dueAt) || a.id.localeCompare(b.id),
-          );
-        },
-        { isolationLevel: "RepeatableRead" },
-      );
+        }
+        return result.sort(
+          (a, b) => a.dueAt.localeCompare(b.dueAt) || a.id.localeCompare(b.id),
+        );
+      });
     },
     async command(userId: string, raw: unknown, now = new Date()) {
       if (!userId) throw new DocumentError("Sign in to manage reminders.", 401);

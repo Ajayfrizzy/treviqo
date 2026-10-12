@@ -1,4 +1,5 @@
 import "server-only";
+import { readRecords } from "@/server/db/read";
 import { ensurePensionFollowup } from "@/modules/finance/lifecycle";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { getDb } from "@/server/db/client";
@@ -188,9 +189,8 @@ export function exitService(db: PrismaClient = getDb()) {
   }
   return {
     async evidence(userId: string, employmentId: string) {
-      return db.$transaction((tx) => evidence(tx, userId, employmentId), {
-        isolationLevel: "RepeatableRead",
-      });
+      // Display reads need no transaction snapshot; mutations revalidate atomically.
+      return readRecords(() => evidence(db, userId, employmentId));
     },
     async list(userId: string) {
       authenticated(userId);
@@ -215,9 +215,8 @@ export function exitService(db: PrismaClient = getDb()) {
     },
     readInTransaction: detail,
     async detail(userId: string, id: string): Promise<ExitRecord> {
-      return db.$transaction((tx) => detail(tx, userId, id), {
-        isolationLevel: "RepeatableRead",
-      });
+      // Display reads need no transaction snapshot; mutations revalidate atomically.
+      return readRecords(() => detail(db, userId, id));
     },
     async create(userId: string, raw: unknown) {
       authenticated(userId);
