@@ -150,7 +150,11 @@ it.each(["not JSON", '{"fields":['])(
       expect.fail("Expected rejection");
     } catch (error) {
       expect(error).toBeInstanceOf(ExtractionParseError);
-      expect((error as ExtractionParseError).counts.invalid_json).toBe(1);
+      expect(
+        (error as ExtractionParseError).counts[
+          raw.startsWith("{") ? "truncated_json" : "invalid_json"
+        ],
+      ).toBe(1);
       expect((error as Error).message).toBe("No grounded proposals");
     }
   },

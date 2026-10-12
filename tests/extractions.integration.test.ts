@@ -82,8 +82,8 @@ it("persists only proposed grounded fields with source/model/version metadata, w
     documentType: "employment_contract",
     model: "fixture-model",
     sourceKind: "pdf_text",
-    promptVersion: "evidence-v6",
-    schemaVersion: "fields-v6",
+    promptVersion: "evidence-v7",
+    schemaVersion: "fields-v7",
   });
   expect(
     extraction!.fields.every(
@@ -991,4 +991,57 @@ it("logs only fixed parse counters when all model proposals are rejected", async
   expect(JSON.stringify(log.mock.calls)).not.toMatch(
     /private|fabricated|secret_unknown|999/,
   );
+});
+
+it.each([
+  ['{"fields":[]} {"fields":[]}', "multiple_json_candidates"],
+  ['{"fields":[', "truncated_json"],
+  ["not JSON", "invalid_json"],
+])(
+  "logs only the structural rejection category for %s",
+  async (output, reason) => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    ai.complete = async () => output;
+    const result = await service().start(userId, documentId, {
+      mode: "ai",
+      type: "employment_contract",
+      text: fixture.text,
+    });
+    expect(result.extraction?.status).toBe("failed");
+    expect(
+      log.mock.calls.filter(([message]) =>
+        String(message).startsWith("extraction_parse_rejected"),
+      ),
+    ).toEqual([[`extraction_parse_rejected no_grounded_fields ${reason}=1`]]);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(output);
+  },
+);
+
+it("persists a single grounded object followed by plain text as partial", async () => {
+  ai.complete = async () =>
+    JSON.stringify({
+      fields: [
+        {
+          key: "employer",
+          value: "Actual Company",
+          evidence: "Employer: Actual Company",
+        },
+      ],
+    }) + " These are the extracted fields.";
+  const result = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "employment_contract",
+    text: "Employer: Actual Company",
+  });
+  expect(result.extraction).toMatchObject({
+    status: "ready",
+    errorCode: "partial",
+  });
+  expect(
+    result.extraction?.fields.find((f) => f.key === "employer"),
+  ).toMatchObject({
+    proposedValue: "Actual Company",
+    value: null,
+    confidence: "needs_review",
+  });
 });

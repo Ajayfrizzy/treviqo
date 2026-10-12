@@ -6,8 +6,8 @@ import {
   supportedTypes,
   type ExtractionType,
 } from "./shared";
-export const PROMPT_VERSION = "evidence-v6";
-export const SCHEMA_VERSION = "fields-v6";
+export const PROMPT_VERSION = "evidence-v7";
+export const SCHEMA_VERSION = "fields-v7";
 const cell = z
   .object({
     value: z.string().min(1).max(1000).nullable(),
@@ -74,6 +74,14 @@ export function groundedCell(
 }
 // Bounded structural salvage only: one complete JSON object or array, possibly
 // fenced or wrapped in prose. Never invent delimiters or splice broken objects.
+class JsonStructureError extends Error {
+  constructor(
+    public readonly reason:
+      "invalid_json" | "multiple_json_candidates" | "truncated_json",
+  ) {
+    super("Invalid extraction structure");
+  }
+}
 function decodeValue(raw: string): unknown {
   if (raw.length > 65536) throw new Error("Oversized output");
   let start = -1,
@@ -87,6 +95,8 @@ function decodeValue(raw: string): unknown {
       if (c === "{" || c === "[") {
         start = i;
         stack.push(c);
+      } else if (c === "}" || c === "]") {
+        throw new JsonStructureError("invalid_json");
       }
       continue;
     }
@@ -107,8 +117,11 @@ function decodeValue(raw: string): unknown {
       }
     }
   }
-  if (start >= 0 || candidates.length !== 1)
-    throw new Error("Ambiguous output");
+  // Never select/merge one payload from several, even if one looks like an example.
+  if (candidates.length > 1)
+    throw new JsonStructureError("multiple_json_candidates");
+  if (start >= 0) throw new JsonStructureError("truncated_json");
+  if (candidates.length !== 1) throw new JsonStructureError("invalid_json");
   return JSON.parse(candidates[0]!);
 }
 function record(value: unknown): value is Record<string, unknown> {
@@ -207,6 +220,8 @@ export class ExtractionParseError extends Error {
 export function parseFields(raw: string, type: ExtractionType, source: string) {
   const counts = {
     invalid_json: 0,
+    multiple_json_candidates: 0,
+    truncated_json: 0,
     invalid_structure: 0,
     unsupported_key: 0,
     missing_evidence: 0,
@@ -231,8 +246,10 @@ function parseFieldEntries(
   let decoded: unknown;
   try {
     decoded = decodeValue(raw);
-  } catch {
-    counts.invalid_json!++;
+  } catch (error) {
+    const reason =
+      error instanceof JsonStructureError ? error.reason : "invalid_json";
+    counts[reason]!++;
     throw new ExtractionParseError(counts);
   }
   let entries: unknown[];
