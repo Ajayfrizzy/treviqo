@@ -82,8 +82,8 @@ it("persists only proposed grounded fields with source/model/version metadata, w
     documentType: "employment_contract",
     model: "fixture-model",
     sourceKind: "pdf_text",
-    promptVersion: "evidence-v5",
-    schemaVersion: "fields-v5",
+    promptVersion: "evidence-v6",
+    schemaVersion: "fields-v6",
   });
   expect(
     extraction!.fields.every(
@@ -921,4 +921,74 @@ it("persists a valid slower inference result beyond the former two-minute lease"
     text: fixture.text,
   });
   expect(result.extraction?.status).toBe("ready");
+});
+
+it("persists normalized grounded proposals as partial and unconfirmed", async () => {
+  const source =
+    "Employer: Northbridge Systems Nigeria Ltd. Salary: NGN 450,000.00";
+  ai.complete = async () =>
+    JSON.stringify({
+      fields: [
+        {
+          key: "salary",
+          value: "NGN450000",
+          evidence: "Salary: NGN 450,000.00",
+        },
+        {
+          key: "employer",
+          value: "Invented Ltd",
+          evidence: "Employer: Northbridge Systems Nigeria Ltd.",
+        },
+      ],
+    });
+  const result = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "employment_contract",
+    text: source,
+  });
+  expect(result.extraction).toMatchObject({
+    status: "ready",
+    errorCode: "partial",
+  });
+  expect(
+    result.extraction?.fields.find((f) => f.key === "salary"),
+  ).toMatchObject({
+    proposedValue: "NGN450000",
+    value: null,
+    evidence: "Salary: NGN 450,000.00",
+    confidence: "needs_review",
+    reviewState: "proposed",
+  });
+});
+it("logs only fixed parse counters when all model proposals are rejected", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  ai.complete = async () =>
+    JSON.stringify({
+      fields: [
+        {
+          key: "salary",
+          value: "NGN 999",
+          evidence: "private fabricated evidence",
+        },
+        { key: "secret_unknown", value: "private-value" },
+      ],
+    });
+  const result = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "employment_contract",
+    text: "Salary: NGN 450,000.00 from the source",
+  });
+  expect(result.extraction?.status).toBe("failed");
+  expect(
+    log.mock.calls.filter(([message]) =>
+      String(message).startsWith("extraction_parse_rejected"),
+    ),
+  ).toEqual([
+    [
+      "extraction_parse_rejected no_grounded_fields unsupported_key=1 evidence_mismatch=1",
+    ],
+  ]);
+  expect(JSON.stringify(log.mock.calls)).not.toMatch(
+    /private|fabricated|secret_unknown|999/,
+  );
 });

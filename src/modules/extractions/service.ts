@@ -29,6 +29,7 @@ import {
 import {
   parseClassification,
   parseFields,
+  ExtractionParseError,
   PROMPT_VERSION,
   SCHEMA_VERSION,
 } from "./schema";
@@ -327,8 +328,16 @@ export function extractionService(
                 const parsed = parseFields(raw, type, source);
                 proposals.push(...parsed);
                 partial = parsed.partial;
-              } catch {
-                console.error("extraction_output_invalid", "extraction");
+              } catch (error) {
+                if (error instanceof ExtractionParseError) {
+                  const counters = Object.entries(error.counts)
+                    .filter(([, count]) => count > 0)
+                    .map(([label, count]) => `${label}=${count}`)
+                    .join(" ");
+                  console.error(
+                    `extraction_parse_rejected no_grounded_fields${counters ? ` ${counters}` : ""}`,
+                  );
+                } else console.error("extraction_output_invalid", "extraction");
                 throw new ExtractionFailure("malformed");
               }
             }

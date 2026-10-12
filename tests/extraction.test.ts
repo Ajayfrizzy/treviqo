@@ -289,7 +289,13 @@ it.each([
 ])("salvages a grounded partial proposal without confirming it: %s", (raw) => {
   const result = parseFields(raw, "employment_contract", source);
   expect(result.filter((field) => field.value)).toEqual([
-    { ...proposal, confidence: "needs_review" },
+    {
+      ...proposal,
+      ...(raw.includes(" Acme Ltd ")
+        ? { value: " Acme Ltd ", evidence: " Employer: Acme Ltd " }
+        : {}),
+      confidence: "needs_review",
+    },
   ]);
   expect(result.partial).toBe(true);
 });
@@ -361,7 +367,7 @@ it("uses deterministic compact type-specific prompts with no completeness reques
     expect(prompt).toEqual(extractionPrompt(source, type));
     expect(prompt.system).toContain("Omit fields you cannot ground");
     expect(prompt.system).toContain(
-      "Copy value and its containing evidence excerpt exactly",
+      "Copy the value exactly as it appears inside the evidence excerpt",
     );
     expect(prompt.system).not.toContain("entries_complete");
     expect(prompt.system).not.toContain('"confidence":');
