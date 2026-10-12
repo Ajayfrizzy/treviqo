@@ -53,6 +53,11 @@ const handler = async (request, response) => {
               evidence: field.evidence,
             })),
         };
+    if (source.includes("FIXTURE_WRONG_TYPE") && classify)
+      result = {
+        type: fixture.type === "payslip" ? "employment_contract" : "payslip",
+        evidence: fixture.classification.evidence,
+      };
     if (source.includes("FIXTURE_LOW") && classify)
       result = { ...fixture.classification, confidence: "low" };
     if (source.includes("FIXTURE_PARTIAL") && !classify) {

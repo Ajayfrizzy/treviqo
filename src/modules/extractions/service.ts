@@ -19,6 +19,7 @@ import {
 import { ContentError, prepareDocument } from "@/server/ai/content";
 import { DocumentError } from "@/modules/documents/validation";
 import {
+  fieldAllowed,
   startSchema,
   reviewSchema,
   fieldLabels,
@@ -33,6 +34,7 @@ import {
   PROMPT_VERSION,
   SCHEMA_VERSION,
 } from "./schema";
+import { chooseClassification, typeAnchors } from "./classification";
 import { classificationPrompt, extractionPrompt } from "./prompts";
 import { allowExtraction } from "./rate-limit";
 import { extractionDatabaseCode } from "./diagnostics";
@@ -75,17 +77,46 @@ const selection = {
   fields: { select: fieldSelect, orderBy: { key: "asc" as const } },
 } satisfies Prisma.DocumentExtractionSelect;
 type Row = Prisma.DocumentExtractionGetPayload<{ select: typeof selection }>;
+type CategoryContext = Pick<
+  Row,
+  "status" | "documentType" | "sourceKind" | "schemaVersion"
+> & {
+  fields: Pick<
+    Row["fields"][number],
+    "key" | "value" | "proposedValue" | "evidence"
+  >[];
+};
+function needsTypeConfirmation(row: CategoryContext) {
+  if (row.status !== "ready") return false;
+  if (
+    !row.documentType ||
+    !supportedTypes.includes(row.documentType as ExtractionType)
+  )
+    return true;
+  const category = row.fields.find((f) => f.key === "document_type");
+  if (category?.value && category.value !== row.documentType) return true;
+  if (category?.proposedValue && category.proposedValue !== row.documentType)
+    return true;
+  const anchors = typeAnchors(category?.evidence ?? "");
+  if (anchors.some((anchor) => anchor.type !== row.documentType)) return true;
+  // Earlier automated attempts did not validate classification purpose. Do not
+  // silently rewrite history or present their schema as validated on reload.
+  return row.sourceKind !== "manual" && row.schemaVersion !== SCHEMA_VERSION;
+}
 function serialize(row: Row): ExtractionRecord {
   return {
     ...row,
     createdAt: row.createdAt.toISOString(),
-    fields: row.fields.map((field) => ({
-      ...field,
-      revisions: field.revisions.map((revision) => ({
-        ...revision,
-        createdAt: revision.createdAt.toISOString(),
+    needsTypeConfirmation: needsTypeConfirmation(row),
+    fields: row.fields
+      .filter((field) => fieldAllowed(row.documentType, field.key))
+      .map((field) => ({
+        ...field,
+        revisions: field.revisions.map((revision) => ({
+          ...revision,
+          createdAt: revision.createdAt.toISOString(),
+        })),
       })),
-    })),
   };
 }
 export function extractionService(
@@ -287,19 +318,29 @@ export function extractionService(
               }
             };
             let classification;
-            if (input.type)
+            if (input.type) {
+              console.info(`classification_user_selected type=${input.type}`);
               classification = {
                 type: input.type,
                 evidence: null,
                 confidence: "needs_review" as const,
               };
-            else {
+            } else {
               const raw = await complete(
                 "classification",
                 classificationPrompt(source),
               );
               try {
-                classification = parseClassification(raw, source);
+                const aiClassification = parseClassification(raw, source);
+                classification = chooseClassification(source, aiClassification);
+                if (
+                  classification.diagnostic === "classification_anchor_override"
+                ) {
+                  console.info(
+                    `classification_anchor_override ai=${aiClassification.type} anchor=${classification.type}`,
+                  );
+                } else if (classification.diagnostic)
+                  console.info(classification.diagnostic);
               } catch {
                 console.error("extraction_output_invalid", "classification");
                 throw new ExtractionFailure("malformed");
@@ -314,7 +355,7 @@ export function extractionService(
                 confidence: classification.confidence,
               },
             ];
-            // Ambiguous classification never chooses a field schema without the worker.
+            // Ambiguous classification pauses until the user selects a schema.
             if (
               type !== "other" &&
               (input.type ||
@@ -419,8 +460,48 @@ export function extractionService(
             id: input.fieldId,
             extraction: { documentId, userId, status: "ready" },
           },
+          // Only category metadata is needed inside this write transaction;
+          // the full review/history is read after the atomic update completes.
+          include: {
+            extraction: {
+              select: {
+                status: true,
+                documentType: true,
+                sourceKind: true,
+                schemaVersion: true,
+                fields: {
+                  where: { key: "document_type" },
+                  select: {
+                    key: true,
+                    value: true,
+                    proposedValue: true,
+                    evidence: true,
+                  },
+                },
+              },
+            },
+          },
         });
         if (!field) throw new DocumentError("Field not found.", 404);
+        if (
+          !fieldAllowed(field.extraction.documentType, field.key) ||
+          needsTypeConfirmation(field.extraction)
+        )
+          throw new DocumentError(
+            "Choose a document category and start a new extraction before reviewing these details.",
+            409,
+          );
+        if (
+          field.key === "document_type" &&
+          (input.action === "reject" ||
+            input.action === "unknown" ||
+            (input.action === "correct" &&
+              input.value !== field.extraction.documentType))
+        )
+          throw new DocumentError(
+            "Use Change category to start a new extraction. Existing attempts stay in history.",
+            409,
+          );
         if (input.action === "confirm" && !field.proposedValue)
           throw new DocumentError(
             "No proposal to confirm. Enter a value or mark unknown.",

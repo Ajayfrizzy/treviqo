@@ -157,6 +157,7 @@ export interface ExtractionRecord {
   errorCode: string | null;
   createdAt: string;
   fields: ReviewField[];
+  needsTypeConfirmation?: boolean;
 }
 export const failureMessages: Record<string, string> = {
   unreadable:
@@ -172,10 +173,59 @@ export const failureMessages: Record<string, string> = {
   interrupted: "This attempt was interrupted. Retry or enter fields manually.",
 };
 export function labelFor(type: string | null, key: string) {
-  if (key === "document_type") return "Suggested document category";
+  if (key === "document_type") return "Document category";
   return (
     (
       fieldLabels[type as ExtractionType] as Record<string, string> | undefined
     )?.[key] ?? key
   );
+}
+
+// Shared invariant for persistence, review APIs and rendering. Unknown types
+// never gain a schema through a cast or fallback field label.
+export function fieldAllowed(type: string | null, key: string): boolean {
+  if (key === "document_type") return true;
+  return (
+    !!type &&
+    Object.hasOwn(fieldLabels, type) &&
+    Object.hasOwn(fieldLabels[type as ExtractionType], key)
+  );
+}
+export function reviewFields(record: ExtractionRecord) {
+  if (record.needsTypeConfirmation) return [];
+  return record.fields.filter(
+    (field) =>
+      field.key !== "document_type" &&
+      fieldAllowed(record.documentType, field.key),
+  );
+}
+const usefulManualFields: Record<ExtractionType, readonly string[]> = {
+  employment_contract: ["employer", "role", "start_date", "notice_period"],
+  payslip: ["pay_period", "gross_pay", "net_pay"],
+  resignation_letter: ["letter_date", "proposed_last_day", "notice_period"],
+  termination_letter: ["letter_date", "effective_date", "reason"],
+  final_settlement: ["pay_period", "final_salary", "total"],
+  pension_statement: [
+    "provider",
+    "statement_start",
+    "statement_end",
+    "entries_complete",
+  ],
+};
+export function groupReviewFields(record: ExtractionRecord) {
+  const fields = reviewFields(record);
+  const proposed = fields.filter(
+    (f) =>
+      f.proposedValue !== null ||
+      f.value !== null ||
+      f.reviewState !== "proposed",
+  );
+  const empty = fields.filter((f) => !proposed.includes(f));
+  const useful =
+    usefulManualFields[record.documentType as ExtractionType] ?? [];
+  return {
+    proposed,
+    manual: empty.filter((f) => useful.includes(f.key)),
+    optional: empty.filter((f) => !useful.includes(f.key)),
+  };
 }

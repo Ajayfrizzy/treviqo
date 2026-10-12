@@ -1,4 +1,5 @@
 import "server-only";
+import { fieldAllowed } from "./shared";
 import { randomUUID } from "node:crypto";
 import { Prisma, type PrismaClient, type DocumentType } from "@prisma/client";
 
@@ -28,6 +29,14 @@ export async function persistAttempt(
   now = new Date(),
 ) {
   const result = input?.result;
+  if (
+    result?.proposals.some(
+      (p) =>
+        !fieldAllowed(result.type, p.key) ||
+        (p.key === "document_type" && p.value !== result.type),
+    )
+  )
+    throw new Error("Extraction schema mismatch");
   const cutoff = new Date(now.getTime() - EXTRACTION_LEASE_MS);
   // Evaluate result leases at the write, after any document lock wait, using
   // the database clock rather than an application timestamp captured beforehand.
@@ -54,7 +63,7 @@ export async function persistAttempt(
         "status" = CASE WHEN ${!!result} AND ${liveLease}
           THEN 'ready' ELSE 'failed' END::"ExtractionStatus",
         "errorCode" = CASE WHEN ${!!result} AND ${liveLease}
-          THEN ${result?.partial ? "partial" : null}
+          THEN ${result?.type === "other" ? "needs_type_confirmation" : result?.partial ? "partial" : null}
           ELSE ${input?.errorCode ?? "interrupted"} END,
         "documentType" = COALESCE(${result?.type ?? null}::"DocumentType", r."documentType"),
         "model" = COALESCE(${input?.model ?? null}, r."model"),

@@ -6,8 +6,8 @@ import {
   supportedTypes,
   type ExtractionType,
 } from "./shared";
-export const PROMPT_VERSION = "evidence-v8";
-export const SCHEMA_VERSION = "fields-v8";
+export const PROMPT_VERSION = "evidence-v9";
+export const SCHEMA_VERSION = "fields-v9";
 const cell = z
   .object({
     value: z.string().min(1).max(1000).nullable(),

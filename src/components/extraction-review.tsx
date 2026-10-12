@@ -5,6 +5,7 @@ import { uiRequest } from "./ui-request";
 import { useRef, useState } from "react";
 import { documentTypes } from "@/modules/documents/shared";
 import {
+  groupReviewFields,
   failureMessages,
   labelFor,
   supportedTypes,
@@ -32,6 +33,8 @@ export function ExtractionReview({
   const [message, setMessage] = useState("");
   const [text, setText] = useState("");
   const [type, setType] = useState("");
+  const categorySelect = useRef<HTMLSelectElement>(null);
+  const [changingCategory, setChangingCategory] = useState(false);
   const [newAttempt, setNewAttempt] = useState<
     "ai" | "manual" | "uncertain" | null
   >(null);
@@ -65,6 +68,7 @@ export function ExtractionReview({
     (current.id === interactionId || current.status === "processing");
   const previous = data.attempts;
   function closeHistory() {
+    setChangingCategory(false);
     historySequence.current++;
     setSelected(null);
     setHistoryLoading(null);
@@ -81,6 +85,7 @@ export function ExtractionReview({
       historyCache.current.delete(historyCache.current.keys().next().value!);
   }
   async function loadHistory(runId: string) {
+    setChangingCategory(false);
     const sequence = ++historySequence.current;
     setSelected(null);
     setHistoryError("");
@@ -174,7 +179,10 @@ export function ExtractionReview({
         )
           setInteractionId(result.extraction?.id ?? null);
       }
-      if (method !== "PATCH") setNewAttempt(null);
+      if (method !== "PATCH") {
+        setNewAttempt(null);
+        setChangingCategory(false);
+      }
       // Classification/review can change records in prefetched destinations.
       if (method !== "GET") router.refresh();
       if (method === "PATCH") setMessage("Review saved.");
@@ -190,9 +198,33 @@ export function ExtractionReview({
       setPending(null);
     }
   }
+  const groups =
+    current && !changingCategory ? groupReviewFields(current) : null;
+  const category = current?.fields.find(
+    (field) => field.key === "document_type",
+  );
   const remaining =
-    current?.fields.filter((field) => field.reviewState === "proposed")
-      .length ?? 0;
+    (groups
+      ? [...groups.proposed, ...groups.manual].filter(
+          (field) => field.reviewState === "proposed",
+        ).length
+      : 0) + (category?.reviewState === "proposed" ? 1 : 0);
+  const showField = (field: ReviewField) => (
+    <FieldCard
+      key={`${field.id}-${field.version}`}
+      field={field}
+      type={current!.documentType}
+      busy={busy}
+      save={(action, value) =>
+        request("PATCH", {
+          fieldId: field.id,
+          version: field.version,
+          action,
+          ...(action === "correct" ? { value } : {}),
+        })
+      }
+    />
+  );
   return (
     <div className="extraction-flow">
       <section className="card">
@@ -230,7 +262,22 @@ export function ExtractionReview({
         className="card employment-form"
         aria-busy={pending === "starting"}
       >
-        <h2>{current ? "New attempt or manual entry" : "Start your review"}</h2>
+        <h2>
+          {current?.needsTypeConfirmation
+            ? "Choose document type"
+            : changingCategory
+              ? "Change document category"
+              : current
+                ? "New attempt or manual entry"
+                : "Start your review"}
+        </h2>
+        {(changingCategory || current?.needsTypeConfirmation) && (
+          <p>
+            Choose the category, then extract again. This creates a new attempt
+            with only that category’s fields. Earlier proposals remain in
+            history.
+          </p>
+        )}
         <p>
           Extraction sends readable text to Rumpty AI. Contracts, payslips,
           resignation/termination letters, final settlements and pension
@@ -241,9 +288,18 @@ export function ExtractionReview({
         <fieldset disabled={busy}>
           <label htmlFor="extract-type">Document type</label>
           <select
+            ref={categorySelect}
             id="extract-type"
             value={type}
-            onChange={(event) => setType(event.target.value)}
+            onChange={(event) => {
+              setType(event.target.value);
+              if (
+                current &&
+                event.target.value &&
+                event.target.value !== current.documentType
+              )
+                setChangingCategory(true);
+            }}
           >
             <option value="">Let AI suggest the type</option>
             {supportedTypes.map((value) => (
@@ -273,13 +329,20 @@ export function ExtractionReview({
           <div className="document-actions">
             <Button
               pendingLabel="Extracting…"
-              onClick={() =>
-                request("POST", {
+              onClick={() => {
+                if (
+                  (changingCategory || current?.needsTypeConfirmation) &&
+                  !type
+                ) {
+                  setError("Choose a document type before continuing.");
+                  return;
+                }
+                return request("POST", {
                   mode: "ai",
                   ...(type ? { type } : {}),
                   ...(text ? { text } : {}),
-                })
-              }
+                });
+              }}
             >
               Extract details
             </Button>
@@ -403,9 +466,11 @@ export function ExtractionReview({
                 ? historical
                   ? "Recorded as processing"
                   : "Extracting details…"
-                : current.errorCode === "partial"
-                  ? "Some details were extracted"
-                  : "Review status"}
+                : current.needsTypeConfirmation
+                  ? "Choose document type"
+                  : current.errorCode === "partial"
+                    ? "Some details were extracted"
+                    : "Review status"}
           </h2>
           {current.status === "failed" ? (
             <p role={historical ? undefined : "alert"}>
@@ -420,9 +485,11 @@ export function ExtractionReview({
             </p>
           ) : (
             <p>
-              {remaining
-                ? `${remaining} fields waiting for your review.`
-                : "Review complete. Rejected and unknown fields are not trusted values."}
+              {current.needsTypeConfirmation
+                ? "The document category needs confirmation before details can be reviewed."
+                : remaining
+                  ? `${remaining} fields waiting for your review.`
+                  : "Review complete. Rejected and unknown fields are not trusted values."}
             </p>
           )}
           {current.status === "ready" && current.errorCode === "partial" && (
@@ -447,22 +514,85 @@ export function ExtractionReview({
           </p>
         </section>
       )}
-      {current?.fields.map((field) => (
-        <FieldCard
-          key={`${field.id}-${field.version}`}
-          field={field}
-          type={current.documentType}
-          busy={busy}
-          save={(action, value) =>
-            request("PATCH", {
-              fieldId: field.id,
-              version: field.version,
-              action,
-              ...(action === "correct" ? { value } : {}),
-            })
-          }
-        />
-      ))}
+      {current?.status === "ready" && (
+        <section
+          className="card employment-form"
+          aria-label="Document category"
+        >
+          <h2>Document category</h2>
+          <p>
+            {current.needsTypeConfirmation
+              ? "Needs confirmation"
+              : `${category?.reviewState === "confirmed" ? "Confirmed" : current.sourceKind === "manual" || category?.confidence === "needs_review" ? "Selected" : "Suggested"}: ${documentTypes[current.documentType as keyof typeof documentTypes] ?? "Choose document type"}`}
+          </p>
+          {current.needsTypeConfirmation && (
+            <p>
+              This attempt’s category has not been validated. Choose a category
+              and extract again; the saved attempt is preserved.
+            </p>
+          )}
+          <div className="document-actions">
+            {category && !current.needsTypeConfirmation && (
+              <Button
+                disabled={
+                  busy ||
+                  category.reviewState === "confirmed" ||
+                  changingCategory
+                }
+                pendingLabel="Confirming…"
+                onClick={() =>
+                  request("PATCH", {
+                    fieldId: category.id,
+                    version: category.version,
+                    action: "confirm",
+                  })
+                }
+              >
+                Confirm category
+              </Button>
+            )}
+            <Button
+              className="secondary"
+              disabled={busy}
+              onClick={() => {
+                setChangingCategory(true);
+                setType(
+                  current.needsTypeConfirmation
+                    ? ""
+                    : (current.documentType ?? ""),
+                );
+                categorySelect.current?.focus();
+              }}
+            >
+              Change category
+            </Button>
+          </div>
+        </section>
+      )}
+      {groups && groups.proposed.length > 0 && (
+        <section aria-label="Proposed fields" className="extraction-flow">
+          <h2>Proposed fields</h2>
+          {groups.proposed.map(showField)}
+        </section>
+      )}
+      {groups && groups.manual.length > 0 && (
+        <section aria-label="Needs manual review" className="extraction-flow">
+          <h2>Needs manual review</h2>
+          <p>
+            Enter these details only if they appear in your document. You can
+            leave unstated details empty.
+          </p>
+          {groups.manual.map(showField)}
+        </section>
+      )}
+      {groups && groups.optional.length > 0 && (
+        <details key={current?.id} className="card">
+          <summary>Add another detail</summary>
+          <div className="extraction-flow">
+            {groups.optional.map(showField)}
+          </div>
+        </details>
+      )}
     </div>
   );
 }
@@ -532,32 +662,14 @@ function FieldCard({
         )}
       </dl>
       <fieldset disabled={busy}>
-        <label htmlFor={inputId}>
-          {field.key === "document_type"
-            ? "Correct category"
-            : "Corrected value"}
-        </label>
-        {field.key === "document_type" ? (
-          <select
-            id={inputId}
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-          >
-            {[...supportedTypes, "other" as const].map((item) => (
-              <option key={item} value={item}>
-                {documentTypes[item]}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <textarea
-            id={inputId}
-            maxLength={1000}
-            rows={3}
-            value={value}
-            onChange={(event) => setValue(event.target.value)}
-          />
-        )}
+        <label htmlFor={inputId}>Corrected value</label>
+        <textarea
+          id={inputId}
+          maxLength={1000}
+          rows={3}
+          value={value}
+          onChange={(event) => setValue(event.target.value)}
+        />
         <div className="review-actions">
           <Button
             pendingLabel="Confirming…"
@@ -589,13 +701,6 @@ function FieldCard({
           </Button>
         </div>
       </fieldset>
-      {field.key === "document_type" && (
-        <p className="field-hint">
-          Changing this proposal does not rewrite the file category or its
-          fields. Start a new attempt with the correct type to extract different
-          fields.
-        </p>
-      )}
       {field.revisions.length > 0 && (
         <details>
           <summary>Review history</summary>

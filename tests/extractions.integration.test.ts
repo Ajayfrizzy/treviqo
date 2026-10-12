@@ -82,8 +82,8 @@ it("persists only proposed grounded fields with source/model/version metadata, w
     documentType: "employment_contract",
     model: "fixture-model",
     sourceKind: "pdf_text",
-    promptVersion: "evidence-v8",
-    schemaVersion: "fields-v8",
+    promptVersion: "evidence-v9",
+    schemaVersion: "fields-v9",
   });
   expect(
     extraction!.fields.every(
@@ -229,7 +229,7 @@ it("handles unavailable inference and malformed output without storing raw respo
   const failed = (
     await service().start(userId, documentId, {
       mode: "ai",
-      text: fixture.text,
+      text: "Employer: Harbour Workshop Ltd. Further details unavailable.",
     })
   ).extraction!;
   expect(failed).toMatchObject({
@@ -243,7 +243,7 @@ it("handles unavailable inference and malformed output without storing raw respo
     (
       await service().start(userId, documentId, {
         mode: "ai",
-        text: fixture.text,
+        text: "Employer: Harbour Workshop Ltd. Further details unavailable.",
       })
     ).extraction,
   ).toMatchObject({ status: "ready", documentType: "other" });
@@ -255,7 +255,7 @@ it("low-confidence classification pauses before type-specific inference", async 
   const run = (
     await service().start(userId, documentId, {
       mode: "ai",
-      text: fixture.text,
+      text: "Employer: Harbour Workshop Ltd. Further details unavailable.",
     })
   ).extraction!;
   expect(ai.complete).toHaveBeenCalledTimes(1);
@@ -1075,6 +1075,7 @@ it("persists recovered resignation evidence as unconfirmed partial and logs only
     reviewState: "proposed",
   });
   expect(log.mock.calls).toEqual([
+    ["classification_user_selected type=resignation_letter"],
     [
       "extraction_parse_partial missing_evidence=1 evidence_recovered=2 evidence_not_found=1",
     ],
@@ -1118,6 +1119,7 @@ it("persists a contextual pension row while rejecting ambiguous repeated amounts
     )?.proposedValue,
   ).toBeNull();
   expect(log.mock.calls).toEqual([
+    ["classification_user_selected type=pension_statement"],
     [
       "extraction_parse_partial missing_evidence=1 evidence_recovered=3 evidence_ambiguous=1",
     ],
@@ -1146,4 +1148,200 @@ it("logs only recovery failure counters when no evidence can be safely recovered
       "extraction_parse_rejected no_grounded_fields missing_evidence=2 evidence_ambiguous=1 evidence_not_found=1",
     ],
   ]);
+});
+
+for (const expected of [
+  "employment_contract",
+  "payslip",
+  "resignation_letter",
+  "termination_letter",
+  "final_settlement",
+  "pension_statement",
+] as const) {
+  it(`isolates ${expected} extraction despite a grounded but wrong AI classification`, async () => {
+    const fixture = JSON.parse(
+      readFileSync(`tests/fixtures/intelligence/${expected}.json`, "utf8"),
+    );
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    ai.complete = vi.fn(async (task) => {
+      if (task.system.includes("Classify only"))
+        return JSON.stringify({
+          type: expected === "payslip" ? "employment_contract" : "payslip",
+          evidence: fixture.classification.evidence,
+        });
+      expect(task.system).toContain(`Extract ${expected} facts`);
+      return JSON.stringify(fixture.fields);
+    });
+    const { extraction } = await service().start(userId, documentId, {
+      mode: "ai",
+      text: fixture.text,
+    });
+    expect(extraction).toMatchObject({
+      status: "ready",
+      documentType: expected,
+      needsTypeConfirmation: false,
+    });
+    const { fieldAllowed } = await import("@/modules/extractions/shared");
+    expect(extraction!.fields.every((f) => fieldAllowed(expected, f.key))).toBe(
+      true,
+    );
+    const saved = await db.extractedField.findMany({
+      where: { extractionId: extraction!.id },
+    });
+    expect(saved.every((f) => fieldAllowed(expected, f.key))).toBe(true);
+    expect(log.mock.calls[0]).toEqual([
+      `classification_anchor_override ai=${expected === "payslip" ? "employment_contract" : "payslip"} anchor=${expected}`,
+    ]);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(
+      fixture.classification.evidence,
+    );
+  });
+}
+it("pauses unsupported classification evidence and resumes in a new user-selected attempt", async () => {
+  const log = vi.spyOn(console, "info").mockImplementation(() => {});
+  ai.complete = vi.fn(async () =>
+    JSON.stringify({
+      type: "employment_contract",
+      evidence: "1 September 2026",
+    }),
+  );
+  const text =
+    "1 September 2026\nmy intended last working day is 30 September 2026";
+  const first = (
+    await service().start(userId, documentId, { mode: "ai", text })
+  ).extraction!;
+  expect(first).toMatchObject({
+    documentType: "other",
+    errorCode: "needs_type_confirmation",
+    needsTypeConfirmation: true,
+  });
+  expect(ai.complete).toHaveBeenCalledTimes(1);
+  expect(first.fields.map((f) => f.key)).toEqual(["document_type"]);
+  ai.complete = vi.fn(async () =>
+    JSON.stringify({
+      fields: [
+        { key: "letter_date", value: "1 September 2026" },
+        { key: "proposed_last_day", value: "30 September 2026" },
+      ],
+    }),
+  );
+  const second = (
+    await service().start(userId, documentId, {
+      mode: "ai",
+      type: "resignation_letter",
+      text,
+    })
+  ).extraction!;
+  expect(second.id).not.toBe(first.id);
+  expect(second).toMatchObject({
+    status: "ready",
+    documentType: "resignation_letter",
+    needsTypeConfirmation: false,
+  });
+  expect(
+    second.fields.find((f) => f.key === "proposed_last_day")?.proposedValue,
+  ).toBe("30 September 2026");
+  expect(
+    (await service().read(userId, documentId, first.id)).extraction,
+  ).toEqual(first);
+  expect(log.mock.calls).toContainEqual(["classification_ambiguous"]);
+  expect(log.mock.calls).toContainEqual([
+    "classification_user_selected type=resignation_letter",
+  ]);
+});
+it("blocks cross-schema persisted fields and in-place category changes without mutating history", async () => {
+  const first = (await service().start(userId, documentId, { mode: "ai" }))
+    .extraction!;
+  const category = first.fields.find((f) => f.key === "document_type")!;
+  await expect(
+    service().review(userId, documentId, {
+      fieldId: category.id,
+      version: 0,
+      action: "correct",
+      value: "pension_statement",
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+  const injected = await db.extractedField.create({
+    data: {
+      extractionId: first.id,
+      key: "gross_pay",
+      proposedValue: "NGN 100",
+      confidence: "needs_review",
+    },
+  });
+  expect(
+    (await service().read(userId, documentId)).extraction?.fields.some(
+      (f) => f.key === "gross_pay",
+    ),
+  ).toBe(false);
+  await expect(
+    service().review(userId, documentId, {
+      fieldId: injected.id,
+      version: 0,
+      action: "confirm",
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+  const second = (
+    await service().start(userId, documentId, {
+      mode: "manual",
+      type: "pension_statement",
+    })
+  ).extraction!;
+  expect(
+    second.fields.some((f) =>
+      ["salary", "start_date", "gross_pay"].includes(f.key),
+    ),
+  ).toBe(false);
+  expect(
+    await db.extractedField.findUnique({ where: { id: category.id } }),
+  ).toMatchObject({ proposedValue: "employment_contract", value: null });
+  expect(
+    await db.extractedField.findUnique({ where: { id: injected.id } }),
+  ).not.toBeNull();
+});
+it("legacy automated attempts require category confirmation without rewriting their proposals", async () => {
+  const first = (await service().start(userId, documentId, { mode: "ai" }))
+    .extraction!;
+  await db.documentExtraction.update({
+    where: { id: first.id },
+    data: { schemaVersion: "fields-v8" },
+  });
+  const result = (await service().read(userId, documentId)).extraction!;
+  expect(result.needsTypeConfirmation).toBe(true);
+  expect(result.fields).toEqual(first.fields);
+  await expect(
+    service().review(userId, documentId, {
+      fieldId: first.fields[0]!.id,
+      version: 0,
+      action: "confirm",
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+});
+it("persistence rejects cross-schema proposals before any writes", async () => {
+  const raw = vi.fn();
+  await expect(
+    persistAttempt(
+      { $queryRaw: raw } as unknown as Parameters<typeof persistAttempt>[0],
+      userId,
+      documentId,
+      {
+        runId: "test",
+        model: "fixture",
+        sourceHash: null,
+        result: {
+          type: "pension_statement",
+          partial: false,
+          proposals: [
+            {
+              key: "gross_pay",
+              value: "100",
+              evidence: "100",
+              confidence: "needs_review",
+            },
+          ],
+        },
+      },
+    ),
+  ).rejects.toThrow("Extraction schema mismatch");
+  expect(raw).not.toHaveBeenCalled();
 });
