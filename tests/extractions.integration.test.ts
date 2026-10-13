@@ -82,8 +82,8 @@ it("persists only proposed grounded fields with source/model/version metadata, w
     documentType: "employment_contract",
     model: "fixture-model",
     sourceKind: "pdf_text",
-    promptVersion: "evidence-v10",
-    schemaVersion: "fields-v10",
+    promptVersion: "evidence-v11",
+    schemaVersion: "fields-v11",
   });
   expect(
     extraction!.fields.every(
@@ -1158,6 +1158,7 @@ for (const expected of [
   "final_settlement",
   "pension_statement",
   "benefit_document",
+  "exit_letter",
 ] as const) {
   it(`isolates ${expected} extraction despite a grounded but wrong AI classification`, async () => {
     const fixture = JSON.parse(
@@ -1483,23 +1484,94 @@ it("extracts the real synthetic benefit PDF, preserves conditions and requires r
   ).toBeNull();
   expect(await db.benefit.count({ where: { userId } })).toBe(0);
 });
-it("retains review access to validated v9 attempts after adding benefits", async () => {
-  const result = (await service().start(userId, documentId, { mode: "ai" }))
+it.each(["v9", "v10"])(
+  "retains review access to validated %s attempts after adding exit letters",
+  async (version) => {
+    const result = (await service().start(userId, documentId, { mode: "ai" }))
+      .extraction!;
+    await db.documentExtraction.update({
+      where: { id: result.id },
+      data: {
+        schemaVersion: `fields-${version}`,
+        promptVersion: `evidence-${version}`,
+      },
+    });
+    expect(
+      (await service().read(userId, documentId)).extraction
+        ?.needsTypeConfirmation,
+    ).toBe(false);
+    const employer = result.fields.find((f) => f.key === "employer")!;
+    await expect(
+      service().review(userId, documentId, {
+        fieldId: employer.id,
+        version: 0,
+        action: "confirm",
+      }),
+    ).resolves.toBeDefined();
+  },
+);
+
+it("extracts the exit confirmation PDF and preserves owner review without changing employment or exit records", async () => {
+  const sample = JSON.parse(
+    readFileSync("tests/fixtures/intelligence/exit_letter.json", "utf8"),
+  );
+  const uploaded = await documentService(db, () => store).upload(
+    userId,
+    { employmentId: job, documentType: "exit_letter" },
+    readFileSync("tests/fixtures/intelligence/exit_letter.pdf"),
+    "exit.pdf",
+    "application/pdf",
+    10485760,
+  );
+  ai.complete = async (task) =>
+    JSON.stringify(
+      task.system.includes("Classify only")
+        ? sample.classification
+        : sample.fields,
+    );
+  const result = (await service().start(userId, uploaded.id, { mode: "ai" }))
     .extraction!;
-  await db.documentExtraction.update({
-    where: { id: result.id },
-    data: { schemaVersion: "fields-v9", promptVersion: "evidence-v9" },
+  expect(result).toMatchObject({
+    documentType: "exit_letter",
+    status: "ready",
+    needsTypeConfirmation: false,
   });
-  expect(
-    (await service().read(userId, documentId)).extraction
-      ?.needsTypeConfirmation,
-  ).toBe(false);
-  const employer = result.fields.find((f) => f.key === "employer")!;
+  const field = result.fields.find((f) => f.key === "last_working_day")!;
+  expect(field).toMatchObject({
+    proposedValue: "30 September 2026",
+    value: null,
+    reviewState: "proposed",
+  });
   await expect(
-    service().review(userId, documentId, {
-      fieldId: employer.id,
+    service().review(otherId, uploaded.id, {
+      fieldId: field.id,
       version: 0,
       action: "confirm",
     }),
-  ).resolves.toBeDefined();
+  ).rejects.toThrow();
+  await service().review(userId, uploaded.id, {
+    fieldId: field.id,
+    version: 0,
+    action: "confirm",
+  });
+  expect(
+    (await service().read(userId, uploaded.id)).extraction!.fields.find(
+      (f) => f.id === field.id,
+    )?.reviewState,
+  ).toBe("confirmed");
+  expect(
+    await db.employment.findUniqueOrThrow({ where: { id: job } }),
+  ).toMatchObject({ endDate: null, status: "active" });
+  expect(await db.exitCase.count({ where: { userId } })).toBe(0);
+  const manual = (
+    await service().start(userId, uploaded.id, {
+      mode: "manual",
+      type: "exit_letter",
+    })
+  ).extraction!;
+  expect(manual).toMatchObject({
+    documentType: "exit_letter",
+    status: "ready",
+    needsTypeConfirmation: false,
+  });
 });

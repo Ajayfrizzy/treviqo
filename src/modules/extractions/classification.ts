@@ -3,6 +3,8 @@ import { supportedTypes, type ExtractionType } from "./shared";
 // Validate purpose, not shared names/amounts. Titles must occupy a heading line;
 // prose referring to another document does not establish that document's purpose.
 const headings: Record<ExtractionType, RegExp> = {
+  exit_letter:
+    /^(?:exit letter|exit confirmation letter|employment exit confirmation)$/i,
   benefit_document:
     /^(?:employee benefits? summary|employee benefits? statement|benefits? summary|employee benefits? overview)$/i,
   employment_contract:
@@ -22,6 +24,8 @@ export function typeAnchors(source: string) {
   const text = source.replace(/\s+/g, " ").toLowerCase();
   const has = (pattern: RegExp) => pattern.test(text);
   const combinations: Record<ExtractionType, boolean> = {
+    // Require a distinctive heading; mentioning an exit does not establish purpose.
+    exit_letter: false,
     // A mention of pension/health alone does not identify a benefit summary.
     benefit_document:
       has(/\bemployee benefits? (?:summary|overview)\b/) &&

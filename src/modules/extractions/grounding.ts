@@ -28,6 +28,7 @@ const dateKeys = new Set([
   "notice_date",
   "proposed_last_day",
   "effective_date",
+  "last_working_day",
 ]);
 const isMoney = (key: string) =>
   moneyKeys.has(key) ||

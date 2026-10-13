@@ -6,8 +6,8 @@ import {
   supportedTypes,
   type ExtractionType,
 } from "./shared";
-export const PROMPT_VERSION = "evidence-v10";
-export const SCHEMA_VERSION = "fields-v10";
+export const PROMPT_VERSION = "evidence-v11";
+export const SCHEMA_VERSION = "fields-v11";
 const cell = z
   .object({
     value: z.string().min(1).max(1000).nullable(),
@@ -151,6 +151,8 @@ const aliases: Record<string, ExtractionType | "other"> = {
   salary_slip: "payslip",
   resignation_letter: "resignation_letter",
   resignation: "resignation_letter",
+  exit_letter: "exit_letter",
+  exit_confirmation_letter: "exit_letter",
   termination_letter: "termination_letter",
   termination: "termination_letter",
   final_settlement: "final_settlement",

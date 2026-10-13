@@ -1006,6 +1006,7 @@ for (const type of [
   "final_settlement",
   "pension_statement",
   "benefit_document",
+  "exit_letter",
 ] as const) {
   test(`wrong AI category cannot cross schemas in the ${type} review`, async ({
     page,
@@ -1050,6 +1051,26 @@ for (const type of [
     await expect(
       page.getByText("Add another detail", { exact: true }).locator(".."),
     ).not.toHaveAttribute("open", "");
+    if (type === "exit_letter") {
+      await expect(
+        page
+          .getByLabel("Document type", { exact: true })
+          .getByRole("option", { name: "Exit letter", exact: true }),
+      ).toHaveCount(1);
+      const lastDay = page.getByRole("region", {
+        name: "Confirmed last working day",
+        exact: true,
+      });
+      await expect(lastDay).toContainText("30 September 2026");
+      await lastDay.getByRole("button", { name: "Confirm proposal" }).click();
+      await expect(
+        lastDay.getByText("confirmed", { exact: true }),
+      ).toBeVisible();
+      await page.reload();
+      await expect(
+        lastDay.getByText("confirmed", { exact: true }),
+      ).toBeVisible();
+    }
     if (type === "benefit_document") {
       await expect(
         page.getByRole("region", {

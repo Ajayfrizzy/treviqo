@@ -279,10 +279,10 @@ export function ExtractionReview({
         )}
         <p>
           Extraction sends readable text to Rumpty AI. Contracts, payslips,
-          resignation/termination letters, final settlements, pension statements
-          and benefit documents are supported. Pension review supports three
-          separate entries per attempt; confirm coverage and completeness
-          yourself. Earlier attempts and reviews are preserved.
+          resignation/termination letters, final settlements, pension statements,
+          benefit documents and exit confirmation letters are supported. Pension
+          review supports three separate entries per attempt; confirm coverage
+          and completeness yourself. Earlier attempts and reviews are preserved.
         </p>
         <fieldset disabled={busy}>
           <label htmlFor="extract-type">Document type</label>

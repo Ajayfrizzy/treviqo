@@ -102,10 +102,10 @@ function needsTypeConfirmation(row: CategoryContext) {
   if (anchors.some((anchor) => anchor.type !== row.documentType)) return true;
   // Earlier automated attempts did not validate classification purpose. Do not
   // silently rewrite history or present their schema as validated on reload.
-  // v10 adds a schema without invalidating the six schemas validated in v9.
+  // Additive schemas retain previously purpose-validated v9/v10 attempts.
   return (
     row.sourceKind !== "manual" &&
-    !["fields-v9", SCHEMA_VERSION].includes(row.schemaVersion)
+    !["fields-v9", "fields-v10", SCHEMA_VERSION].includes(row.schemaVersion)
   );
 }
 function serialize(row: Row): ExtractionRecord {

@@ -1,0 +1,56 @@
+{
+  "type": "exit_letter",
+  "text": "Northbridge Systems Nigeria Ltd\n18 Adeola Odeku Street, Victoria Island, Lagos, Nigeria\nEXIT CONFIRMATION LETTER\nEmployee: Amina Bello\nRole: Frontend Engineer\nLast working day: 30 September 2026\nExit type: Resignation\nThis letter confirms that Amina Bello completed employment with Northbridge Systems Nigeria Ltd on\n30 September 2026. Company assets were returned and no asset return is outstanding.\nA final settlement statement has been issued separately. Pension records should be verified against the\nemployee's retirement account statement.\nSynthetic test document for Treviqo - not a real employment record.",
+  "classification": {
+    "type": "exit_letter",
+    "evidence": "EXIT CONFIRMATION LETTER",
+    "confidence": "high"
+  },
+  "fields": {
+    "employer": {
+      "value": "Northbridge Systems Nigeria Ltd",
+      "evidence": "Northbridge Systems Nigeria Ltd",
+      "confidence": "high"
+    },
+    "employee": {
+      "value": "Amina Bello",
+      "evidence": "Amina Bello",
+      "confidence": "high"
+    },
+    "role": {
+      "value": "Frontend Engineer",
+      "evidence": "Frontend Engineer",
+      "confidence": "high"
+    },
+    "last_working_day": {
+      "value": "30 September 2026",
+      "evidence": "30 September 2026",
+      "confidence": "high"
+    },
+    "exit_type": {
+      "value": "Resignation",
+      "evidence": "Resignation",
+      "confidence": "high"
+    },
+    "asset_return_wording": {
+      "value": "Company assets were returned and no asset return is outstanding.",
+      "evidence": "Company assets were returned and no asset return is outstanding.",
+      "confidence": "high"
+    },
+    "settlement_reference": {
+      "value": "A final settlement statement has been issued separately.",
+      "evidence": "A final settlement statement has been issued separately.",
+      "confidence": "high"
+    },
+    "pension_reference": {
+      "value": "Pension records should be verified against the employee's retirement account statement.",
+      "evidence": "Pension records should be verified against the employee's retirement account statement.",
+      "confidence": "high"
+    },
+    "letter_date": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    }
+  }
+}

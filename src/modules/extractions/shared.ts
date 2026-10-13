@@ -4,6 +4,7 @@ export const supportedTypes = [
   "payslip",
   "resignation_letter",
   "termination_letter",
+  "exit_letter",
   "final_settlement",
   "pension_statement",
   "benefit_document",
@@ -24,6 +25,17 @@ const pensionRows = Object.fromEntries(
   ),
 );
 export const fieldLabels = {
+  exit_letter: {
+    employer: "Employer",
+    employee: "Employee",
+    role: "Role",
+    letter_date: "Letter date",
+    last_working_day: "Confirmed last working day",
+    exit_type: "Stated exit type",
+    asset_return_wording: "Asset return / clearance wording",
+    settlement_reference: "Settlement wording",
+    pension_reference: "Pension wording",
+  },
   benefit_document: {
     employer: "Employer",
     employee: "Employee",
@@ -212,6 +224,12 @@ export function reviewFields(record: ExtractionRecord) {
   );
 }
 const usefulManualFields: Record<ExtractionType, readonly string[]> = {
+  exit_letter: [
+    "employer",
+    "last_working_day",
+    "exit_type",
+    "asset_return_wording",
+  ],
   benefit_document: [
     "health_plan_wording",
     "group_life_wording",
