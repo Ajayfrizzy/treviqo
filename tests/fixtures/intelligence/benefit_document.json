@@ -1,0 +1,56 @@
+{
+  "type": "benefit_document",
+  "text": "NORTHBRIDGE SYSTEMS NIGERIA LTD\nEMPLOYEE BENEFIT SUMMARY\nEmployee: Amina Bello\nEmployment: Frontend Engineer\nHealth plan\nHealth coverage is employer-sponsored. Coverage remains active through the employee's last working\nday and continues for 30 calendar days after employment ends. After that period, continuation is not\nautomatic and must be arranged separately if available.\nGroup life cover\nGroup life cover is employer-linked and ends when the employee ceases to be eligible under the\nemployer policy.\nPension\nRetirement savings are held in the employee's personal retirement account and are not owned by the\nemployer.\nSynthetic test document for Treviqo - not a real employment record.",
+  "classification": {
+    "type": "benefit_document",
+    "evidence": "EMPLOYEE BENEFIT SUMMARY",
+    "confidence": "high"
+  },
+  "fields": {
+    "employer": {
+      "value": "NORTHBRIDGE SYSTEMS NIGERIA LTD",
+      "evidence": "NORTHBRIDGE SYSTEMS NIGERIA LTD",
+      "confidence": "high"
+    },
+    "employee": {
+      "value": "Amina Bello",
+      "evidence": "Amina Bello",
+      "confidence": "high"
+    },
+    "role": {
+      "value": "Frontend Engineer",
+      "evidence": "Frontend Engineer",
+      "confidence": "high"
+    },
+    "health_plan_wording": {
+      "value": "Health coverage is employer-sponsored. Coverage remains active through the employee's last working day and continues for 30 calendar days after employment ends. After that period, continuation is not automatic and must be arranged separately if available.",
+      "evidence": "Health coverage is employer-sponsored. Coverage remains active through the employee's last working day and continues for 30 calendar days after employment ends. After that period, continuation is not automatic and must be arranged separately if available.",
+      "confidence": "high"
+    },
+    "group_life_wording": {
+      "value": "Group life cover is employer-linked and ends when the employee ceases to be eligible under the employer policy.",
+      "evidence": "Group life cover is employer-linked and ends when the employee ceases to be eligible under the employer policy.",
+      "confidence": "high"
+    },
+    "pension_wording": {
+      "value": "Retirement savings are held in the employee's personal retirement account and are not owned by the employer.",
+      "evidence": "Retirement savings are held in the employee's personal retirement account and are not owned by the employer.",
+      "confidence": "high"
+    },
+    "health_provider": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "group_life_provider": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    },
+    "pension_provider": {
+      "value": null,
+      "evidence": null,
+      "confidence": "needs_review"
+    }
+  }
+}

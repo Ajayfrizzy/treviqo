@@ -82,8 +82,8 @@ it("persists only proposed grounded fields with source/model/version metadata, w
     documentType: "employment_contract",
     model: "fixture-model",
     sourceKind: "pdf_text",
-    promptVersion: "evidence-v9",
-    schemaVersion: "fields-v9",
+    promptVersion: "evidence-v10",
+    schemaVersion: "fields-v10",
   });
   expect(
     extraction!.fields.every(
@@ -1157,6 +1157,7 @@ for (const expected of [
   "termination_letter",
   "final_settlement",
   "pension_statement",
+  "benefit_document",
 ] as const) {
   it(`isolates ${expected} extraction despite a grounded but wrong AI classification`, async () => {
     const fixture = JSON.parse(
@@ -1440,4 +1441,65 @@ it("reservation leaves document metadata unchanged for Passport evidence freshne
     where: { id: documentId },
   });
   expect(after).toEqual(before);
+});
+it("extracts the real synthetic benefit PDF, preserves conditions and requires review", async () => {
+  const sample = JSON.parse(
+    readFileSync("tests/fixtures/intelligence/benefit_document.json", "utf8"),
+  );
+  const uploaded = await documentService(db, () => store).upload(
+    userId,
+    { employmentId: job, documentType: "benefit_document" },
+    readFileSync("tests/fixtures/intelligence/benefit_document.pdf"),
+    "benefit.pdf",
+    "application/pdf",
+    10485760,
+  );
+  ai.complete = async (task) =>
+    JSON.stringify(
+      task.system.includes("Classify only")
+        ? sample.classification
+        : sample.fields,
+    );
+  const result = (await service().start(userId, uploaded.id, { mode: "ai" }))
+    .extraction!;
+  expect(result).toMatchObject({
+    documentType: "benefit_document",
+    status: "ready",
+    errorCode: "partial",
+    needsTypeConfirmation: false,
+  });
+  expect(
+    result.fields.find((f) => f.key === "health_plan_wording"),
+  ).toMatchObject({
+    value: null,
+    reviewState: "proposed",
+    confidence: "needs_review",
+  });
+  expect(
+    result.fields.find((f) => f.key === "health_plan_wording")?.proposedValue,
+  ).toContain("30 calendar days");
+  expect(
+    result.fields.find((f) => f.key === "pension_provider")?.proposedValue,
+  ).toBeNull();
+  expect(await db.benefit.count({ where: { userId } })).toBe(0);
+});
+it("retains review access to validated v9 attempts after adding benefits", async () => {
+  const result = (await service().start(userId, documentId, { mode: "ai" }))
+    .extraction!;
+  await db.documentExtraction.update({
+    where: { id: result.id },
+    data: { schemaVersion: "fields-v9", promptVersion: "evidence-v9" },
+  });
+  expect(
+    (await service().read(userId, documentId)).extraction
+      ?.needsTypeConfirmation,
+  ).toBe(false);
+  const employer = result.fields.find((f) => f.key === "employer")!;
+  await expect(
+    service().review(userId, documentId, {
+      fieldId: employer.id,
+      version: 0,
+      action: "confirm",
+    }),
+  ).resolves.toBeDefined();
 });

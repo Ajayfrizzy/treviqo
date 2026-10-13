@@ -9,6 +9,7 @@ const types = [
   "termination_letter",
   "final_settlement",
   "pension_statement",
+  "benefit_document",
 ];
 const fixtures = types.map((type) =>
   JSON.parse(

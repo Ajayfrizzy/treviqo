@@ -6,6 +6,7 @@ import { useRef, useState } from "react";
 import { documentTypes } from "@/modules/documents/shared";
 import {
   groupReviewFields,
+  extractionReadyMessage,
   failureMessages,
   labelFor,
   supportedTypes,
@@ -187,9 +188,7 @@ export function ExtractionReview({
       if (method !== "GET") router.refresh();
       if (method === "PATCH") setMessage("Review saved.");
       if (method === "POST" && result.extraction?.status === "ready")
-        setMessage(
-          "Details are ready for your review. Nothing is confirmed automatically.",
-        );
+        setMessage(extractionReadyMessage(result.extraction));
     } catch (error) {
       if (method === "POST") setNewAttempt("uncertain");
       setError(error instanceof Error ? error.message : "Please retry.");
@@ -280,10 +279,10 @@ export function ExtractionReview({
         )}
         <p>
           Extraction sends readable text to Rumpty AI. Contracts, payslips,
-          resignation/termination letters, final settlements and pension
-          statements are supported. Pension review supports three separate
-          entries per attempt; confirm coverage and completeness yourself.
-          Earlier attempts and reviews are preserved.
+          resignation/termination letters, final settlements, pension statements
+          and benefit documents are supported. Pension review supports three
+          separate entries per attempt; confirm coverage and completeness
+          yourself. Earlier attempts and reviews are preserved.
         </p>
         <fieldset disabled={busy}>
           <label htmlFor="extract-type">Document type</label>
@@ -502,7 +501,8 @@ export function ExtractionReview({
           {current.status === "ready" && current.fields.length <= 1 && (
             <p>
               Choose the correct supported document type above and start a new
-              attempt, or enter details manually.
+              attempt, or enter details manually. If none fits, keep the file as
+              a source document; do not select an unrelated category.
             </p>
           )}
           <p className="field-hint">

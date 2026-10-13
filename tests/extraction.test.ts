@@ -99,7 +99,8 @@ it("bounds source/review inputs and rejects ownership injection", () => {
     startSchema.safeParse({ mode: "ai", text: "x".repeat(18001) }).success,
   ).toBe(false);
   expect(
-    startSchema.safeParse({ mode: "manual", type: "benefit_document" }).success,
+    startSchema.safeParse({ mode: "manual", type: "unsupported_document" })
+      .success,
   ).toBe(false);
   expect(startSchema.safeParse({ mode: "ai", userId: "other" }).success).toBe(
     false,

@@ -6,6 +6,7 @@ export const supportedTypes = [
   "termination_letter",
   "final_settlement",
   "pension_statement",
+  "benefit_document",
 ] as const;
 export type ExtractionType = (typeof supportedTypes)[number];
 const pensionRows = Object.fromEntries(
@@ -23,6 +24,17 @@ const pensionRows = Object.fromEntries(
   ),
 );
 export const fieldLabels = {
+  benefit_document: {
+    employer: "Employer",
+    employee: "Employee",
+    role: "Role",
+    health_plan_wording: "Health plan — coverage and continuation",
+    group_life_wording: "Group life — eligibility and end conditions",
+    pension_wording: "Pension — account ownership wording",
+    health_provider: "Health plan provider",
+    group_life_provider: "Group life provider",
+    pension_provider: "Pension provider",
+  },
   final_settlement: {
     pay_period: "Pay period",
     final_salary: "Final salary",
@@ -200,6 +212,11 @@ export function reviewFields(record: ExtractionRecord) {
   );
 }
 const usefulManualFields: Record<ExtractionType, readonly string[]> = {
+  benefit_document: [
+    "health_plan_wording",
+    "group_life_wording",
+    "pension_wording",
+  ],
   employment_contract: ["employer", "role", "start_date", "notice_period"],
   payslip: ["pay_period", "gross_pay", "net_pay"],
   resignation_letter: ["letter_date", "proposed_last_day", "notice_period"],
@@ -228,4 +245,15 @@ export function groupReviewFields(record: ExtractionRecord) {
     manual: empty.filter((f) => useful.includes(f.key)),
     optional: empty.filter((f) => !useful.includes(f.key)),
   };
+}
+
+export function extractionReadyMessage(record: ExtractionRecord): string {
+  if (
+    record.needsTypeConfirmation ||
+    record.errorCode === "needs_type_confirmation"
+  )
+    return "The file is saved, but its category needs confirmation before extraction can continue.";
+  if (record.sourceKind === "manual")
+    return "Manual fields are ready. Enter only details stated in your document.";
+  return "Details are ready for your review. Nothing is confirmed automatically.";
 }

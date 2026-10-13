@@ -229,3 +229,9 @@ use ordinary owner-filtered queries rather than long interactive transactions.
 These displays are not a single cross-query snapshot; mutations still recheck
 current evidence and versions inside their existing atomic transactions. Temporary
 read failures become generic typed 503 errors for existing retry/error boundaries.
+
+## Benefit document extraction (v10)
+
+`benefit_document` now supports employee benefit summaries alongside the six existing extraction categories. Distinctive summary headings select its isolated schema; pension wording alone does not select pension-statement contribution fields. The schema captures employer, employee, role, separate health/group-life/pension clauses, and explicitly named providers. Clause wording includes stated limits and continuation conditions; no portability decisions, coverage-date calculations or automatic Benefit/Passport mutations occur. Every proposal remains grounded and needs review.
+
+The synthetic `benefit_document.pdf` fixture is the supplied employee benefit summary. Provider names are absent and stay empty. The review presents proposed clauses and useful manual fields, with remaining optional fields collapsed. Category-confirmation and manual-entry results use distinct status messages. Validated v9 attempts remain reviewable; this additive schema does not invalidate existing reviews. Older unvalidated classifications retain their existing confirmation requirement.

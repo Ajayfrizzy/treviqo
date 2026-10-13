@@ -6,8 +6,8 @@ import {
   supportedTypes,
   type ExtractionType,
 } from "./shared";
-export const PROMPT_VERSION = "evidence-v9";
-export const SCHEMA_VERSION = "fields-v9";
+export const PROMPT_VERSION = "evidence-v10";
+export const SCHEMA_VERSION = "fields-v10";
 const cell = z
   .object({
     value: z.string().min(1).max(1000).nullable(),
@@ -157,6 +157,9 @@ const aliases: Record<string, ExtractionType | "other"> = {
   final_settlement_document: "final_settlement",
   final_settlement_statement: "final_settlement",
   pension_statement: "pension_statement",
+  benefit_document: "benefit_document",
+  benefit_summary: "benefit_document",
+  employee_benefit_summary: "benefit_document",
   other: "other",
 };
 export function parseClassification(raw: string, source: string) {

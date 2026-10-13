@@ -190,6 +190,10 @@ test("handles model failure, low confidence, malformed output and manual fallbac
     exact: true,
   });
   await expect(category).toContainText("Needs confirmation");
+  await expect(page.getByRole("status")).toContainText(
+    "category needs confirmation",
+  );
+  await expect(page.getByRole("status")).not.toContainText("Details are ready");
   await expect(
     page.getByRole("region", { name: "Employer", exact: true }),
   ).toHaveCount(0);
@@ -1001,6 +1005,7 @@ for (const type of [
   "termination_letter",
   "final_settlement",
   "pension_statement",
+  "benefit_document",
 ] as const) {
   test(`wrong AI category cannot cross schemas in the ${type} review`, async ({
     page,
@@ -1045,6 +1050,28 @@ for (const type of [
     await expect(
       page.getByText("Add another detail", { exact: true }).locator(".."),
     ).not.toHaveAttribute("open", "");
+    if (type === "benefit_document") {
+      await expect(
+        page.getByRole("region", {
+          name: "Health plan — coverage and continuation",
+          exact: true,
+        }),
+      ).toContainText("30 calendar days");
+      await expect(
+        page.getByRole("region", {
+          name: "Health plan — coverage and continuation",
+          exact: true,
+        }),
+      ).toContainText("continuation is not automatic");
+      await expect(
+        page.getByRole("region", { name: "Gross pay", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page
+          .getByLabel("Document type", { exact: true })
+          .getByRole("option", { name: "Benefit document", exact: true }),
+      ).toHaveCount(1);
+    }
     if (type === "pension_statement") {
       await expect(
         page.getByRole("region", {
