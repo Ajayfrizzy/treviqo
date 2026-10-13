@@ -561,3 +561,39 @@ it("binds confirmation to the reviewed payslip period revision as well as its am
     "needs_clarification",
   );
 });
+
+it("keeps pension confirmation after reload when database field order changes", async () => {
+  const { statement, data } = await pension();
+  await service.command(a, id, {
+    action: "pension_confirm",
+    version: data.pension!.version,
+    evidenceToken: data.pension!.evidenceToken,
+  });
+  const reversed = db.$extends({
+    query: {
+      documentExtraction: {
+        async findMany({ args, query }) {
+          const rows = await query(args);
+          return rows.map((row) => {
+            const result = row as typeof row & { fields?: unknown[] };
+            return result.fields
+              ? { ...result, fields: [...result.fields].reverse() }
+              : result;
+          });
+        },
+      },
+    },
+  });
+  const reload = financeService(reversed as unknown as typeof db);
+  const unchanged = await reload.read(a, id);
+  expect(unchanged.pension!.evidenceToken).toBe(data.pension!.evidenceToken);
+  expect(unchanged.pension!.result.state).toBe("confirmed");
+  // Actual revisions must still revoke confirmation, regardless of row order.
+  await db.extractedField.update({
+    where: { id: statement.field.id },
+    data: { version: { increment: 1 } },
+  });
+  expect((await reload.read(a, id)).pension!.result.state).toBe(
+    "needs_clarification",
+  );
+});

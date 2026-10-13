@@ -72,6 +72,18 @@ export function financeService(db: PrismaClient = getDb()) {
             ["confirmed", "corrected"].includes(field.reviewState) &&
             field.value !== null,
         )
+        // Database row order must not change the evidence token or revoke confirmation.
+        .sort((a, b) =>
+          a.key < b.key
+            ? -1
+            : a.key > b.key
+              ? 1
+              : a.id < b.id
+                ? -1
+                : a.id > b.id
+                  ? 1
+                  : 0,
+        )
         .map((field) => ({
           id: field.id,
           version: field.version,
