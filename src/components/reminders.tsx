@@ -1,8 +1,16 @@
 "use client";
+import { IconBadge, StatusChip, EmptyState, type Tone } from "./product-ui";
 import { Button } from "./button";
 import { uiRequest } from "./ui-request";
 import Link from "@/components/action-link";
 import { useState } from "react";
+const reminderTones: Record<string, Tone> = {
+  exit_action: "exit",
+  missing_document: "info",
+  pension_followup: "history",
+  pension_follow_up: "history",
+  stale_action: "review",
+};
 interface Data {
   updatesAvailable: boolean;
   reminders: {
@@ -81,30 +89,46 @@ export function Reminders({ initial }: { initial: Data }) {
         </p>
       )}
       {!data.reminders.length ? (
-        <section className="card history">
-          <h2>No reminders due</h2>
-          <p>
-            New cases are checked in the background. Snoozing or dismissing a
-            reminder does not confirm completion.
-          </p>
-          <Link className="touch-link" href="/exit">
-            Review exit checklists
-          </Link>
-        </section>
+        <div className="history">
+          <EmptyState title="No reminders due" icon="reminders" tone="success">
+            <p>
+              New cases are checked in the background. Snoozing or dismissing a
+              reminder does not confirm completion.
+            </p>
+            <Link className="touch-link" href="/exit">
+              Review exit checklists
+            </Link>
+          </EmptyState>
+        </div>
       ) : (
         <div className="passport-flow history">
           {data.reminders.map((item) => (
-            <article className="card" key={item.id}>
-              <span className="badge">{item.kind.replaceAll("_", " ")}</span>
+            <article
+              className={`card reminder-card tone-${reminderTones[item.kind] ?? "review"}`}
+              key={item.id}
+            >
+              <div className="card-topline">
+                <StatusChip tone={reminderTones[item.kind] ?? "review"}>
+                  {item.kind.replaceAll("_", " ")}
+                </StatusChip>
+                <IconBadge
+                  icon="reminders"
+                  tone={reminderTones[item.kind] ?? "review"}
+                />
+              </div>
               <h2>{item.title}</h2>
               <p>{item.message}</p>
-              <p>Follow-up date: {item.dueAt.slice(0, 10)}</p>
+              <p className="reminder-date">
+                Follow-up date:{" "}
+                <time dateTime={item.dueAt}>{item.dueAt.slice(0, 10)}</time>
+              </p>
               <Link className="touch-link" href={item.href}>
                 Review current records
               </Link>
               <div className="form-actions">
                 <Button
                   pendingLabel="Snoozing…"
+                  className="secondary"
                   disabled={busy}
                   onClick={() =>
                     request({

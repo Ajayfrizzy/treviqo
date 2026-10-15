@@ -1,3 +1,4 @@
+import { IconBadge, StatusChip, EmptyState } from "@/components/product-ui";
 import Link from "@/components/action-link";
 import { employmentPageUser } from "@/modules/employments/page-user";
 import { exitService } from "@/modules/exits/service";
@@ -18,26 +19,32 @@ export default async function ExitPage() {
         Start an exit checklist
       </Link>
       {!cases.length ? (
-        <section className="card history">
-          <h2>No exit cases yet</h2>
-          <p>
-            Start an exit checklist above. Choose your employment and last
-            working date to see the records and questions to follow up. You can
-            save and return at any step.
-          </p>
-        </section>
+        <div className="history">
+          <EmptyState title="No exit cases yet" icon="exit" tone="exit">
+            <p>
+              Start an exit checklist above. Choose your employment and last
+              working date to see the records and questions to follow up. You
+              can save and return at any step.
+            </p>
+          </EmptyState>
+        </div>
       ) : (
         <div className="employment-list history">
           {cases.map((item) => (
-            <article key={item.id} className="card employment-card exit-job">
+            <article
+              key={item.id}
+              className="card employment-card exit-job accent-card tone-exit"
+            >
+              <div className="card-topline">
+                <IconBadge icon="exit" tone="exit" />
+                <StatusChip tone="exit">{exitTypes[item.exitType]}</StatusChip>
+              </div>
               <h2>{item.employment.employerName}</h2>
-              <p>
-                {item.employment.roleTitle} · {exitTypes[item.exitType]}
-              </p>
+              <p>{item.employment.roleTitle}</p>
               <p>
                 Last working date: {formatEmploymentDate(item.lastWorkingDate)}
               </p>
-              <Link className="touch-link" href={`/exit/${item.id}`}>
+              <Link className="button-link attention" href={`/exit/${item.id}`}>
                 Open checklist
               </Link>
             </article>

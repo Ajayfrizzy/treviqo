@@ -61,6 +61,7 @@ for (const width of [375, 1440]) {
     const timings: Record<string, number> = {};
     for (const [label, heading] of [
       ["Exit", "Job Exit Checker"],
+      ["Reminders", "Your reminders"],
       ["Passport", "Benefit Passport"],
       ["Documents", "Documents"],
       ["Profile", "Profile"],

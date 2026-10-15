@@ -174,7 +174,7 @@ export function ExitForm({
     : "";
   return (
     <form
-      className="employment-form card exit-form"
+      className="employment-form card exit-form accent-card tone-exit"
       onSubmit={(event) => {
         event.preventDefault();
         void save();
@@ -185,6 +185,25 @@ export function ExitForm({
       <p className="eyebrow">
         {employerName} · Step {step + 1} of {steps.length}
       </p>
+      <ol className="step-progress" aria-label="Exit form progress">
+        {steps.map((label, index) => (
+          <li
+            key={label}
+            aria-current={index === step ? "step" : undefined}
+            data-visited={index < step}
+          >
+            <span className="step-number" aria-hidden="true">
+              {index + 1}
+            </span>
+            <span>
+              {label}
+              {index === step && (
+                <span className="sr-only"> — current step</span>
+              )}
+            </span>
+          </li>
+        ))}
+      </ol>
       <h2 ref={heading} tabIndex={-1}>
         {steps[step]}
       </h2>

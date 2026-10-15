@@ -11,9 +11,10 @@ Design and validate smartphone layouts first.
 ## Bottom navigation
 1. Home
 2. Exit
-3. Passport
-4. Documents
-5. Profile
+3. Reminders
+4. Passport
+5. Documents
+6. Profile
 
 Desktop can use a sidebar with the same information architecture.
 
@@ -319,3 +320,18 @@ wrap on narrow screens and retain at least 48px targets. There is no auto-cyclin
 scroll interception or new animation dependency.
 
 See [landing interaction validation](../milestones/LANDING_INTERACTIONS.md).
+
+
+## Authenticated semantic UI — 15 October 2026
+
+The authenticated shell uses scoped `product.css` tokens and shared `product-ui` components. Soft green marks completed/confirmed states, amber review, blue documents/information, orange exit actions, violet history, and neutral inactive states. Red remains destructive. Text labels accompany every status; color alone does not convey meaning. Icons reuse the navigation stroke family through `UiIcon`.
+
+Reminders is a first-class navigation destination. Below 600px, six links form two rows of three with readable labels and 52px targets; 600–799px uses one row, and desktop uses the sidebar. Content reserves space for the fixed bottom navigation. No count query was added to the layout.
+
+Home uses compact counts, semantic icons and actionable attention rows. Employment and document cards have restrained accents and metadata hierarchy. Exit list cards show existing type/date data without fabricated progress; detail shows actual complete and not-applicable counts with its existing safety explanation. The wizard shows all four steps with an explicit current step, retaining validation and save behavior.
+
+Reminders use compact cards and secondary snooze/dismiss actions. Passport separates employment, exit, pension, benefits and document availability; assessment messages, trust disclaimers, stale warnings, dates and source links remain visible. The short assessment basis is intentionally not collapsed because it explains the limits of the assessment. Profile receives limited section accents. Shared empty states provide a marker and existing next action. Hover motion is limited to dashboard feedback and respects reduced motion.
+
+No APIs, queries, persistence, domain rules, extraction, worker, authentication or account-deletion behavior change in this pass.
+
+Validation for this pass: `npm run validate` passed lint, TypeScript, 432 unit tests, production build and worker build. Final `npm run test:e2e` passed all 169 tests, including populated product screens at 320, 375, 430, 768, 1024, 1280 and 1440px. Lint/TypeScript and production build were rechecked after refinements. An earlier browser run was stopped when it retained the obsolete disclosure test during the visible-disclaimer refinement; the final full run passed. Screenshots are generated under ignored `test-results/product-*.png`. Semantic text/tint contrast ranges from 5.75:1 to 7.33:1. Physical-device Safari, safe-area/virtual-keyboard behavior and text enlargement remain manual checks.

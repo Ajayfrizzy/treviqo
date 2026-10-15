@@ -1,3 +1,4 @@
+import { StatusChip } from "./product-ui";
 import Link from "@/components/action-link";
 import {
   formatEmploymentDate,
@@ -11,8 +12,20 @@ export function EmploymentCard({
   employment: EmploymentRecord;
 }) {
   return (
-    <article className="card employment-card">
-      <span className="badge">{statusLabels[employment.status]}</span>
+    <article
+      className={`card employment-card accent-card tone-${employment.status === "active" ? "success" : employment.status === "closed" ? "history" : "exit"}`}
+    >
+      <StatusChip
+        tone={
+          employment.status === "active"
+            ? "success"
+            : employment.status === "closed"
+              ? "history"
+              : "exit"
+        }
+      >
+        {statusLabels[employment.status]}
+      </StatusChip>
       <h3>{employment.roleTitle}</h3>
       <p className="employer-name">{employment.employerName}</p>
       <p className="employment-meta">

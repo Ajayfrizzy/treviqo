@@ -1,3 +1,8 @@
+import {
+  SectionTitle,
+  StatusChip,
+  checklistTone,
+} from "@/components/product-ui";
 import Link from "@/components/action-link";
 import { notFound } from "next/navigation";
 import { employmentPageUser } from "@/modules/employments/page-user";
@@ -36,8 +41,32 @@ export default async function ExitDetail({
           Exit details saved. Your checklist is up to date.
         </p>
       )}
-      <section className="card">
-        <h2>Records and next actions</h2>
+      <section className="card section-panel tone-exit">
+        <SectionTitle icon="exit" tone="exit">
+          Records and next actions
+        </SectionTitle>
+        <div className="checklist-progress">
+          <p id="checklist-progress-label">
+            {
+              record.checklist.filter((item) => item.state === "complete")
+                .length
+            }{" "}
+            of {record.checklist.length} checks complete ·{" "}
+            {
+              record.checklist.filter((item) => item.state === "not_applicable")
+                .length
+            }{" "}
+            not applicable
+          </p>
+          <progress
+            aria-labelledby="checklist-progress-label"
+            value={
+              record.checklist.filter((item) => item.state === "complete")
+                .length
+            }
+            max={record.checklist.length}
+          />
+        </div>
         <p>
           Last working date:{" "}
           {formatEmploymentDate(record.answers.lastWorkingDate)}
@@ -61,10 +90,14 @@ export default async function ExitDetail({
       </p>
       <div className="exit-checklist">
         {record.checklist.map((item) => (
-          <section className="card" aria-label={item.title} key={item.ruleId}>
-            <span className={`badge checklist-${item.state}`}>
+          <section
+            className={`card checklist-card tone-${checklistTone[item.state]}`}
+            aria-label={item.title}
+            key={item.ruleId}
+          >
+            <StatusChip tone={checklistTone[item.state]}>
               {stateLabels[item.state]}
-            </span>
+            </StatusChip>
             <h2>{item.title}</h2>
             <p>{item.message}</p>
             <h3>Next action</h3>

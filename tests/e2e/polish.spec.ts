@@ -38,7 +38,14 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       .click();
     await expect(page).toHaveURL("/home");
     const nav = page.getByRole("navigation", { name: "Primary" });
-    for (const label of ["Home", "Exit", "Passport", "Documents", "Profile"]) {
+    for (const label of [
+      "Home",
+      "Exit",
+      "Reminders",
+      "Passport",
+      "Documents",
+      "Profile",
+    ]) {
       await nav.getByRole("link", { name: label, exact: true }).click();
       await expect(
         nav.getByRole("link", { name: label, exact: true }),
@@ -50,6 +57,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
           {
             Home: "Welcome to Treviqo, Fixture",
             Exit: "Job Exit Checker",
+            Reminders: "Your reminders",
             Passport: "Benefit Passport",
             Documents: "Documents",
             Profile: "Profile",

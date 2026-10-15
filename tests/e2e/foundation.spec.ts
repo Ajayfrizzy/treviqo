@@ -94,7 +94,14 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
     await page.goto("/home");
     const nav = page.getByRole("navigation", { name: "Primary" });
     await expect(nav).toBeVisible();
-    for (const label of ["Exit", "Passport", "Documents", "Profile", "Home"]) {
+    for (const label of [
+      "Exit",
+      "Reminders",
+      "Passport",
+      "Documents",
+      "Profile",
+      "Home",
+    ]) {
       await nav.getByRole("link", { name: label, exact: true }).click();
       await expect(
         nav.getByRole("link", { name: label, exact: true }),

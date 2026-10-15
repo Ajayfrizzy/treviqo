@@ -1,0 +1,514 @@
+/* Authenticated product only. Semantic roles share one restrained palette. */
+.app-shell {
+  --success-ink: #245e49;
+  --success-soft: #edf5ef;
+  --success-line: #b9d7c3;
+  --review-ink: #795015;
+  --review-soft: #fff6e4;
+  --review-line: #e5cc96;
+  --info-ink: #285b79;
+  --info-soft: #edf4fa;
+  --info-line: #bad2e3;
+  --exit-ink: #8a4a24;
+  --exit-soft: #fcf1e9;
+  --exit-line: #e6c4ad;
+  --history-ink: #61507e;
+  --history-soft: #f3eff8;
+  --history-line: #d0c3e0;
+  --neutral-ink: #53625c;
+  --neutral-soft: #f1f3ee;
+  --neutral-line: #dce2d9;
+  --danger-ink: #922b2b;
+  --danger-soft: #fff1ef;
+  --danger-line: #dfb4ae;
+}
+.app-shell .tone-success {
+  --tone-ink: var(--success-ink);
+  --tone-soft: var(--success-soft);
+  --tone-line: var(--success-line);
+}
+.app-shell .tone-review {
+  --tone-ink: var(--review-ink);
+  --tone-soft: var(--review-soft);
+  --tone-line: var(--review-line);
+}
+.app-shell .tone-info {
+  --tone-ink: var(--info-ink);
+  --tone-soft: var(--info-soft);
+  --tone-line: var(--info-line);
+}
+.app-shell .tone-exit {
+  --tone-ink: var(--exit-ink);
+  --tone-soft: var(--exit-soft);
+  --tone-line: var(--exit-line);
+}
+.app-shell .tone-history {
+  --tone-ink: var(--history-ink);
+  --tone-soft: var(--history-soft);
+  --tone-line: var(--history-line);
+}
+.app-shell .tone-neutral {
+  --tone-ink: var(--neutral-ink);
+  --tone-soft: var(--neutral-soft);
+  --tone-line: var(--neutral-line);
+}
+.app-shell .tone-danger {
+  --tone-ink: var(--danger-ink);
+  --tone-soft: var(--danger-soft);
+  --tone-line: var(--danger-line);
+}
+.app-shell .icon-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 40px;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  color: var(--tone-ink);
+  background: var(--tone-soft);
+}
+.app-shell .status-chip {
+  display: inline-flex;
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.3rem 0.65rem;
+  border: 1px solid var(--tone-line);
+  border-radius: 2rem;
+  background: var(--tone-soft);
+  color: var(--tone-ink);
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1.5;
+  margin-bottom: 0.75rem;
+}
+.app-shell .accent-card {
+  border-top: 3px solid var(--tone-line);
+}
+.app-shell .section-panel {
+  border-left: 3px solid var(--tone-line);
+}
+.app-shell .product-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.app-shell .card-topline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+.app-shell .card-topline .status-chip {
+  margin: 0;
+}
+.app-shell .empty-state {
+  border-style: dashed;
+  background: var(--tone-soft);
+  padding: 1.5rem;
+}
+.app-shell .empty-state > .icon-badge {
+  background: var(--surface);
+  margin-bottom: 0.85rem;
+}
+.app-shell .empty-state p {
+  max-width: 65ch;
+}
+.app-shell .navigation {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  padding: 0.35rem 0.5rem calc(0.35rem + env(safe-area-inset-bottom));
+}
+.app-shell .navigation a {
+  min-height: 52px;
+  font-size: 0.75rem;
+}
+.app-shell .navigation .link-content {
+  gap: 0.1rem;
+}
+.app-shell .content {
+  padding-bottom: calc(10rem + env(safe-area-inset-bottom));
+}
+.app-shell .home-overview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.85rem;
+}
+.app-shell .home-overview .dashboard-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.5rem 1rem;
+  background: linear-gradient(130deg, var(--tone-soft), var(--surface));
+  border-top: 3px solid var(--tone-line);
+  padding: 1.15rem;
+}
+.app-shell .dashboard-card > .icon-badge {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+.app-shell .dashboard-card > strong {
+  grid-column: 1;
+  grid-row: 1;
+  color: var(--tone-ink);
+  font-size: 2.3rem;
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+}
+.app-shell .dashboard-card > h3 {
+  grid-column: 1;
+  grid-row: 2;
+  font-size: 0.95rem;
+  margin: 0;
+}
+.app-shell .dashboard-card > .touch-link {
+  grid-column: 1 / -1;
+  margin-top: 0.25rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.app-shell .home-attention {
+  padding: 1.1rem;
+  border-top: 3px solid var(--review-line);
+}
+.app-shell .attention-links {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+}
+.app-shell .attention-links .touch-link {
+  display: flex;
+  width: 100%;
+  padding: 0.7rem;
+  border-radius: 0.75rem;
+  background: var(--tone-soft);
+  color: var(--tone-ink);
+  text-decoration: none;
+  font-weight: 600;
+}
+.app-shell .attention-links .link-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.app-shell .attention-links .link-content::after {
+  content: "→";
+  margin-left: auto;
+}
+.app-shell .attention-links .icon-badge {
+  background: var(--surface);
+}
+.app-shell .employment-card {
+  padding: 1.2rem;
+}
+.app-shell .employment-card .employer-name {
+  font-size: 1rem;
+  margin-bottom: 0.75rem;
+}
+.app-shell .employment-card .employment-meta {
+  font-size: 0.85rem;
+}
+.app-shell .employment-card > .touch-link {
+  border-top: 1px solid var(--border);
+  margin-top: 0.6rem;
+  width: 100%;
+  font-weight: 700;
+}
+.app-shell .exit-job .button-link {
+  margin-top: 0.5rem;
+}
+.app-shell .exit-job > p {
+  margin-bottom: 0.6rem;
+}
+.app-shell .step-progress {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.5rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+.app-shell .step-progress li {
+  border-top: 3px solid var(--border);
+  padding-top: 0.65rem;
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.app-shell .step-progress li[aria-current="step"] {
+  color: var(--exit-ink);
+  border-color: var(--exit-ink);
+  font-weight: 700;
+}
+.app-shell .step-progress li[data-visited="true"] {
+  border-color: var(--success-line);
+}
+.app-shell .step-number {
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--neutral-soft);
+  font-weight: 700;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+}
+.app-shell .step-progress [aria-current="step"] .step-number {
+  background: var(--exit-soft);
+}
+.app-shell .exit-form > fieldset {
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+.app-shell .exit-form .field-hint {
+  padding-left: 0.7rem;
+  border-left: 2px solid var(--info-line);
+}
+.app-shell .exit-form .form-actions + .form-actions {
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+.app-shell .checklist-card {
+  padding: 1.1rem 1.2rem;
+  border-left: 3px solid var(--tone-line);
+  background: linear-gradient(100deg, var(--tone-soft), var(--surface) 70%);
+}
+.app-shell .checklist-card h2 {
+  font-size: 1.1rem;
+}
+.app-shell .checklist-card p {
+  margin-bottom: 0.7rem;
+}
+.app-shell .checklist-card h3 {
+  font-size: 0.85rem;
+}
+.app-shell details > summary {
+  min-height: 48px;
+  padding-block: 0.7rem;
+  cursor: pointer;
+  font-weight: 600;
+}
+.app-shell .checklist-card details {
+  border-top: 1px solid var(--tone-line);
+  margin-top: 0.85rem;
+}
+.app-shell .checklist-progress {
+  margin-bottom: 1rem;
+}
+.app-shell .checklist-progress p {
+  font-size: 0.85rem;
+  margin-bottom: 0.4rem;
+}
+.app-shell .checklist-progress progress {
+  height: 0.5rem;
+  display: block;
+}
+.app-shell .reminder-card {
+  padding: 1.1rem 1.2rem;
+  border-left: 3px solid var(--tone-line);
+}
+.app-shell .reminder-card p {
+  margin-bottom: 0.6rem;
+}
+.app-shell .reminder-card .form-actions {
+  margin-top: 0.65rem;
+  padding-top: 0.65rem;
+  border-top: 1px solid var(--border);
+  gap: 0.5rem;
+}
+.app-shell .reminder-card .form-actions button {
+  font-size: 0.85rem;
+  padding-inline: 0.85rem;
+  flex: 1 1 100%;
+}
+.app-shell .reminder-date {
+  font-size: 0.8rem;
+}
+.app-shell .passport-timeline {
+  border-color: var(--history-line);
+  padding-left: 1rem;
+  gap: 1rem;
+}
+.app-shell .passport-timeline li {
+  position: relative;
+}
+.app-shell .passport-timeline li::before {
+  content: "";
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--history-ink);
+  border: 2px solid var(--canvas);
+  top: 1.5rem;
+  left: -1.38rem;
+}
+.app-shell .passport-timeline .card {
+  padding: 1.25rem;
+}
+.app-shell .passport-timeline .card p {
+  margin-bottom: 0.6rem;
+}
+.app-shell .passport-summary-grid,
+.app-shell .benefit-grid,
+.app-shell .document-status-grid {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.app-shell .benefit-card {
+  padding: 1.15rem;
+  align-self: start;
+}
+.app-shell .benefit-card h3 {
+  margin: 0 0 0.6rem;
+}
+.app-shell .benefit-card .quiet {
+  margin: 0.6rem 0;
+  font-size: 0.8rem;
+}
+.app-shell .benefit-card .benefit-basis {
+  border-top: 1px solid var(--border);
+  padding-top: 0.7rem;
+}
+.app-shell .benefit-card .form-actions {
+  margin-top: 0.75rem;
+  gap: 0.65rem;
+}
+.app-shell .benefit-card .form-actions > button {
+  flex: 1 1 100%;
+}
+.app-shell .benefit-card form {
+  border-top: 1px solid var(--border);
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+}
+.app-shell .document-status-grid .card {
+  padding: 1rem;
+}
+.app-shell .document-status-grid h3 {
+  margin-top: 0;
+}
+.app-shell .document-card {
+  padding: 1.2rem;
+  border-top: 3px solid var(--tone-line);
+}
+.app-shell .document-card h2 {
+  margin: 0 0 0.5rem;
+}
+.app-shell .document-card > p {
+  margin-bottom: 0.6rem;
+}
+.app-shell .document-card .document-category {
+  color: var(--tone-ink);
+  font-weight: 700;
+  font-size: 0.85rem;
+}
+.app-shell .document-filter {
+  max-width: 44rem;
+}
+.app-shell .profile-grid {
+  align-items: start;
+}
+.app-shell .profile-form {
+  max-width: 42rem;
+  gap: 1.25rem;
+}
+.app-shell .profile-form [role="status"] {
+  color: var(--success-ink);
+  background: var(--success-soft);
+  padding: 0.7rem 1rem;
+  border-radius: 0.65rem;
+}
+.app-shell .button-link,
+.app-shell button {
+  min-height: 48px;
+}
+.app-shell button.danger-button:hover:not(:disabled) {
+  background: #742020;
+  border-color: #742020;
+}
+.app-shell .button-link.attention {
+  color: var(--exit-ink);
+  border-color: var(--exit-line);
+  background: var(--exit-soft);
+}
+.app-shell .button-link.attention:hover {
+  background: #f7e4d6;
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .app-shell .dashboard-card {
+    transition:
+      transform 0.16s,
+      box-shadow 0.16s;
+  }
+  .app-shell .dashboard-card:hover,
+  .app-shell .dashboard-card:focus-within {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px #172d270b;
+  }
+}
+@media (min-width: 600px) {
+  .app-shell .navigation {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  .app-shell .content {
+    padding-bottom: calc(7rem + env(safe-area-inset-bottom));
+  }
+  .app-shell .home-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .app-shell .step-progress {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .app-shell .reminder-card .form-actions button {
+    flex: 0 1 auto;
+  }
+}
+@media (min-width: 768px) {
+  .app-shell .benefit-card .form-actions > button {
+    flex: 0 1 auto;
+  }
+}
+@media (min-width: 800px) {
+  .app-shell .navigation {
+    padding: 0;
+  }
+  .app-shell .navigation a {
+    font-size: 0.9rem;
+  }
+  .app-shell .navigation .link-content {
+    gap: 0.85rem;
+  }
+  .app-shell .content {
+    padding-bottom: 4rem;
+  }
+}
+@media (min-width: 1100px) {
+  .app-shell .passport-summary-grid,
+  .app-shell .benefit-grid,
+  .app-shell .document-status-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .app-shell .benefit-card:has(form) {
+    grid-column: 1 / -1;
+  }
+  .app-shell .benefit-card .form-actions > button {
+    flex: 0 1 auto;
+  }
+}
+
+.app-shell .benefit-actions > form {
+  flex: 1 1 100%;
+}
+.app-shell .benefit-card .benefit-actions > button {
+  width: auto;
+}
+.app-shell .content {
+  scroll-margin-bottom: 10rem;
+}
+.app-shell .attention-links a:focus-visible {
+  outline-offset: 2px;
+}

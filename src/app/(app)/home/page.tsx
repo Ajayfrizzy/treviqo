@@ -1,3 +1,4 @@
+import { IconBadge, EmptyState } from "@/components/product-ui";
 import { Suspense } from "react";
 import { PageSkeleton } from "@/components/page-skeleton";
 import Link from "@/components/action-link";
@@ -158,12 +159,15 @@ async function EmploymentOverview({
               ))}
             </div>
           ) : (
-            <section className="card">
+            <EmptyState title="No current employment" icon="work">
               <p>
                 No current employment recorded. Your previous roles are kept
                 below.
               </p>
-            </section>
+              <Link className="touch-link" href="/employments/new">
+                Add employment
+              </Link>
+            </EmptyState>
           )}
           <section aria-labelledby="previous-heading" className="history">
             <h2 id="previous-heading">Previous employment</h2>
@@ -174,10 +178,16 @@ async function EmploymentOverview({
                 ))}
               </div>
             ) : (
-              <p>
-                No closed employment records yet. Your active roles appear
-                above.
-              </p>
+              <EmptyState
+                title="Your history starts here"
+                icon="passport"
+                tone="history"
+              >
+                <p>
+                  No closed employment records yet. Your active roles appear
+                  above.
+                </p>
+              </EmptyState>
             )}
           </section>
         </>
@@ -221,30 +231,45 @@ async function HomeSummary({
         className="card home-attention"
         aria-labelledby="attention-title"
       >
-        <h2 id="attention-title">What needs your attention</h2>
+        <h2 id="attention-title" className="product-section-title">
+          <IconBadge icon="reminders" tone="review" />
+          What needs your attention
+        </h2>
         {hasAttention ? (
           <ul className="attention-links">
             {proposals > 0 && (
               <li>
-                <Link className="touch-link" href="/documents">
-                  Review proposals in {proposals} document
-                  {proposals === 1 ? "" : "s"}
+                <Link className="touch-link tone-info" href="/documents">
+                  <IconBadge icon="documents" tone="info" />
+                  <span>
+                    Review proposals in {proposals} document
+                    {proposals === 1 ? "" : "s"}
+                  </span>
                 </Link>
               </li>
             )}
             {reminders.length > 0 && (
               <li>
-                <Link className="touch-link" href="/reminders">
-                  View {reminders.length} due reminder
-                  {reminders.length === 1 ? "" : "s"}
+                <Link className="touch-link tone-review" href="/reminders">
+                  <IconBadge icon="reminders" tone="review" />
+                  <span>
+                    View {reminders.length} due reminder
+                    {reminders.length === 1 ? "" : "s"}
+                  </span>
                 </Link>
               </li>
             )}
             {unresolvedExits.map((exit) => (
               <li key={exit.id}>
-                <Link className="touch-link" href={`/exit/${exit.id}`}>
-                  Review exit checklist for {exit.employerName} —{" "}
-                  {exit.roleTitle}
+                <Link
+                  className="touch-link tone-exit"
+                  href={`/exit/${exit.id}`}
+                >
+                  <IconBadge icon="exit" tone="exit" />
+                  <span>
+                    Review exit checklist for {exit.employerName} —{" "}
+                    {exit.roleTitle}
+                  </span>
                 </Link>
               </li>
             ))}
@@ -256,28 +281,32 @@ async function HomeSummary({
       <section aria-label="Working-life overview">
         <h2 id="overview-title">Overview</h2>
         <div className="home-overview">
-          <article className="card">
+          <article className="card dashboard-card tone-success">
+            <IconBadge icon="work" tone="success" />
             <strong>{current.length}</strong>
             <h3>Current employments</h3>
             <a className="touch-link" href="#current-employment">
               View current employment
             </a>
           </article>
-          <article className="card">
+          <article className="card dashboard-card tone-info">
+            <IconBadge icon="documents" tone="info" />
             <strong>{needsReview}</strong>
             <h3>Documents to review</h3>
             <Link className="touch-link" href="/documents">
               Open your documents
             </Link>
           </article>
-          <article className="card">
+          <article className="card dashboard-card tone-exit">
+            <IconBadge icon="exit" tone="exit" />
             <strong>{activeExits.length}</strong>
             <h3>Active exit checklists</h3>
             <Link className="touch-link" href="/exit">
               Open Job Exit Checker
             </Link>
           </article>
-          <article className="card">
+          <article className="card dashboard-card tone-history">
+            <IconBadge icon="passport" tone="history" />
             <strong>{previous.length}</strong>
             <h3>Closed employments</h3>
             <Link className="touch-link" href="/passport">

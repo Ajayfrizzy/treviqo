@@ -1,3 +1,4 @@
+import { IconBadge, StatusChip, EmptyState } from "@/components/product-ui";
 import Link from "@/components/action-link";
 import { employmentPageUser } from "@/modules/employments/page-user";
 import { passportService } from "@/modules/passport/service";
@@ -18,8 +19,11 @@ export default async function PassportPage() {
         certificate. Summaries reflect current source records.
       </p>
       {!entries.length ? (
-        <section className="card">
-          <h2>No closed employments yet</h2>
+        <EmptyState
+          title="No closed employments yet"
+          icon="passport"
+          tone="history"
+        >
           <p>
             Keep your past roles and benefit records within reach as you move
             on. Manage your employment below and mark a finished role Closed to
@@ -29,7 +33,7 @@ export default async function PassportPage() {
           <Link className="button-link" href="/home">
             Manage employment
           </Link>
-        </section>
+        </EmptyState>
       ) : (
         <ol
           className="passport-timeline"
@@ -37,8 +41,13 @@ export default async function PassportPage() {
         >
           {entries.map((entry) => (
             <li key={entry.id}>
-              <article className="card">
-                <span className="badge">Closed · worker-entered</span>
+              <article className="card section-panel tone-history">
+                <div className="card-topline">
+                  <IconBadge icon="passport" tone="history" />
+                  <StatusChip tone="history">
+                    Closed · worker-entered
+                  </StatusChip>
+                </div>
                 <h2>{entry.employer}</h2>
                 <p>{entry.role}</p>
                 <p>
