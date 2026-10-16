@@ -115,11 +115,23 @@ for (const width of [320, 375, 390, 430, 768, 1440]) {
       await expect(more).not.toBeVisible();
     }
     if (width < 800) {
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      const last = page.getByRole("main").getByRole("link").last();
-      const lastBox = await last.boundingBox();
-      const navBox = await nav.boundingBox();
-      expect(lastBox!.y + lastBox!.height).toBeLessThanOrEqual(navBox!.y);
+      await expect
+        .poll(async () => {
+          await page.evaluate(() =>
+            window.scrollTo({
+              top: document.body.scrollHeight,
+              behavior: "instant",
+            }),
+          );
+          const lastBox = await page
+            .getByRole("main")
+            .getByRole("link")
+            .last()
+            .boundingBox();
+          const navBox = await nav.boundingBox();
+          return lastBox!.y + lastBox!.height - navBox!.y;
+        })
+        .toBeLessThanOrEqual(0);
       await page.evaluate(() => window.scrollTo(0, 0));
     }
     await page.screenshot({ path: `test-results/navigation-bar-${width}.png` });
