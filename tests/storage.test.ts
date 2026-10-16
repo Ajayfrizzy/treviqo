@@ -264,3 +264,41 @@ it("does not checkpoint unversioned objects when DeleteObject fails", async () =
     "delete denied",
   );
 });
+
+it.each([
+  ["AbortError", "timeout"],
+  ["ECONNRESET", "network"],
+  ["ENOTFOUND", "dns"],
+  ["AccessDenied", "authorization"],
+])(
+  "logs safe %s failures, destroys the client, and never retries PUT",
+  async (name, category) => {
+    configure();
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const failure = Object.assign(new Error("secret provider response"), {
+      name,
+    });
+    mocks.send.mockRejectedValueOnce(failure);
+    try {
+      await expect(
+        getObjectStorage().put(
+          "secret-key",
+          Buffer.from("private document"),
+          "application/pdf",
+        ),
+      ).rejects.toBe(failure);
+      expect(mocks.send).toHaveBeenCalledTimes(1);
+      expect(mocks.options).toHaveBeenCalledWith(
+        expect.objectContaining({ maxAttempts: 1 }),
+      );
+      expect(mocks.destroy).toHaveBeenCalledTimes(1);
+      expect(log.mock.calls).toEqual([
+        [
+          `storage_failed operation=put_object category=${category} http=unknown code=${name}`,
+        ],
+      ]);
+    } finally {
+      log.mockRestore();
+    }
+  },
+);

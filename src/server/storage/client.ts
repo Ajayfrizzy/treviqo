@@ -9,6 +9,7 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { diagnoseStorage } from "./diagnostics";
 import { getEnv } from "@/server/config/env";
 export interface PrivateObjectStorage {
   checkConnection(): Promise<void>;
@@ -25,16 +26,30 @@ export interface PrivateObjectStorage {
 }
 // Explicit endpoint/credentials only: this SDK is a Rumpty S3 protocol client.
 export function getObjectStorage(): PrivateObjectStorage {
-  const env = getEnv();
+  let env: ReturnType<typeof getEnv>;
+  try {
+    env = getEnv();
+  } catch {
+    console.error(
+      "storage_failed operation=initialize category=configuration http=unknown code=unknown",
+    );
+    throw new Error("Object storage configuration is invalid");
+  }
   if (
     !env.S3_ENDPOINT ||
     !env.S3_BUCKET ||
     !env.S3_REGION ||
     !env.S3_ACCESS_KEY_ID ||
     !env.S3_SECRET_ACCESS_KEY
-  )
+  ) {
+    console.error(
+      "storage_failed operation=initialize category=configuration http=unknown code=unknown",
+    );
     throw new Error("Object storage is not configured");
-  const client = new S3Client({
+  }
+  // Each operation owns its client through completion, including streamed reads.
+  // Destroying one operation must not close another operation's sockets.
+  const clientOptions = {
     endpoint: env.S3_ENDPOINT,
     region: env.S3_REGION,
     forcePathStyle: env.S3_FORCE_PATH_STYLE,
@@ -43,10 +58,12 @@ export function getObjectStorage(): PrivateObjectStorage {
       secretAccessKey: env.S3_SECRET_ACCESS_KEY,
     },
     maxAttempts: 1,
-  });
+  };
+  const createClient = () => new S3Client(clientOptions);
   const Bucket = env.S3_BUCKET;
-  return {
+  const storage: PrivateObjectStorage = {
     async checkConnection() {
+      const client = createClient();
       try {
         await client.send(new HeadBucketCommand({ Bucket }), {
           abortSignal: AbortSignal.timeout(2500),
@@ -56,6 +73,7 @@ export function getObjectStorage(): PrivateObjectStorage {
       }
     },
     async read(key, maxBytes) {
+      const client = createClient();
       try {
         const result = await client.send(
           new GetObjectCommand({ Bucket, Key: key }),
@@ -75,6 +93,7 @@ export function getObjectStorage(): PrivateObjectStorage {
       }
     },
     async put(key, body, mimeType) {
+      const client = createClient();
       try {
         await client.send(
           new PutObjectCommand({
@@ -92,6 +111,7 @@ export function getObjectStorage(): PrivateObjectStorage {
       }
     },
     async remove(key) {
+      const client = createClient();
       try {
         await client.send(new DeleteObjectCommand({ Bucket, Key: key }), {
           abortSignal: AbortSignal.timeout(10000),
@@ -104,6 +124,7 @@ export function getObjectStorage(): PrivateObjectStorage {
       }
     },
     async purge(key) {
+      const client = createClient();
       // Rumpty unversioned buckets need only HEAD/DELETE permissions. Version
       // enumeration is opt-in for a deployment explicitly configured as versioned.
       if (env.S3_VERSIONING === "unversioned") {
@@ -242,6 +263,7 @@ export function getObjectStorage(): PrivateObjectStorage {
         throw new Error("Invalid access lifetime");
       if (!/^[a-zA-Z0-9_.-]+$/.test(filename))
         throw new Error("Invalid download filename");
+      const client = createClient();
       try {
         return await getSignedUrl(
           client,
@@ -258,5 +280,13 @@ export function getObjectStorage(): PrivateObjectStorage {
         client.destroy();
       }
     },
+  };
+  return {
+    checkConnection: diagnoseStorage("head_bucket", storage.checkConnection),
+    read: diagnoseStorage("get_object", storage.read),
+    put: diagnoseStorage("put_object", storage.put),
+    remove: diagnoseStorage("delete_object", storage.remove),
+    purge: diagnoseStorage("purge_object", storage.purge),
+    signDownload: diagnoseStorage("sign_download", storage.signDownload),
   };
 }
