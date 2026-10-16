@@ -202,12 +202,13 @@ export function ExtractionReview({
   const category = current?.fields.find(
     (field) => field.key === "document_type",
   );
-  const remaining =
-    (groups
-      ? [...groups.proposed, ...groups.manual].filter(
-          (field) => field.reviewState === "proposed",
-        ).length
-      : 0) + (category?.reviewState === "proposed" ? 1 : 0);
+  const proposedRemaining =
+    groups?.proposed.filter((field) => field.reviewState === "proposed")
+      .length ?? 0;
+  const missingRemaining =
+    groups?.manual.filter((field) => field.reviewState === "proposed").length ??
+    0;
+  const categoryRemaining = category?.reviewState === "proposed";
   const showField = (field: ReviewField) => (
     <FieldCard
       key={`${field.id}-${field.version}`}
@@ -487,8 +488,20 @@ export function ExtractionReview({
             <p>
               {current.needsTypeConfirmation
                 ? "The document category needs confirmation before details can be reviewed."
-                : remaining
-                  ? `${remaining} fields waiting for your review.`
+                : proposedRemaining || missingRemaining || categoryRemaining
+                  ? [
+                      proposedRemaining
+                        ? `${proposedRemaining} extracted details waiting for review.`
+                        : "No extracted details waiting for review.",
+                      missingRemaining
+                        ? `${missingRemaining} missing details to check against the document.`
+                        : "",
+                      categoryRemaining
+                        ? "Document category awaiting confirmation."
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")
                   : "Review complete. Rejected and unknown fields are not trusted values."}
             </p>
           )}

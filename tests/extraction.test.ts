@@ -157,10 +157,10 @@ it("validates every expected realistic payslip field against the synthetic sourc
     "payslip",
     fixture.text,
   );
-  expect(fields).toHaveLength(11);
-  expect(fields.every((f) => f.value === fixture.fields[f.key].value)).toBe(
-    true,
-  );
+  expect(fields).toHaveLength(13);
+  expect(
+    fields.every((f) => f.value === (fixture.fields[f.key]?.value ?? null)),
+  ).toBe(true);
 });
 it("expands sparse model proposals without weakening evidence, duplicate, or key checks", () => {
   const source = "Employer: Harbour Workshop Ltd";

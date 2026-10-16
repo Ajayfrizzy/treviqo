@@ -6,10 +6,10 @@ const headings: Record<ExtractionType, RegExp> = {
   exit_letter:
     /^(?:exit letter|exit confirmation letter|employment exit confirmation)$/i,
   benefit_document:
-    /^(?:employee benefits? summary|employee benefits? statement|benefits? summary|employee benefits? overview)$/i,
+    /^(?:(?:employee|employment) benefits? summary|employee benefits? statement|benefits? summary|employee benefits? overview)$/i,
   employment_contract:
     /^(?:employment contract|contract of employment|employment agreement)$/i,
-  payslip: /^(?:payslip|pay slip|salary slip|payroll statement)$/i,
+  payslip: /^(?:(?:monthly )?payslip|pay slip|salary slip|payroll statement)$/i,
   resignation_letter:
     /^(?:resignation|resignation letter|notice of resignation)$/i,
   termination_letter:

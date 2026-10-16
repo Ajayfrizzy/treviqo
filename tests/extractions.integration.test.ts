@@ -82,8 +82,8 @@ it("persists only proposed grounded fields with source/model/version metadata, w
     documentType: "employment_contract",
     model: "fixture-model",
     sourceKind: "pdf_text",
-    promptVersion: "evidence-v11",
-    schemaVersion: "fields-v11",
+    promptVersion: "evidence-v12",
+    schemaVersion: "fields-v12",
   });
   expect(
     extraction!.fields.every(
@@ -1488,8 +1488,8 @@ it("extracts the real synthetic benefit PDF, preserves conditions and requires r
   ).toBeNull();
   expect(await db.benefit.count({ where: { userId } })).toBe(0);
 });
-it.each(["v9", "v10"])(
-  "retains review access to validated %s attempts after adding exit letters",
+it.each(["v9", "v10", "v11"])(
+  "retains review access to validated %s attempts after adding source recovery fields",
   async (version) => {
     const result = (await service().start(userId, documentId, { mode: "ai" }))
       .extraction!;
@@ -1611,3 +1611,164 @@ it.each(['{"fields":[', "not JSON", '{"fields":[]}'])(
     ).toMatchObject({ employerName: "Original employer" });
   },
 );
+
+for (const type of [
+  "payslip",
+  "final_settlement",
+  "benefit_document",
+  "resignation_letter",
+  "pension_statement",
+] as const) {
+  it(`persists grounded ${type} layout recovery when model output is unusable`, async () => {
+    const layouts = JSON.parse(
+      readFileSync(
+        "tests/fixtures/intelligence/labelled-source-layouts.json",
+        "utf8",
+      ),
+    );
+    const text = layouts[type] as string;
+    ai.complete = vi.fn().mockResolvedValue("not JSON");
+    const { extraction } = await service().start(userId, documentId, {
+      mode: "ai",
+      type,
+      text,
+    });
+    expect(extraction).toMatchObject({
+      status: "ready",
+      errorCode: "partial",
+      documentType: type,
+    });
+    const fields = extraction!.fields.filter(
+      (f) => f.key !== "document_type" && f.proposedValue !== null,
+    );
+    expect(fields.length).toBeGreaterThan(1);
+    for (const field of fields) {
+      expect(field).toMatchObject({
+        value: null,
+        confidence: "needs_review",
+        reviewState: "proposed",
+      });
+      expect(text.replace(/\s+/g, " ")).toContain(
+        field.evidence!.replace(/\s+/g, " "),
+      );
+    }
+    expect(ai.complete).toHaveBeenCalledTimes(1);
+    expect(
+      await db.employment.findUnique({ where: { id: job } }),
+    ).toMatchObject({ employerName: "Original employer" });
+  });
+}
+it("corrects swapped model payroll fields using explicit source labels", async () => {
+  const layouts = JSON.parse(
+    readFileSync(
+      "tests/fixtures/intelligence/labelled-source-layouts.json",
+      "utf8",
+    ),
+  );
+  ai.complete = vi.fn().mockResolvedValue(
+    JSON.stringify({
+      fields: [
+        {
+          key: "gross_pay",
+          value: "NGN 197,175.00",
+          evidence: "Net salary paid NGN 197,175.00",
+        },
+      ],
+    }),
+  );
+  const { extraction } = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "payslip",
+    text: layouts.payslip,
+  });
+  expect(extraction!.fields.find((f) => f.key === "gross_pay")).toMatchObject({
+    proposedValue: "NGN 245,000.00",
+    evidence: "Gross monthly salary NGN 245,000.00",
+    value: null,
+  });
+});
+it("replaces model pension row ordering as a whole without mixing row associations", async () => {
+  const layouts = JSON.parse(
+    readFileSync(
+      "tests/fixtures/intelligence/labelled-source-layouts.json",
+      "utf8",
+    ),
+  );
+  ai.complete = vi.fn().mockResolvedValue(
+    JSON.stringify({
+      fields: [
+        {
+          key: "contribution_1_period",
+          value: "2022-08",
+          evidence:
+            "2022-08 NGN 19,600.00 NGN 24,500.00 7 September 2022 Posted",
+        },
+      ],
+    }),
+  );
+  const { extraction } = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "pension_statement",
+    text: layouts.pension_statement,
+  });
+  expect(
+    extraction!.fields.find((f) => f.key === "contribution_1_period"),
+  ).toMatchObject({ proposedValue: "2022-06" });
+  expect(
+    extraction!.fields.find((f) => f.key === "contribution_1_date"),
+  ).toMatchObject({ proposedValue: "7 July 2022" });
+  expect(
+    extraction!.fields.find((f) => f.key === "contribution_3_date"),
+  ).toMatchObject({ proposedValue: "7 September 2022" });
+});
+
+it("does not resurrect conflicting duplicate proposals through source recovery", async () => {
+  const text =
+    "Monthly Payslip\nGross monthly salary NGN 245,000.00\nNet salary paid NGN 197,175.00";
+  ai.complete = vi.fn().mockResolvedValue(
+    JSON.stringify({
+      fields: [
+        {
+          key: "gross_pay",
+          value: "NGN 245,000.00",
+          evidence: "Gross monthly salary NGN 245,000.00",
+        },
+        {
+          key: "gross_pay",
+          value: "NGN 197,175.00",
+          evidence: "Net salary paid NGN 197,175.00",
+        },
+      ],
+    }),
+  );
+  const { extraction } = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "payslip",
+    text,
+  });
+  expect(extraction).toMatchObject({
+    status: "failed",
+    errorCode: "malformed",
+  });
+});
+it("retains manual-only pension completeness when recovering malformed model output", async () => {
+  const layouts = JSON.parse(
+    readFileSync(
+      "tests/fixtures/intelligence/labelled-source-layouts.json",
+      "utf8",
+    ),
+  );
+  ai.complete = vi.fn().mockResolvedValue("not JSON");
+  const { extraction } = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "pension_statement",
+    text: layouts.pension_statement,
+  });
+  expect(
+    extraction!.fields.find((f) => f.key === "entries_complete"),
+  ).toMatchObject({
+    value: null,
+    proposedValue: null,
+    reviewState: "proposed",
+  });
+});

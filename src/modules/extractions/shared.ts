@@ -50,6 +50,10 @@ export const fieldLabels = {
   final_settlement: {
     pay_period: "Pay period",
     final_salary: "Final salary",
+    final_gross_salary: "Final gross salary",
+    final_net_salary: "Final net salary",
+    tax_deduction: "Tax deduction",
+    settlement_status: "Recorded settlement status",
     leave: "Leave settlement",
     reimbursement: "Reimbursement",
     bonus: "Bonus / commission",
@@ -86,6 +90,9 @@ export const fieldLabels = {
     employer: "Employer",
     employee: "Employee",
     pay_period: "Pay period",
+    payment_date: "Payment date",
+    employer_pension_contribution:
+      "Employer pension contribution (separate from net pay)",
     gross_pay: "Gross pay",
     net_pay: "Net pay",
     basic_salary: "Basic salary",

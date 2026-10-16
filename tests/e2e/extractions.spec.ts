@@ -171,7 +171,9 @@ test("handles model failure, low confidence, malformed output and manual fallbac
   ]) {
     await page
       .getByLabel("Document text (optional)")
-      .fill(`${contract.text}\n${marker}`);
+      .fill(
+        `EMPLOYMENT CONTRACT\nNo explicit labelled fields are available.\n${marker}`,
+      );
     await page
       .getByRole("button", { name: "Extract details", exact: true })
       .click();
@@ -474,7 +476,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
         data: {
           mode: "ai",
           type: "employment_contract",
-          text: `${contract.text}\nFIXTURE_MALFORMED`,
+          text: "Employment contract. No explicit labelled fields are available.\nFIXTURE_MALFORMED",
         },
       });
       expect((await failed.json()).extraction.status).toBe("failed");
@@ -617,7 +619,7 @@ test("an uncertain retry outcome does not restore the previous failure as the ne
     data: {
       mode: "ai",
       type: "employment_contract",
-      text: `${contract.text}\nFIXTURE_MALFORMED`,
+      text: "Employment contract. No explicit labelled fields are available.\nFIXTURE_MALFORMED",
     },
   });
   await page.goto(`/documents/${id}/review`);
@@ -688,7 +690,7 @@ test("history loading is separate, cached, and cannot overwrite a new failed res
       data: {
         mode: "ai",
         type: "employment_contract",
-        text: `${contract.text}\nFIXTURE_MALFORMED`,
+        text: "Employment contract. No explicit labelled fields are available.\nFIXTURE_MALFORMED",
       },
     });
     failures.push((await response.json()).extraction.id);
@@ -757,7 +759,9 @@ test("history loading is separate, cached, and cannot overwrite a new failed res
     .selectOption("employment_contract");
   await page
     .getByLabel("Document text (optional)")
-    .fill(`${contract.text}\nFIXTURE_MALFORMED`);
+    .fill(
+      "Employment contract. No explicit labelled fields are available.\nFIXTURE_MALFORMED",
+    );
   let finish!: () => void;
   const starting = new Promise<void>((resolve) => {
     finish = resolve;
@@ -1113,5 +1117,91 @@ for (const type of [
       ).toHaveCount(0);
     }
     await checkResponsiveActions(page);
+  });
+}
+
+for (const width of [320, 768, 1440]) {
+  test(`labelled source facts display accurately at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 850 });
+    const id = await createDocument(page);
+    const layouts = JSON.parse(
+      readFileSync(
+        "tests/fixtures/intelligence/labelled-source-layouts.json",
+        "utf8",
+      ),
+    );
+    for (const [type, checks] of [
+      [
+        "payslip",
+        [
+          ["Gross pay", "NGN 245,000.00"],
+          ["Net pay", "NGN 197,175.00"],
+          [
+            "Employer pension contribution (separate from net pay)",
+            "NGN 24,500.00",
+          ],
+        ],
+      ],
+      [
+        "final_settlement",
+        [
+          ["Final gross salary", "NGN 245,000.00"],
+          ["Final net salary", "NGN 197,175.00"],
+          ["Tax deduction", "NGN -25,725.00"],
+        ],
+      ],
+      ["resignation_letter", [["Letter date", "1 August 2022"]]],
+      [
+        "benefit_document",
+        [
+          [
+            "Health plan — coverage and continuation",
+            "ended after separation.",
+          ],
+        ],
+      ],
+      ["pension_statement", [["Pension provider", "Example Pensions Ltd"]]],
+    ] as const) {
+      const response = await page.request.post(
+        `/api/documents/${id}/extractions`,
+        {
+          headers: { origin },
+          data: {
+            mode: "ai",
+            type,
+            text: layouts[type] + "\nFIXTURE_MALFORMED",
+          },
+        },
+      );
+      expect(response.ok()).toBe(true);
+      const run = (await response.json()).extraction;
+      expect(run).toMatchObject({
+        status: "ready",
+        errorCode: "partial",
+        documentType: type,
+      });
+      await page.goto(`/documents/${id}/review`);
+      for (const [label, value] of checks) {
+        await expect(
+          page.getByRole("region", { name: label, exact: true }),
+        ).toContainText(value);
+      }
+      const count = run.fields.filter(
+        (f: { key: string; proposedValue: string | null }) =>
+          f.key !== "document_type" && f.proposedValue !== null,
+      ).length;
+      await expect(
+        page.getByText(`${count} extracted details waiting for review.`, {
+          exact: false,
+        }),
+      ).toBeVisible();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    }
   });
 }

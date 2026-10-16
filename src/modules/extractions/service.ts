@@ -39,7 +39,7 @@ import {
   ExtractionParseError,
   SCHEMA_VERSION,
 } from "./schema";
-import { recoverContractFields } from "./contract-recovery";
+import { recoverSourceFields } from "./source-recovery";
 import { chooseClassification, typeAnchors } from "./classification";
 import { classificationPrompt, extractionPrompt } from "./prompts";
 import { allowExtraction } from "./rate-limit";
@@ -103,10 +103,12 @@ function needsTypeConfirmation(row: CategoryContext) {
   if (anchors.some((anchor) => anchor.type !== row.documentType)) return true;
   // Earlier automated attempts did not validate classification purpose. Do not
   // silently rewrite history or present their schema as validated on reload.
-  // Additive schemas retain previously purpose-validated v9/v10 attempts.
+  // Additive schemas retain previously purpose-validated v9–v11 attempts.
   return (
     row.sourceKind !== "manual" &&
-    !["fields-v9", "fields-v10", SCHEMA_VERSION].includes(row.schemaVersion)
+    !["fields-v9", "fields-v10", "fields-v11", SCHEMA_VERSION].includes(
+      row.schemaVersion,
+    )
   );
 }
 function serialize(row: Row): ExtractionRecord {
@@ -371,10 +373,7 @@ export function extractionService(
                 "extraction",
                 extractionPrompt(source, type),
               );
-              const recovered =
-                type === "employment_contract"
-                  ? recoverContractFields(source)
-                  : [];
+              const recovered = recoverSourceFields(source, type);
               try {
                 const parsed = parseFields(raw, type, source);
                 if (parsed.counts.conflicting_duplicate) recovered.length = 0;
@@ -404,16 +403,39 @@ export function extractionService(
                 if (!recovered.length) throw new ExtractionFailure("malformed");
                 partial = true;
               }
+              if (
+                type === "pension_statement" &&
+                recovered.some((field) => field.key.startsWith("contribution_"))
+              ) {
+                proposals = proposals.filter(
+                  (field) => !field.key.startsWith("contribution_"),
+                );
+              }
               let recoveredCount = 0;
               for (const field of recovered) {
                 const existing = proposals.find(
                   (proposal) => proposal.key === field.key,
                 );
-                if (existing?.value !== null && existing !== undefined)
+                if (
+                  existing?.value !== null &&
+                  existing !== undefined &&
+                  type === "employment_contract"
+                )
                   continue;
                 if (existing) Object.assign(existing, field);
                 else proposals.push(field);
                 recoveredCount++;
+              }
+              // Source recovery must retain the same manual fallback slots as
+              // a parsed response, including pension completeness confirmation.
+              for (const key of Object.keys(fieldLabels[type])) {
+                if (!proposals.some((field) => field.key === key))
+                  proposals.push({
+                    key,
+                    value: null,
+                    evidence: null,
+                    confidence: "needs_review",
+                  });
               }
               if (recoveredCount) {
                 partial = true;

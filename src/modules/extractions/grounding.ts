@@ -7,6 +7,10 @@ const textForm = (text: string) =>
 const moneyKeys = new Set([
   "salary",
   "final_salary",
+  "final_gross_salary",
+  "final_net_salary",
+  "tax_deduction",
+  "employer_pension_contribution",
   "leave",
   "reimbursement",
   "bonus",
@@ -23,6 +27,7 @@ const moneyKeys = new Set([
   "allowances",
 ]);
 const dateKeys = new Set([
+  "payment_date",
   "start_date",
   "letter_date",
   "notice_date",
