@@ -39,6 +39,7 @@ import {
   ExtractionParseError,
   SCHEMA_VERSION,
 } from "./schema";
+import { recoverContractFields } from "./contract-recovery";
 import { chooseClassification, typeAnchors } from "./classification";
 import { classificationPrompt, extractionPrompt } from "./prompts";
 import { allowExtraction } from "./rate-limit";
@@ -370,8 +371,13 @@ export function extractionService(
                 "extraction",
                 extractionPrompt(source, type),
               );
+              const recovered =
+                type === "employment_contract"
+                  ? recoverContractFields(source)
+                  : [];
               try {
                 const parsed = parseFields(raw, type, source);
+                if (parsed.counts.conflicting_duplicate) recovered.length = 0;
                 proposals.push(...parsed);
                 partial = parsed.partial;
                 if (
@@ -386,6 +392,7 @@ export function extractionService(
                 }
               } catch (error) {
                 if (error instanceof ExtractionParseError) {
+                  if (error.counts.conflicting_duplicate) recovered.length = 0;
                   const counters = Object.entries(error.counts)
                     .filter(([, count]) => count > 0)
                     .map(([label, count]) => `${label}=${count}`)
@@ -394,7 +401,25 @@ export function extractionService(
                     `extraction_parse_rejected no_grounded_fields${counters ? ` ${counters}` : ""}`,
                   );
                 } else console.error("extraction_output_invalid", "extraction");
-                throw new ExtractionFailure("malformed");
+                if (!recovered.length) throw new ExtractionFailure("malformed");
+                partial = true;
+              }
+              let recoveredCount = 0;
+              for (const field of recovered) {
+                const existing = proposals.find(
+                  (proposal) => proposal.key === field.key,
+                );
+                if (existing?.value !== null && existing !== undefined)
+                  continue;
+                if (existing) Object.assign(existing, field);
+                else proposals.push(field);
+                recoveredCount++;
+              }
+              if (recoveredCount) {
+                partial = true;
+                console.info(
+                  `extraction_source_recovered fields=${recoveredCount}`,
+                );
               }
             }
           }

@@ -423,7 +423,7 @@ it("persists sparse 3B responses only as proposals and retains missing review fi
     reviewState: "proposed",
   });
   expect(run.fields.find((f) => f.key === "salary")).toMatchObject({
-    proposedValue: null,
+    proposedValue: "NGN 250,000 monthly",
     value: null,
     reviewState: "proposed",
   });
@@ -454,7 +454,7 @@ it("persists valid partial proposals with an explicit indicator and no trusted v
     extraction!.fields.filter(
       (f) => f.proposedValue && f.key !== "document_type",
     ),
-  ).toHaveLength(1);
+  ).toHaveLength(5);
   expect(
     extraction!.fields.every(
       (f) => f.reviewState === "proposed" && f.value === null,
@@ -470,7 +470,7 @@ it("fails safely with zero grounded fields while keeping manual entry available"
   const failed = await service().start(userId, documentId, {
     mode: "ai",
     type: "employment_contract",
-    text: fixture.text,
+    text: "Employment contract. No explicit labelled fields are available.",
   });
   expect(failed.extraction).toMatchObject({
     status: "failed",
@@ -880,13 +880,17 @@ it("uses the same prompt only on explicit retry and preserves the failed attempt
           {
             key: "employer",
             value: "Harbour Workshop Ltd",
-            evidence: "Employer: Harbour Workshop Ltd",
+            evidence: "The employer is Harbour Workshop Ltd.",
           },
         ],
       }),
     );
   ai.complete = complete;
-  const input = { mode: "ai", type: "employment_contract", text: fixture.text };
+  const input = {
+    mode: "ai",
+    type: "employment_contract",
+    text: "The employer is Harbour Workshop Ltd.",
+  };
   const first = (await service().start(userId, documentId, input)).extraction!;
   expect(first).toMatchObject({
     status: "failed",
@@ -976,7 +980,7 @@ it("logs only fixed parse counters when all model proposals are rejected", async
   const result = await service().start(userId, documentId, {
     mode: "ai",
     type: "employment_contract",
-    text: "Salary: NGN 450,000.00 from the source",
+    text: "Salary NGN 450,000.00 from the source",
   });
   expect(result.extraction?.status).toBe("failed");
   expect(
@@ -1005,7 +1009,7 @@ it.each([
     const result = await service().start(userId, documentId, {
       mode: "ai",
       type: "employment_contract",
-      text: fixture.text,
+      text: fixture.text.replaceAll(":", " —"),
     });
     expect(result.extraction?.status).toBe("failed");
     expect(
@@ -1575,3 +1579,35 @@ it("extracts the exit confirmation PDF and preserves owner review without changi
     needsTypeConfirmation: false,
   });
 });
+
+it.each(['{"fields":[', "not JSON", '{"fields":[]}'])(
+  "recovers explicit contract labels independently of broken model output: %s",
+  async (output) => {
+    ai.complete = vi.fn().mockResolvedValue(output);
+    const text =
+      "Employment Agreement\nEmployer: Synthetic Services Ltd\nJob title: Customer Success Specialist\nStart date: 12 September 2022\nGross monthly salary: NGN 385,000.00";
+    const result = await service().start(userId, documentId, {
+      mode: "ai",
+      type: "employment_contract",
+      text,
+    });
+    expect(result.extraction).toMatchObject({
+      status: "ready",
+      errorCode: "partial",
+    });
+    for (const key of ["employer", "role", "start_date", "salary"]) {
+      const field = result.extraction!.fields.find((f) => f.key === key)!;
+      expect(field.proposedValue).not.toBeNull();
+      expect(text).toContain(field.evidence);
+      expect(field).toMatchObject({
+        value: null,
+        reviewState: "proposed",
+        confidence: "needs_review",
+      });
+    }
+    expect(ai.complete).toHaveBeenCalledTimes(1);
+    expect(
+      await db.employment.findUnique({ where: { id: job } }),
+    ).toMatchObject({ employerName: "Original employer" });
+  },
+);
