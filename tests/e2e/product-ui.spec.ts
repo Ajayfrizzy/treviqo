@@ -125,6 +125,11 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       ["documents", "/documents"],
       ["profile", "/profile"],
     ]) {
+      const hydrationErrors: string[] = [];
+      const captureError = (error: Error) => {
+        hydrationErrors.push(error.message);
+      };
+      page.on("pageerror", captureError);
       await page.goto(url!);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       const nav = page.getByRole("navigation", { name: "Primary" });
@@ -154,9 +159,19 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
           page.locator('.step-progress [aria-current="step"]'),
         ).toContainText("Notice");
       }
-      if (name === "checklist")
+      if (name === "checklist") {
         await expect(page.getByRole("progressbar")).toBeVisible();
+        const disclosure = page.locator("details").first();
+        const summary = disclosure.locator("summary");
+        await summary.focus();
+        await page.keyboard.press("Enter");
+        await expect(disclosure).toHaveAttribute("open", "");
+        await page.keyboard.press("Space");
+        await expect(disclosure).not.toHaveAttribute("open", "");
+      }
       await checkResponsiveActions(page);
+      expect(hydrationErrors).toEqual([]);
+      page.off("pageerror", captureError);
       await page.screenshot({
         path: `test-results/product-${name}-${width}.png`,
         fullPage: true,

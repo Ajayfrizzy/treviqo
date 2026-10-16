@@ -505,6 +505,7 @@
 }
 .app-shell .benefit-card .benefit-actions > button {
   width: auto;
+  overflow-wrap: anywhere;
 }
 .app-shell .content {
   scroll-margin-bottom: 10rem;
@@ -604,5 +605,55 @@
   }
   .app-shell .navigation [aria-current] .nav-icon {
     box-shadow: 0 2px currentColor;
+  }
+}
+
+/* Keep provenance together without hiding assessment safeguards or sources. */
+.app-shell .benefit-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.75rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.6rem;
+  margin-top: 0.6rem;
+  min-width: 0;
+}
+.app-shell .benefit-evidence .quiet {
+  flex-basis: 100%;
+  margin: 0;
+}
+.app-shell .benefit-evidence .benefit-basis {
+  border: 0;
+  padding: 0;
+}
+.app-shell .benefit-evidence .touch-link {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.app-shell .benefit-card > .form-message {
+  margin: 0.65rem 0 0;
+}
+
+@media (max-width: 599px) {
+  .app-shell .navigation a,
+  .app-shell .navigation .nav-more {
+    min-height: max(52px, 3.5rem);
+    overflow-wrap: anywhere;
+    line-height: 1.2;
+    min-width: 0;
+  }
+  .app-shell .navigation .link-content {
+    max-width: 100%;
+  }
+  .app-shell .navigation .nav-more > span {
+    max-width: 100%;
+  }
+  .app-shell .navigation .link-content > span {
+    max-width: 100%;
+  }
+  .navigation-sheet {
+    bottom: calc(
+      max(52px, 3.5rem) + 0.7rem + 1px + env(safe-area-inset-bottom)
+    );
   }
 }

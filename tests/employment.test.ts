@@ -89,6 +89,7 @@ describe("employment facts", () => {
       current: [records[0], records[2]],
       previous: [records[1]],
     });
-    expect(formatEmploymentDate("2024-02-29")).toContain("29");
+    expect(formatEmploymentDate("2024-02-29")).toBe("29 Feb 2024");
+    expect(formatEmploymentDate("2024-09-30")).toBe("30 Sept 2024");
   });
 });

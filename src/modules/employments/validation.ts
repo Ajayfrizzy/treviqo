@@ -65,12 +65,30 @@ export type EmploymentRecord = EmploymentInput & {
   updatedAt: string;
 };
 export function formatEmploymentDate(value: string) {
-  return new Intl.DateTimeFormat("en-NG", {
+  // Keep SSR and browser text identical: ICU engines disagree on Sep/Sept.
+  const parts = new Intl.DateTimeFormat("en-NG", {
     day: "numeric",
-    month: "short",
+    month: "numeric",
     year: "numeric",
     timeZone: "UTC",
-  }).format(new Date(`${value}T00:00:00.000Z`));
+  }).formatToParts(new Date(`${value}T00:00:00.000Z`));
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)!.value;
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sept",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
+  return `${part("day")} ${months[Number(part("month")) - 1]} ${part("year")}`;
 }
 export function groupEmployments<
   T extends { status: EmploymentInput["status"] },

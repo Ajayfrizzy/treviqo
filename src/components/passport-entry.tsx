@@ -3,7 +3,7 @@ import { SectionTitle, StatusChip } from "./product-ui";
 import { Button } from "./button";
 import { uiRequest } from "./ui-request";
 import Link from "@/components/action-link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   benefitCategories,
   portabilityLabels,
@@ -23,13 +23,17 @@ const pensionStates: Record<string, string> = {
 };
 export function PassportEntry({ initial }: { initial: PassportDetail }) {
   const [data, setData] = useState(initial);
+  const inFlight = useRef(false);
+  const [feedbackCategory, setFeedbackCategory] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [unavailable, setUnavailable] = useState(false);
   const [editing, setEditing] = useState<BenefitView | null>(null);
-  async function request(command?: unknown) {
-    if (busy) return false;
+  async function request(command?: unknown, category: string | null = null) {
+    if (inFlight.current) return false;
+    inFlight.current = true;
+    setFeedbackCategory(category);
     setBusy(true);
     setError("");
     setSuccess("");
@@ -55,9 +59,26 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
       setError(error instanceof Error ? error.message : "Please retry.");
       return false;
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
+  const feedback = (category: string | null) =>
+    feedbackCategory === category && (
+      <>
+        {error && (
+          <p role="alert" className="form-message">
+            {error} Displayed records are from the last successful load; refresh
+            before relying on them.
+          </p>
+        )}
+        {success && (
+          <p role="status" className="form-message">
+            {success}
+          </p>
+        )}
+      </>
+    );
   if (unavailable)
     return (
       <section className="card">
@@ -93,17 +114,7 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
           Refresh Passport
         </Button>
       </header>
-      {error && (
-        <p role="alert" className="form-message">
-          {error} Displayed records are from the last successful load; refresh
-          before relying on them.
-        </p>
-      )}
-      {success && (
-        <p role="status" className="form-message">
-          {success}
-        </p>
-      )}
+      {feedback(null)}
       <div className="passport-summary-grid">
         <section
           className="card section-panel tone-history"
@@ -252,33 +263,35 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
                 </p>
               )}
               <p>{benefit.message}</p>
-              <p className="quiet benefit-basis">{benefit.basis}</p>
-              {benefit.updatedAt && (
-                <p className="quiet">
-                  Last assessed:{" "}
-                  {formatEmploymentDate(benefit.updatedAt.slice(0, 10))}
-                </p>
-              )}
-              {benefit.mentions.map((mention, index) => (
-                <Link
-                  className="touch-link"
-                  key={`${mention.documentId}-${index}`}
-                  href={`/documents/${mention.documentId}/review`}
-                >
-                  {mention.label} · source {index + 1}
-                </Link>
-              ))}
-              {benefit.documentId &&
-                data.sources.some(
-                  (source) => source.id === benefit.documentId,
-                ) && (
+              <div className="benefit-evidence">
+                <p className="quiet benefit-basis">{benefit.basis}</p>
+                {benefit.updatedAt && (
+                  <p className="quiet">
+                    Last assessed:{" "}
+                    {formatEmploymentDate(benefit.updatedAt.slice(0, 10))}
+                  </p>
+                )}
+                {benefit.mentions.map((mention, index) => (
                   <Link
                     className="touch-link"
-                    href={`/documents/${benefit.documentId}`}
+                    key={`${mention.documentId}-${index}`}
+                    href={`/documents/${mention.documentId}/review`}
                   >
-                    Open assessment evidence
+                    {mention.label} · source {index + 1}
                   </Link>
-                )}
+                ))}
+                {benefit.documentId &&
+                  data.sources.some(
+                    (source) => source.id === benefit.documentId,
+                  ) && (
+                    <Link
+                      className="touch-link"
+                      href={`/documents/${benefit.documentId}`}
+                    >
+                      Open assessment evidence
+                    </Link>
+                  )}
+              </div>
               <div className="form-actions benefit-actions">
                 {editing?.category === benefit.category ? (
                   <BenefitForm
@@ -286,7 +299,9 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
                     benefit={benefit}
                     data={data}
                     busy={busy}
-                    save={(input) => request({ action: "save", input })}
+                    save={(input) =>
+                      request({ action: "save", input }, benefit.category)
+                    }
                     cancel={() => setEditing(null)}
                   />
                 ) : (
@@ -307,17 +322,21 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
                           "Remove your assessment? Original employment and evidence remain.",
                         )
                       )
-                        return request({
-                          action: "remove",
-                          category: benefit.category,
-                          version: benefit.version,
-                        });
+                        return request(
+                          {
+                            action: "remove",
+                            category: benefit.category,
+                            version: benefit.version,
+                          },
+                          benefit.category,
+                        );
                     }}
                   >
                     Remove assessment
                   </Button>
                 )}
               </div>
+              {feedback(benefit.category)}
             </article>
           ))}
         </div>

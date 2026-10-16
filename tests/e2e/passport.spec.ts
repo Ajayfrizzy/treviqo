@@ -133,23 +133,35 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440])
       .getByLabel("I checked the evidence and it supports this assessment.")
       .check();
     if (width === 320) {
-      await page.route(`**/api/passport/${employment.id}`, (route) =>
-        route.fulfill({
+      let release!: () => void;
+      const waiting = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      let submissions = 0;
+      await page.route(`**/api/passport/${employment.id}`, async (route) => {
+        submissions++;
+        await waiting;
+        await route.fulfill({
           status: 503,
           json: { error: "Temporary failure. Retry." },
-        }),
-      );
+        });
+      });
       await hmo.getByRole("button", { name: "Save assessment" }).click();
-      await expect(page.getByRole("main").getByRole("alert")).toContainText(
-        "Temporary failure",
-      );
+      await expect(hmo.getByRole("button", { name: "Saving…" })).toBeDisabled();
+      await hmo.locator("form").evaluate((form) => {
+        (form as HTMLFormElement).requestSubmit();
+        (form as HTMLFormElement).requestSubmit();
+      });
+      expect(submissions).toBe(1);
+      release();
+      await expect(hmo.getByRole("alert")).toContainText("Temporary failure");
       await expect(hmo.getByLabel("Your portability assessment")).toHaveValue(
         "employer_linked",
       );
       await page.unroute(`**/api/passport/${employment.id}`);
     }
     await hmo.getByRole("button", { name: "Save assessment" }).click();
-    await expect(page.getByRole("status")).toContainText(
+    await expect(hmo.getByRole("status")).toContainText(
       "Benefit assessment saved",
     );
     await expect(hmo).toContainText("Employer-linked");
@@ -168,6 +180,31 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440])
       ),
     ).toBe(true);
     await hmo.scrollIntoViewIfNeeded();
+    if (width === 320) {
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.addStyleTag({ content: "html { font-size: 200%; }" });
+      await hmo.scrollIntoViewIfNeeded();
+      const nav = page.getByRole("navigation", { name: "Primary" });
+      for (const item of await nav.locator("a:visible, button:visible").all()) {
+        expect(
+          await item.evaluate(
+            (element) => element.scrollWidth <= element.clientWidth + 1,
+          ),
+        ).toBe(true);
+      }
+      await nav.getByRole("button", { name: "More", exact: true }).click();
+      const sheetBox = await page
+        .getByRole("dialog", { name: "More", exact: true })
+        .boundingBox();
+      const navBox = await nav.boundingBox();
+      expect(sheetBox!.y + sheetBox!.height).toBeLessThanOrEqual(navBox!.y);
+      await page.keyboard.press("Escape");
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    }
     await checkResponsiveActions(page);
     await page.screenshot({ path: `test-results/passport-${width}.png` });
     const response = await page.request.get(`/api/passport/${employment.id}`);
