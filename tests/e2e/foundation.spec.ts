@@ -1,3 +1,4 @@
+import { navigateTo, primaryDestination } from "../helpers/navigation";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -102,10 +103,11 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       "Profile",
       "Home",
     ]) {
-      await nav.getByRole("link", { name: label, exact: true }).click();
-      await expect(
-        nav.getByRole("link", { name: label, exact: true }),
-      ).toHaveAttribute("aria-current", "page");
+      await navigateTo(page, label);
+      await expect(primaryDestination(page, label)).toHaveAttribute(
+        "aria-current",
+        /page|location/,
+      );
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,

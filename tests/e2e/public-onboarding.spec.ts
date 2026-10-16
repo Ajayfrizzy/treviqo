@@ -1,3 +1,4 @@
+import { navigateTo } from "../helpers/navigation";
 import { expect, test } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -238,10 +239,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
     await expect(
       page.getByRole("region", { name: "Working-life overview" }),
     ).toContainText("Documents to review");
-    await page
-      .getByRole("navigation", { name: "Primary" })
-      .getByRole("link", { name: "Profile", exact: true })
-      .click();
+    await navigateTo(page, "Profile");
     await expect(page.getByRole("main")).toContainText("Nigeria");
     await expect(page.getByRole("main")).toContainText("Okafor");
     const edit = page.getByRole("region", { name: "Edit personal details" });

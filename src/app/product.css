@@ -116,7 +116,7 @@
   max-width: 65ch;
 }
 .app-shell .navigation {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   padding: 0.35rem 0.5rem calc(0.35rem + env(safe-area-inset-bottom));
 }
 .app-shell .navigation a {
@@ -127,7 +127,7 @@
   gap: 0.1rem;
 }
 .app-shell .content {
-  padding-bottom: calc(10rem + env(safe-area-inset-bottom));
+  padding-bottom: calc(7rem + env(safe-area-inset-bottom));
 }
 .app-shell .home-overview {
   display: grid;
@@ -511,4 +511,98 @@
 }
 .app-shell .attention-links a:focus-visible {
   outline-offset: 2px;
+}
+
+/* Phone-only overflow destinations; larger layouts retain all six links. */
+.app-shell .navigation .nav-more {
+  display: none;
+}
+.navigation-sheet {
+  position: fixed;
+  inset: auto 0 calc(64px + env(safe-area-inset-bottom));
+  width: calc(100% - 1rem);
+  max-width: 420px;
+  max-height: calc(100dvh - 90px - env(safe-area-inset-bottom));
+  overflow-y: auto;
+  margin: 0 auto;
+  padding: 1rem;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  box-shadow: 0 12px 40px #172d2726;
+}
+.navigation-sheet::backdrop {
+  background: #172d2755;
+}
+.navigation-sheet header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+.navigation-sheet h2 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+.navigation-sheet nav {
+  display: grid;
+  gap: 0.5rem;
+}
+.navigation-sheet a {
+  display: flex;
+  min-height: 52px;
+  padding: 0.65rem 0.85rem;
+  border-radius: var(--radius-small);
+  color: var(--muted);
+  text-decoration: none;
+}
+.navigation-sheet .link-content {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.navigation-sheet a:hover {
+  background: #f0f4ee;
+}
+.navigation-sheet a[aria-current="page"] {
+  text-decoration: underline;
+  text-underline-offset: 0.25em;
+  color: var(--accent);
+  background: #e3eee5;
+  font-weight: 700;
+}
+@media (max-width: 599px) {
+  .app-shell .navigation .nav-secondary {
+    display: none;
+  }
+  .app-shell .navigation .nav-more {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.1rem;
+    min-width: 0;
+    min-height: 52px;
+    padding: 0;
+    border: 0;
+    border-radius: var(--radius-small);
+    background: transparent;
+    color: var(--muted);
+    font-size: 0.75rem;
+    font-weight: 400;
+    box-shadow: none;
+  }
+  .app-shell .navigation .nav-more:hover {
+    background: #f0f4ee;
+  }
+  .app-shell .navigation .nav-more[aria-current] {
+    color: var(--accent);
+    background: #e3eee5;
+    font-weight: 700;
+  }
+  .app-shell .navigation [aria-current] .nav-icon {
+    box-shadow: 0 2px currentColor;
+  }
 }

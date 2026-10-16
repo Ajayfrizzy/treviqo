@@ -128,7 +128,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       await page.goto(url!);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       const nav = page.getByRole("navigation", { name: "Primary" });
-      await expect(nav.getByRole("link")).toHaveCount(6);
+      await expect(nav.getByRole("link")).toHaveCount(width < 600 ? 4 : 6);
       for (const link of await nav.getByRole("link").all()) {
         const box = await link.boundingBox();
         expect(box!.width).toBeGreaterThanOrEqual(44);

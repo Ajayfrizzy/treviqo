@@ -1,3 +1,4 @@
+import { navigateTo, primaryDestination } from "../helpers/navigation";
 import { checkResponsiveActions } from "../helpers/responsive-actions";
 import { expect, test } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
@@ -37,7 +38,6 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       .getByRole("button", { name: "Create account", exact: true })
       .click();
     await expect(page).toHaveURL("/home");
-    const nav = page.getByRole("navigation", { name: "Primary" });
     for (const label of [
       "Home",
       "Exit",
@@ -46,10 +46,11 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       "Documents",
       "Profile",
     ]) {
-      await nav.getByRole("link", { name: label, exact: true }).click();
-      await expect(
-        nav.getByRole("link", { name: label, exact: true }),
-      ).toHaveAttribute("aria-current", "page");
+      await navigateTo(page, label);
+      await expect(primaryDestination(page, label)).toHaveAttribute(
+        "aria-current",
+        /page|location/,
+      );
       await expect(
         page.getByRole("main").getByRole("heading", { level: 1 }),
       ).toHaveText(

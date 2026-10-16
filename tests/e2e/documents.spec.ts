@@ -1,3 +1,4 @@
+import { primaryDestination } from "../helpers/navigation";
 import { checkResponsiveActions } from "../helpers/responsive-actions";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
@@ -79,11 +80,10 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
-    await expect(
-      page
-        .getByRole("navigation")
-        .getByRole("link", { name: "Documents", exact: true }),
-    ).toHaveAttribute("aria-current", "page");
+    await expect(primaryDestination(page, "Documents")).toHaveAttribute(
+      "aria-current",
+      /page|location/,
+    );
     await checkResponsiveActions(page);
     await page.screenshot({
       path: `test-results/vault-${width}.png`,
