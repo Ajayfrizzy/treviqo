@@ -133,6 +133,9 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       exact: true,
     });
     await leave.getByRole("button", { name: "Mark unknown" }).click();
+    await expect(
+      page.getByText("Reviewed details:", { exact: false }),
+    ).toContainText("2 corrected · 1 rejected · 1 unknown");
     await expect(leave.getByText("unknown", { exact: true })).toBeVisible();
     await page.reload();
     await expect(correction).toBeDisabled();

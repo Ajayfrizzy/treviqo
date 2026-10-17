@@ -1,3 +1,4 @@
+import { ExitTypeNotice } from "@/components/exit-type-notice";
 import {
   SectionTitle,
   StatusChip,
@@ -41,6 +42,11 @@ export default async function ExitDetail({
           Exit details saved. Your checklist is up to date.
         </p>
       )}
+      <ExitTypeNotice
+        id={record.id}
+        savedType={record.answers.exitType}
+        discrepancies={record.exitTypeDiscrepancies}
+      />
       <section className="card section-panel tone-exit">
         <SectionTitle icon="exit" tone="exit">
           Records and next actions

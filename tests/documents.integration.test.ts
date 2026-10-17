@@ -386,3 +386,57 @@ it("does not compensate a finalization that committed before its acknowledgement
     }),
   ).toBe(1);
 });
+
+it("requires verified purge and preserves pending metadata and audit when verification fails", async () => {
+  const doc = await upload();
+  const row = await db.employmentDocument.findUniqueOrThrow({
+    where: { id: doc.id },
+  });
+  const purge = vi
+    .spyOn(store, "purge")
+    .mockRejectedValueOnce(new Error("sensitive provider detail"));
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  await expect(service().remove(a, doc.id)).rejects.toMatchObject({
+    status: 503,
+    message:
+      "Storage cleanup could not be verified. Deletion is pending; please retry.",
+  });
+  expect(purge).toHaveBeenCalledWith(row.objectKey);
+  expect(log).toHaveBeenCalledWith("document_delete_storage_failed");
+  expect(JSON.stringify(log.mock.calls)).not.toContain(
+    "sensitive provider detail",
+  );
+  expect(
+    await db.employmentDocument.findUnique({ where: { id: doc.id } }),
+  ).toMatchObject({ status: "deleting", objectKey: row.objectKey });
+  expect(
+    await db.auditEvent.count({
+      where: { documentId: doc.id, action: "document_deleted" },
+    }),
+  ).toBe(0);
+  await service().remove(a, doc.id);
+  expect(store.objects.has(row.objectKey)).toBe(false);
+  expect(
+    await db.employmentDocument.findUnique({ where: { id: doc.id } }),
+  ).toMatchObject({ status: "deleted" });
+});
+it("allows retry after verified storage cleanup but failed database finalization", async () => {
+  const doc = await upload();
+  vi.spyOn(db, "$transaction").mockRejectedValueOnce(
+    new Error("database failure"),
+  );
+  await expect(service().remove(a, doc.id)).rejects.toThrow();
+  expect(store.objects.size).toBe(0);
+  expect(
+    await db.employmentDocument.findUnique({ where: { id: doc.id } }),
+  ).toMatchObject({ status: "deleting" });
+  await service().remove(a, doc.id);
+  expect(
+    await db.employmentDocument.findUnique({ where: { id: doc.id } }),
+  ).toMatchObject({ status: "deleted" });
+  expect(
+    await db.auditEvent.count({
+      where: { documentId: doc.id, action: "document_deleted" },
+    }),
+  ).toBe(1);
+});

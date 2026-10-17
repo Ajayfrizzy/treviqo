@@ -34,6 +34,11 @@ const labels: Partial<Record<ExtractionType, Record<string, string>>> = {
     "proposed last working day": "proposed_last_day",
     "notice period": "notice_period",
   },
+  termination_letter: {
+    "letter date": "letter_date",
+    "employment end date": "effective_date",
+    reason: "reason",
+  },
   exit_letter: {
     ...common,
     "letter date": "letter_date",

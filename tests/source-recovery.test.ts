@@ -112,3 +112,36 @@ it("keeps financial distinctions explicit in a compact prompt", () => {
     "Payable does not mean paid.",
   );
 });
+
+it("keeps pension coverage months separate from a next-year posting date and does not certify history", () => {
+  const source =
+    "Pension Contribution Statement\nPension provider: Example Pensions Ltd\nStatement period: 2024-10 to 2024-12\nContribution period Employee contribution Employer contribution Posting date Status\n2024-10 NGN 30,800.00 NGN 38,500.00 7 November 2024 Posted\n2024-11 NGN 30,800.00 NGN 38,500.00 7 December 2024 Posted\n2024-12 NGN 30,800.00 NGN 38,500.00 7 January 2025 Posted";
+  const result = values("pension_statement", source);
+  expect(result).toMatchObject({
+    statement_start: "2024-10",
+    statement_end: "2024-12",
+    contribution_3_period: "2024-12",
+    contribution_3_date: "7 January 2025",
+    contribution_3_employee_amount: "NGN 30,800.00",
+    contribution_3_employer_amount: "NGN 38,500.00",
+  });
+  expect(result).not.toHaveProperty("entries_complete");
+  const incomplete = values(
+    "pension_statement",
+    source.replace(/2024-11 NGN[^\n]+\n/, ""),
+  );
+  expect(incomplete).not.toHaveProperty("entries_complete");
+  expect(incomplete.contribution_2_period).toBe("2024-12");
+  expect(incomplete).not.toHaveProperty("contribution_3_period");
+});
+it("does not invent group-life coverage in a medical/provident summary", () => {
+  const source =
+    "Employment Benefits Summary\nEmployee: Fixture Worker\nEmployer: Example Services Ltd\nBenefit coverage at separation: Employee provident savings plan contributions were recorded; group\nmedical cover was employer-linked.";
+  const result = values("benefit_document", source);
+  expect(result.employee).toBe("Fixture Worker");
+  expect(result.employer).toBe("Example Services Ltd");
+  expect(result.health_plan_wording).toContain(
+    "medical cover was employer-linked.",
+  );
+  expect(result).not.toHaveProperty("group_life_wording");
+});

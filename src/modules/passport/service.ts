@@ -251,6 +251,7 @@ export function passportService(db: PrismaClient = getDb()) {
                 item.state !== "complete" && item.state !== "not_applicable",
             ).length,
             total: exit.checklist.length,
+            exitTypeDiscrepancies: exit.exitTypeDiscrepancies,
           }
         : null,
       documents: documentGroups.map((group) => {

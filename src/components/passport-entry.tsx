@@ -1,4 +1,5 @@
 "use client";
+import { ExitTypeNotice } from "@/components/exit-type-notice";
 import { SectionTitle, StatusChip } from "./product-ui";
 import { Button } from "./button";
 import { uiRequest } from "./ui-request";
@@ -154,6 +155,11 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
                 {exitTypes[data.exit.type as keyof typeof exitTypes]} ·
                 worker-entered
               </p>
+              <ExitTypeNotice
+                id={data.exit.id}
+                savedType={data.exit.type as keyof typeof exitTypes}
+                discrepancies={data.exit.exitTypeDiscrepancies}
+              />
               <p>
                 Last working date:{" "}
                 {formatEmploymentDate(data.exit.lastWorkingDate)}

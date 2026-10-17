@@ -302,3 +302,23 @@ it.each([
     }
   },
 );
+
+it.each(["unversioned", "versioned"])(
+  "does not treat a missing bucket as verified object deletion (%s)",
+  async (versioning) => {
+    configure();
+    vi.stubEnv("S3_VERSIONING", versioning);
+    const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
+    mocks.send.mockImplementation(async (command) => {
+      if (command instanceof HeadObjectCommand)
+        throw Object.assign(new Error("provider detail"), {
+          name: "NoSuchBucket",
+          $metadata: { httpStatusCode: 404 },
+        });
+      return { IsTruncated: false, Versions: [], DeleteMarkers: [] };
+    });
+    await expect(getObjectStorage().purge("owned")).rejects.toMatchObject({
+      name: "NoSuchBucket",
+    });
+  },
+);

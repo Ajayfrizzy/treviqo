@@ -1,7 +1,7 @@
 import { parseFields } from "./schema";
 import type { Proposal } from "./persistence";
 
-// Exact, single-line labels only. Never infer facts from clauses or repair AI JSON.
+// Exact labels and a bounded explicit benefits clause. Never infer eligibility.
 const labels: Record<string, string> = {
   employer: "employer",
   "employee name": "employee",
@@ -41,6 +41,25 @@ export function recoverContractFields(source: string): Proposal[] {
       confidence: "needs_review",
     });
     candidates.set(key, entries);
+  }
+  // This explicit shared clause is commonly wrapped by PDF text extraction.
+  // Preserve every qualifier: it does not establish eligibility or continuation.
+  const clauses = [
+    ...source.matchAll(
+      /Employer-sponsored medical and group life benefits, where applicable, are linked to the employment\s+relationship and are subject to plan terms\./g,
+    ),
+  ];
+  if (clauses.length === 1) {
+    for (const key of ["hmo_reference", "group_life_reference"]) {
+      candidates.set(key, [
+        {
+          key,
+          value: clauses[0]![0],
+          evidence: clauses[0]![0],
+          confidence: "needs_review",
+        },
+      ]);
+    }
   }
   // Duplicate labels are ambiguous even if one looks more plausible.
   const fields = [...candidates.values()]

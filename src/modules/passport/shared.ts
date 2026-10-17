@@ -1,3 +1,4 @@
+import type { ExitTypeDiscrepancy } from "@/modules/exits/discrepancy";
 import { z } from "zod";
 export const benefitCategories = {
   pension: "Pension / RSA",
@@ -105,6 +106,7 @@ export interface PassportDetail extends PassportSummary {
     lastWorkingDate: string;
     unresolved: number;
     total: number;
+    exitTypeDiscrepancies?: ExitTypeDiscrepancy[];
   } | null;
   documents: {
     category: string;

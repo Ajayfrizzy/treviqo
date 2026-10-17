@@ -318,3 +318,91 @@ test("Passport API/page ownership, anonymous, Origin and input boundaries", asyn
     await other.close();
   }
 });
+
+for (const width of [320, 1440]) {
+  test(`exit discrepancy stays informational and correctable across Passport at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 850 });
+    await account(page);
+    const employment = await job(page);
+    const second = await job(page);
+    const upload = await page.request.post(
+      `/api/documents?employmentId=${employment.id}&documentType=termination_letter`,
+      {
+        headers: {
+          origin,
+          "content-type": "application/pdf",
+          "x-file-name": "redundancy.pdf",
+        },
+        data: readFileSync(
+          "tests/fixtures/intelligence/termination_letter.pdf",
+        ),
+      },
+    );
+    expect(upload.status()).toBe(201);
+    const doc = (await upload.json()).document.id;
+    const extraction = await page.request.post(
+      `/api/documents/${doc}/extractions`,
+      {
+        headers: { origin },
+        data: {
+          mode: "ai",
+          type: "termination_letter",
+          text: "Notice of Role Redundancy\nLetter date: 20 November 2024\nReason: Role redundancy following departmental restructuring\nEmployment end date: 20 December 2024\nFIXTURE_MALFORMED",
+        },
+      },
+    );
+    expect((await extraction.json()).extraction.status).toBe("ready");
+    const created = await page.request.post("/api/exits", {
+      headers: { origin },
+      data: {
+        employmentId: employment.id,
+        answers: { exitType: "resignation", lastWorkingDate: "2026-10-31" },
+      },
+    });
+    expect(created.status()).toBe(201);
+    const exit = (await created.json()).exitCase;
+    await page.goto(`/passport/${second.id}`);
+    await expect(
+      page.getByRole("complementary", { name: "Exit type needs review" }),
+    ).toHaveCount(0);
+    for (const path of [`/exit/${exit.id}`, `/passport/${employment.id}`]) {
+      await page.goto(path);
+      const notice = page.getByRole("complementary", {
+        name: "Exit type needs review",
+      });
+      await expect(notice).toContainText("Your saved exit type is Resignation");
+      await expect(notice).toContainText(
+        "Redundancy — unconfirmed extracted detail",
+      );
+      await expect(
+        notice.getByRole("link", { name: "Review source detail" }),
+      ).toHaveAttribute("href", `/documents/${doc}/review`);
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    }
+    await page
+      .getByRole("link", { name: "Review and correct exit details" })
+      .click();
+    await expect(page).toHaveURL(`/exit/${exit.id}/edit`);
+    await page
+      .getByLabel("How is this employment ending?")
+      .selectOption("redundancy");
+    await page.getByRole("button", { name: "Save and view checklist" }).click();
+    await expect(page).toHaveURL(new RegExp(`/exit/${exit.id}\\?saved=1`));
+    await expect(
+      page.getByRole("complementary", { name: "Exit type needs review" }),
+    ).toHaveCount(0);
+    await page.goto(`/passport/${employment.id}`);
+    await expect(
+      page.getByRole("region", { name: "Exit summary" }),
+    ).toContainText("Redundancy · worker-entered");
+    await expect(
+      page.getByRole("complementary", { name: "Exit type needs review" }),
+    ).toHaveCount(0);
+  });
+}

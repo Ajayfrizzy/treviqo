@@ -504,3 +504,72 @@ it("reads nested Exit/Finance/Passport evidence without interactive transactions
     transaction.mockRestore();
   }
 });
+
+it("keeps exit discrepancies, pension providers and benefits scoped to each employer", async () => {
+  const sibling = await employment(a);
+  await db.employment.update({
+    where: { id: sibling },
+    data: { employerName: "Second employer" },
+  });
+  const firstProvider = await source("pension_statement", {
+    provider: "First provider",
+  });
+  const secondProvider = await source(
+    "pension_statement",
+    { provider: "Second provider" },
+    sibling,
+  );
+  await source("termination_letter", {
+    reason: "Role redundancy following departmental restructuring",
+  });
+  const firstExit = await exitService(db).create(a, {
+    employmentId: job,
+    answers: { exitType: "resignation", lastWorkingDate: "2026-10-31" },
+  });
+  const secondExit = await exitService(db).create(a, {
+    employmentId: sibling,
+    answers: { exitType: "retirement", lastWorkingDate: "2026-10-31" },
+  });
+  const groupLife = await source("employment_contract", {
+    group_life_reference: "Employer-linked group life, subject to plan terms",
+  });
+  const first = await service.read(a, job);
+  const second = await service.read(a, sibling);
+  const assessed = await service.command(a, job, {
+    action: "save",
+    input: {
+      category: "group_life",
+      classification: "employer_linked",
+      version: null,
+      contextToken: first.contextToken,
+      documentId: groupLife.doc.id,
+      fieldId: groupLife.field.id,
+      fieldVersion: 1,
+      evidenceAcknowledged: true,
+    },
+  });
+  expect(
+    assessed.benefits.find((item) => item.category === "group_life"),
+  ).toMatchObject({
+    classification: "employer_linked",
+    documentId: groupLife.doc.id,
+  });
+  expect(
+    second.benefits.find((item) => item.category === "group_life"),
+  ).toMatchObject({ classification: "unknown", documentId: null });
+  expect(JSON.stringify(second)).not.toContain(groupLife.doc.id);
+  expect(first.exit).toMatchObject({
+    id: firstExit.id,
+    type: "resignation",
+    exitTypeDiscrepancies: [{ type: "redundancy", reviewed: true }],
+  });
+  expect(second.exit).toMatchObject({
+    id: secondExit.id,
+    type: "retirement",
+    exitTypeDiscrepancies: [],
+  });
+  expect(first.pension.provider).toBe("First provider");
+  expect(second.pension.provider).toBe("Second provider");
+  expect(JSON.stringify(first)).not.toContain(secondProvider.doc.id);
+  expect(JSON.stringify(second)).not.toContain(firstProvider.doc.id);
+});

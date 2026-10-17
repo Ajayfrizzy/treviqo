@@ -1772,3 +1772,32 @@ it("retains manual-only pension completeness when recovering malformed model out
     reviewState: "proposed",
   });
 });
+
+it("preserves complete conditional contract benefit wording even when the model selects only a fragment", async () => {
+  const clause =
+    "Employer-sponsored medical and group life benefits, where applicable, are linked to the employment\nrelationship and are subject to plan terms.";
+  ai.complete = vi.fn().mockResolvedValue(
+    JSON.stringify({
+      fields: [
+        {
+          key: "group_life_reference",
+          value: "group life benefits",
+          evidence: clause,
+        },
+      ],
+    }),
+  );
+  const { extraction } = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "employment_contract",
+    text: "Employment Agreement\n" + clause,
+  });
+  for (const key of ["hmo_reference", "group_life_reference"])
+    expect(extraction!.fields.find((f) => f.key === key)).toMatchObject({
+      proposedValue: clause,
+      evidence: clause,
+      value: null,
+      reviewState: "proposed",
+      confidence: "needs_review",
+    });
+});

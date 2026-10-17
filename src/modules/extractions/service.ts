@@ -419,7 +419,8 @@ export function extractionService(
                 if (
                   existing?.value !== null &&
                   existing !== undefined &&
-                  type === "employment_contract"
+                  type === "employment_contract" &&
+                  !["hmo_reference", "group_life_reference"].includes(field.key)
                 )
                   continue;
                 if (existing) Object.assign(existing, field);

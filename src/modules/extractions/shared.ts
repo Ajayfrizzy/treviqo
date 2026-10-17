@@ -282,3 +282,12 @@ export function extractionReadyMessage(record: ExtractionRecord): string {
     return "Manual fields are ready. Enter only details stated in your document.";
   return "Details are ready for your review. Nothing is confirmed automatically.";
 }
+
+// Category confirmation and empty manual slots are not extracted proposals.
+export function reviewedFieldCounts(record: ExtractionRecord) {
+  const counts = { confirmed: 0, corrected: 0, rejected: 0, unknown: 0 };
+  for (const field of reviewFields(record)) {
+    if (field.reviewState !== "proposed") counts[field.reviewState]++;
+  }
+  return counts;
+}

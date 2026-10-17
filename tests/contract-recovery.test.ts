@@ -40,3 +40,26 @@ it("does not infer facts from prose or accept unbounded input", () => {
   ).toEqual([]);
   expect(recoverContractFields("x".repeat(18001))).toEqual([]);
 });
+
+it("recovers the full conditional medical/group-life clause without asserting eligibility", () => {
+  const clause =
+    "Employer-sponsored medical and group life benefits, where applicable, are linked to the employment\nrelationship and are subject to plan terms.";
+  const fields = recoverContractFields(source + "\n" + clause);
+  for (const key of ["hmo_reference", "group_life_reference"]) {
+    expect(fields.find((f) => f.key === key)).toMatchObject({
+      value: clause,
+      evidence: clause,
+      confidence: "needs_review",
+    });
+  }
+  expect(
+    recoverContractFields(source + "\n" + clause + "\n" + clause).some(
+      (f) => f.key === "group_life_reference",
+    ),
+  ).toBe(false);
+  expect(
+    recoverContractFields(
+      source + "\nEmployer-sponsored medical and group life benefits may apply",
+    ).some((f) => f.key === "group_life_reference"),
+  ).toBe(false);
+});

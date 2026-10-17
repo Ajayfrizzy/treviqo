@@ -131,6 +131,7 @@ export function getObjectStorage(): PrivateObjectStorage {
         const abortSignal = AbortSignal.timeout(10000);
         const absent = (error: unknown) =>
           error instanceof Error &&
+          error.name !== "NoSuchBucket" &&
           (["NoSuchKey", "NotFound"].includes(error.name) ||
             (error as { $metadata?: { httpStatusCode?: number } }).$metadata
               ?.httpStatusCode === 404);
@@ -243,6 +244,7 @@ export function getObjectStorage(): PrivateObjectStorage {
           } catch (error) {
             if (
               error instanceof Error &&
+              error.name !== "NoSuchBucket" &&
               ((error as { $metadata?: { httpStatusCode?: number } }).$metadata
                 ?.httpStatusCode === 404 ||
                 error.name === "NoSuchKey" ||

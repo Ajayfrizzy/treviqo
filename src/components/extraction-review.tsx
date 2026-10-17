@@ -6,6 +6,7 @@ import { useRef, useState } from "react";
 import { documentTypes } from "@/modules/documents/shared";
 import {
   groupReviewFields,
+  reviewedFieldCounts,
   extractionReadyMessage,
   failureMessages,
   labelFor,
@@ -209,6 +210,12 @@ export function ExtractionReview({
     groups?.manual.filter((field) => field.reviewState === "proposed").length ??
     0;
   const categoryRemaining = category?.reviewState === "proposed";
+  const reviewedSummary = current
+    ? Object.entries(reviewedFieldCounts(current))
+        .filter(([, count]) => count > 0)
+        .map(([state, count]) => `${count} ${state}`)
+        .join(" · ")
+    : "";
   const showField = (field: ReviewField) => (
     <FieldCard
       key={`${field.id}-${field.version}`}
@@ -505,11 +512,14 @@ export function ExtractionReview({
                   : "Review complete. Rejected and unknown fields are not trusted values."}
             </p>
           )}
+          {current.status === "ready" && reviewedSummary && (
+            <p aria-live="polite">Reviewed details: {reviewedSummary}.</p>
+          )}
           {current.status === "ready" && current.errorCode === "partial" && (
             <p>
-              Review each proposed detail against the original document before
-              confirming it. Some details may be missing; enter them manually if
-              needed.
+              This was a partial extraction. Check the original document for
+              missing details and enter them manually where needed. Only
+              confirmed or corrected values are trusted.
             </p>
           )}
           {current.status === "ready" && current.fields.length <= 1 && (

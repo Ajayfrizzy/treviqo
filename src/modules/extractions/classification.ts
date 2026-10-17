@@ -13,7 +13,7 @@ const headings: Record<ExtractionType, RegExp> = {
   resignation_letter:
     /^(?:resignation|resignation letter|notice of resignation)$/i,
   termination_letter:
-    /^(?:termination|termination letter|notice of termination|termination of employment)$/i,
+    /^(?:termination|termination letter|notice of termination|notice of (?:role )?redundancy|termination of employment)$/i,
   final_settlement:
     /^(?:final settlement|final settlement statement|final settlement document)$/i,
   pension_statement:

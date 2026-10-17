@@ -1,3 +1,4 @@
+import { documentExitType, type ExitTypeDiscrepancy } from "./discrepancy";
 import "server-only";
 import { readRecords } from "@/server/db/read";
 import { ensurePensionFollowup } from "@/modules/finance/lifecycle";
@@ -174,6 +175,80 @@ export function exitService(db: PrismaClient = getDb()) {
     const row = await find(tx, userId, id);
     const input = answers(row);
     const context = await evidence(tx, userId, row.employmentId);
+    // Read only the latest attempt per available document in this employment.
+    // Proposed facts can raise a notice, never mutate worker-entered answers.
+    const documents = await tx.employmentDocument.findMany({
+      where: {
+        userId,
+        employmentId: row.employmentId,
+        status: "ready",
+        employment: { userId },
+      },
+      select: {
+        id: true,
+        extractions: {
+          where: { userId },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 1,
+          select: {
+            status: true,
+            documentType: true,
+            fields: {
+              where: {
+                key: { in: ["document_type", "exit_type", "reason"] },
+              },
+              select: {
+                key: true,
+                value: true,
+                proposedValue: true,
+                evidence: true,
+                reviewState: true,
+              },
+            },
+          },
+        },
+      },
+    });
+    const exitTypeDiscrepancies: ExitTypeDiscrepancy[] = [];
+    for (const document of documents) {
+      const run = document.extractions[0];
+      if (
+        !run ||
+        run.status !== "ready" ||
+        !["exit_letter", "termination_letter"].includes(run.documentType ?? "")
+      )
+        continue;
+      const category = run.fields.find(
+        (field) => field.key === "document_type",
+      );
+      if (
+        category &&
+        (["rejected", "unknown"].includes(category.reviewState) ||
+          (category.value && category.value !== run.documentType) ||
+          (category.proposedValue &&
+            category.proposedValue !== run.documentType))
+      )
+        continue;
+      for (const field of run.fields) {
+        if (["rejected", "unknown"].includes(field.reviewState)) continue;
+        const reviewed =
+          field.reviewState === "confirmed" ||
+          field.reviewState === "corrected";
+        const value = reviewed
+          ? field.value
+          : field.evidence
+            ? field.proposedValue
+            : null;
+        const type = value ? documentExitType(field.key, value) : undefined;
+        if (type && type !== input.exitType)
+          exitTypeDiscrepancies.push({
+            documentId: document.id,
+            type,
+            reviewed,
+          });
+      }
+    }
+
     return {
       id: row.id,
       employmentId: row.employmentId,
@@ -185,6 +260,7 @@ export function exitService(db: PrismaClient = getDb()) {
       answers: input,
       rulesVersion: RULES_VERSION,
       checklist: buildChecklist(input, context),
+      exitTypeDiscrepancies,
     };
   }
   return {
