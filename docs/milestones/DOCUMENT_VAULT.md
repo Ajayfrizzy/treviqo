@@ -1,5 +1,7 @@
 # Milestone 2 — Secure Document Vault
 
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+
 Implemented October 3, 2026. Authenticated workers can upload, filter by employment, inspect metadata, request private downloads, and delete their own documents. No AI/OCR, extraction, exit, settlement, pension, benefits, or Passport workflow was implemented. Nothing was committed, pushed, or deployed to Rumpty.
 
 ## Architecture and data
@@ -41,23 +43,23 @@ Only new runtime dependency: `@aws-sdk/s3-request-presigner`, for established S3
 
 ## Validation results
 
-| Exact command | Result |
-| --- | --- |
-| `npm run db:generate` | Passed |
-| `npm run lint` | Passed, including final smoke/test changes |
-| `npm run typecheck` | Passed, including final test changes |
-| `npm test` | 50 passed |
-| `npm run db:deploy` | All four migrations applied to disposable PostgreSQL 17 |
-| `npm run test:integration` | 24 passed; no skips |
-| `npm run test:e2e` | 26 passed; no skips |
-| `npm run build` | Passed |
-| `npx prisma migrate diff --from-url postgresql://treviqo_test@127.0.0.1:55432/treviqo_test --to-schema-datamodel prisma/schema.prisma --exit-code` | No difference detected |
-| `docker build -t treviqo:m2 .` | Production image built successfully |
-| `docker build --target migrate -t treviqo-m2-migrate .` | Release image built successfully |
-| `docker run --rm -e DATABASE_URL=postgresql://treviqo_test@host.docker.internal:55432/treviqo_test treviqo-m2-migrate` | Four migrations found; no pending migrations |
-| `docker exec treviqo-m2-smoke node tests/production-smoke.mjs` | Passed auth, non-root runtime, secure cookies, vault upload/TLS download/anonymous denial/delete/three audits |
-| `npm audit --omit=dev` | Zero production vulnerabilities |
-| `git diff --check` | Passed; implementation files remain untracked as they were at task start |
+| Exact command                                                                                                                                      | Result                                                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `npm run db:generate`                                                                                                                              | Passed                                                                                                        |
+| `npm run lint`                                                                                                                                     | Passed, including final smoke/test changes                                                                    |
+| `npm run typecheck`                                                                                                                                | Passed, including final test changes                                                                          |
+| `npm test`                                                                                                                                         | 50 passed                                                                                                     |
+| `npm run db:deploy`                                                                                                                                | All four migrations applied to disposable PostgreSQL 17                                                       |
+| `npm run test:integration`                                                                                                                         | 24 passed; no skips                                                                                           |
+| `npm run test:e2e`                                                                                                                                 | 26 passed; no skips                                                                                           |
+| `npm run build`                                                                                                                                    | Passed                                                                                                        |
+| `npx prisma migrate diff --from-url postgresql://treviqo_test@127.0.0.1:55432/treviqo_test --to-schema-datamodel prisma/schema.prisma --exit-code` | No difference detected                                                                                        |
+| `docker build -t treviqo:m2 .`                                                                                                                     | Production image built successfully                                                                           |
+| `docker build --target migrate -t treviqo-m2-migrate .`                                                                                            | Release image built successfully                                                                              |
+| `docker run --rm -e DATABASE_URL=postgresql://treviqo_test@host.docker.internal:55432/treviqo_test treviqo-m2-migrate`                             | Four migrations found; no pending migrations                                                                  |
+| `docker exec treviqo-m2-smoke node tests/production-smoke.mjs`                                                                                     | Passed auth, non-root runtime, secure cookies, vault upload/TLS download/anonymous denial/delete/three audits |
+| `npm audit --omit=dev`                                                                                                                             | Zero production vulnerabilities                                                                               |
+| `git diff --check`                                                                                                                                 | Passed; implementation files remain untracked as they were at task start                                      |
 
 Integration/browser commands used exported `DATABASE_URL=postgresql://treviqo_test@127.0.0.1:55432/treviqo_test` and `REDIS_URL=redis://127.0.0.1:56379`. Disposable services used synthetic data, not real credentials. Docker smoke used a temporary TLS certificate and trusted it through NODE_EXTRA_CA_CERTS; TLS verification stayed enabled. Test services were removed afterward.
 

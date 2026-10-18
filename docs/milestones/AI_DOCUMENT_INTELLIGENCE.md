@@ -1,5 +1,7 @@
 # Milestone 3 — AI Document Intelligence
 
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+
 Implemented October 3, 2026. Workers can request document classification/extraction, review evidence, confirm/correct/reject fields, mark unknowns, and recover through manual entry. No commits, pushes, deployments, or live inference calls were made.
 
 ## What changed
@@ -18,12 +20,12 @@ The injectable `DocumentAI` contract accepts a fixed system prompt, source text,
 
 Classification and type-specific extraction are separate narrow calls. Classification supports the four priority types plus Other; low/needs-review classification stops before selecting a field schema. The worker can supply a supported type for a subsequent attempt. High confidence never confirms a field automatically.
 
-| Type | Named fields |
-| --- | --- |
+| Type                | Named fields                                                                                                                                                                     |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Employment contract | Employer, employee, role, start date, employment type, salary/currency, salary frequency, notice period, annual leave, probation, pension/HMO/group-life references, exit clause |
-| Payslip | Employer, employee, pay period, gross/net pay, basic salary, pension deduction, tax, other deductions, explicit reimbursements and allowances |
-| Resignation letter | Letter date, notice date, proposed last day, stated notice period, explicit reason |
-| Termination letter | Letter date, effective date, stated reason, notice/pay-in-lieu wording, settlement references, benefit termination wording |
+| Payslip             | Employer, employee, pay period, gross/net pay, basic salary, pension deduction, tax, other deductions, explicit reimbursements and allowances                                    |
+| Resignation letter  | Letter date, notice date, proposed last day, stated notice period, explicit reason                                                                                               |
+| Termination letter  | Letter date, effective date, stated reason, notice/pay-in-lieu wording, settlement references, benefit termination wording                                                       |
 
 Amounts/dates/clauses are nullable verbatim strings, not calculated or normalized values. References to benefits, pension, or settlement are merely quotations; no later workflow or judgment is performed. Unsupported document types do not receive a forced schema.
 
@@ -63,24 +65,24 @@ No bulk/automatic confirmation is provided. Reviewed values do not update Employ
 
 ## Validation
 
-| Command | Result |
-| --- | --- |
-| `npm run db:generate` | Passed |
-| `npm run lint` | Passed after fixes, including final test changes |
-| `npm run typecheck` | Passed after fixes, including final test changes |
-| `npm test` | 65 passed, no skips |
-| `npm run db:deploy` | All five migrations applied to disposable PostgreSQL 17 |
-| `npm run test:integration` | 34 passed, no skips |
-| `npm run test:e2e` | Full 31-scenario run: 30 passed; one ambiguous test locator failed |
-| `npm run test:e2e -- tests/e2e/extractions.spec.ts` | All five extraction scenarios passed after locator correction; all 31 unique browser scenarios now have passing results |
-| `npm run build` | Passed |
-| `npx prisma migrate diff --from-url postgresql://treviqo_test@127.0.0.1:55432/treviqo_test --to-schema-datamodel prisma/schema.prisma --exit-code` | No difference detected |
-| `docker build -t treviqo:m3 .` | Passed; standalone parser assets included |
-| `docker build --target migrate -t treviqo-m3-migrate .` | Passed |
-| `docker run --rm -e DATABASE_URL=postgresql://treviqo_test@host.docker.internal:55432/treviqo_test treviqo-m3-migrate` | Five migrations; none pending |
-| `docker exec treviqo-m3-smoke node tests/production-smoke.mjs` | Passed production PDF preparation, TLS inference, grounded proposal, confirmation, derived-data deletion, vault lifecycle, non-root auth and secure-cookie/logout checks |
-| `npm audit --omit=dev` | Zero production vulnerabilities |
-| `git diff --check` | Passed |
+| Command                                                                                                                                            | Result                                                                                                                                                                   |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run db:generate`                                                                                                                              | Passed                                                                                                                                                                   |
+| `npm run lint`                                                                                                                                     | Passed after fixes, including final test changes                                                                                                                         |
+| `npm run typecheck`                                                                                                                                | Passed after fixes, including final test changes                                                                                                                         |
+| `npm test`                                                                                                                                         | 65 passed, no skips                                                                                                                                                      |
+| `npm run db:deploy`                                                                                                                                | All five migrations applied to disposable PostgreSQL 17                                                                                                                  |
+| `npm run test:integration`                                                                                                                         | 34 passed, no skips                                                                                                                                                      |
+| `npm run test:e2e`                                                                                                                                 | Full 31-scenario run: 30 passed; one ambiguous test locator failed                                                                                                       |
+| `npm run test:e2e -- tests/e2e/extractions.spec.ts`                                                                                                | All five extraction scenarios passed after locator correction; all 31 unique browser scenarios now have passing results                                                  |
+| `npm run build`                                                                                                                                    | Passed                                                                                                                                                                   |
+| `npx prisma migrate diff --from-url postgresql://treviqo_test@127.0.0.1:55432/treviqo_test --to-schema-datamodel prisma/schema.prisma --exit-code` | No difference detected                                                                                                                                                   |
+| `docker build -t treviqo:m3 .`                                                                                                                     | Passed; standalone parser assets included                                                                                                                                |
+| `docker build --target migrate -t treviqo-m3-migrate .`                                                                                            | Passed                                                                                                                                                                   |
+| `docker run --rm -e DATABASE_URL=postgresql://treviqo_test@host.docker.internal:55432/treviqo_test treviqo-m3-migrate`                             | Five migrations; none pending                                                                                                                                            |
+| `docker exec treviqo-m3-smoke node tests/production-smoke.mjs`                                                                                     | Passed production PDF preparation, TLS inference, grounded proposal, confirmation, derived-data deletion, vault lifecycle, non-root auth and secure-cookie/logout checks |
+| `npm audit --omit=dev`                                                                                                                             | Zero production vulnerabilities                                                                                                                                          |
+| `git diff --check`                                                                                                                                 | Passed                                                                                                                                                                   |
 
 Service/browser commands used exported `DATABASE_URL=postgresql://treviqo_test@127.0.0.1:55432/treviqo_test` and `REDIS_URL=redis://127.0.0.1:56379`. All data/credentials were synthetic. Docker smoke used local TLS S3/inference fixtures and a temporary CA via NODE_EXTRA_CA_CERTS; TLS verification remained enabled. Disposable containers/fixture processes were stopped after validation.
 

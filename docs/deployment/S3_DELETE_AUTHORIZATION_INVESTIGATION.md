@@ -1,5 +1,33 @@
 # Direct S3 DELETE investigation — 18 October 2026
 
+## Current live status
+
+**Normal API deletion remains unresolved.** Direct DeleteObject returned HTTP 403 AccessDenied with RumptyCloud S3 credentials in both the production investigation and one controlled dedicated private-test-bucket run. RumptyCloud support has been contacted, as reported by the project operator. The exact cause—missing allow, explicit policy/condition, retention or provider API behavior—is not established. No credential rotation, broader access or adapter workaround is justified by the 403 alone.
+
+The authorized private test used only `PROBE_*` credentials and a disposable generated object after local checks confirmed separate production/test identifiers, matching test confirmation and no conflicting definitions/environment overrides. No production operation was performed in that run. Public documentation intentionally omits storage identifiers, probe keys/run IDs and incident-specific user details.
+
+| Controlled private-test operation                | Actual result      | Interpretation                                          |
+| ------------------------------------------------ | ------------------ | ------------------------------------------------------- |
+| PutObject                                        | 200                | Private test object stored                              |
+| GetObject                                        | 200; bytes matched | Read and content verification passed                    |
+| HeadObject before DELETE                         | 200                | Object existed                                          |
+| HeadObject for never-written key                 | 404 NotFound       | Absence verified for that test key/principal            |
+| DeleteObject                                     | 403 AccessDenied   | Authorization failure; normal deletion did not succeed  |
+| HeadObject after DELETE and final cleanup        | 200                | Object remained accessible; cleanup failed              |
+| GetBucketVersioning / GetObjectLockConfiguration | 403 AccessDenied   | Actual versioning/lock configuration unknown            |
+| GetObjectRetention / GetObjectLegalHold          | 400 InvalidRequest | Inconclusive; not proof that retention/holds are absent |
+| ListObjectVersions                               | 403 AccessDenied   | Retained-version inventory unverified                   |
+
+The disposable test object remained at the end of the run and requires authorized operator follow-up using the private diagnostic record. No later cleanup is claimed. Do not create repeated probes while cleanup is blocked. A test-bucket result does not prove production-bucket or document-prefix permissions, and a missing-key 404 in this test does not establish production HEAD behavior.
+
+**Verified manual-removal recovery is implemented:** pending document metadata can finalize on an authorized retry only after the adapter verifies absence under the correct bucket/versioning mode. HTTP 403 is never proof of deletion. Scheduled account cleanup likewise retains disabled accounts, unpurged keys and retry/checkpoint state until verification succeeds. See [recovery steps](DOCUMENT_DELETION_RECOVERY.md) and [account lifecycle](../security/ACCOUNT_DELETION.md).
+
+Recommended next action: RumptyCloud support/operator review of the effective DeleteObject policy and provider-side request handling for the affected principals/targets, plus confirmation of bucket versioning/retention. Keep object ownership and access restrictions intact. An independent signed-client comparison or a new production disposable probe needs separate explicit authorization; neither has been performed as part of the controlled test.
+
+## Original audit and probe preparation
+
+The sections below record the initial audit before the subsequently authorized private-test run. Use the current status above for live results; the request audit and guarded operator procedures remain applicable.
+
 ## Conclusion and evidence boundary
 
 **The exact production root cause is not established.** The recorded live evidence
@@ -10,7 +38,7 @@ condition, retention restriction, or a provider gateway mapping an error to 403.
 Console deletion may run under a different principal/API and does not demonstrate
 application DELETE authorization.
 
-No new live S3 requests were made in this investigation. A designated private test
+No live S3 requests were made during the initial audit/preparation phase. A designated private test
 bucket and scoped probe configuration were not supplied. Existing application
 credentials are not implicitly designated test credentials. Production mutations
 were explicitly excluded. No current production document, bucket key, credential,
@@ -20,19 +48,19 @@ Sources: [original live report](LIVE_RUMPTY_VERIFICATION.md),
 [follow-up DELETE/HEAD evidence](RUMPTY_BLOCKERS.md#s3-deletion-diagnosis), and
 [verified recovery behavior](DOCUMENT_DELETION_RECOVERY.md).
 
-| Operation | Historical live evidence | HTTP / safe category | New evidence / limitation |
-| --- | --- | --- | --- |
-| HeadBucket | Succeeded | Exact status not recorded / none | Connectivity does not establish DELETE policy |
-| PutObject, private ACL | Succeeded | Exact status not recorded / none | Real-SDK local fixture succeeds; no new live PUT |
-| GetObject | Identical bytes returned | Signed GET 200 / none; SDK status not recorded | Real-SDK local fixture verifies bytes |
-| HeadObject, existing object | Succeeded in follow-up | 200 / none | Real-SDK local fixture returns 200 |
-| DeleteObject | Denied twice, including follow-up | 403 / authorization, code AccessDenied | Ordinary configured SDK DELETE succeeds against local fixture (204); current Rumpty success unverified |
-| HeadObject, missing object | Not established live | Unknown | Local fixtures exercise 404 / not_found and 403 / authorization; 403 never establishes absence |
-| GetBucketVersioning | Denied in follow-up | 403 / authorization | Actual production mode remains unknown |
-| GetObjectLockConfiguration | Denied in follow-up | 403 / authorization | Actual production lock/default-retention state remains unknown |
-| GetObjectRetention / GetObjectLegalHold | No recorded live test | Unknown | New probe supports read-only checks on its own disposable object |
-| ListObjectVersions | No recorded live test | Unknown | New probe restricts inventory to its own generated key |
-| Unsigned/tampered GET | Denied | 403 / authorization | Historical privacy evidence for that object only |
+| Operation                               | Historical live evidence          | HTTP / safe category                           | New evidence / limitation                                                                              |
+| --------------------------------------- | --------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| HeadBucket                              | Succeeded                         | Exact status not recorded / none               | Connectivity does not establish DELETE policy                                                          |
+| PutObject, private ACL                  | Succeeded                         | Exact status not recorded / none               | Real-SDK local fixture succeeds; no new live PUT                                                       |
+| GetObject                               | Identical bytes returned          | Signed GET 200 / none; SDK status not recorded | Real-SDK local fixture verifies bytes                                                                  |
+| HeadObject, existing object             | Succeeded in follow-up            | 200 / none                                     | Real-SDK local fixture returns 200                                                                     |
+| DeleteObject                            | Denied twice, including follow-up | 403 / authorization, code AccessDenied         | Ordinary configured SDK DELETE succeeds against local fixture (204); current Rumpty success unverified |
+| HeadObject, missing object              | Not established live              | Unknown                                        | Local fixtures exercise 404 / not_found and 403 / authorization; 403 never establishes absence         |
+| GetBucketVersioning                     | Denied in follow-up               | 403 / authorization                            | Actual production mode remains unknown                                                                 |
+| GetObjectLockConfiguration              | Denied in follow-up               | 403 / authorization                            | Actual production lock/default-retention state remains unknown                                         |
+| GetObjectRetention / GetObjectLegalHold | No recorded live test             | Unknown                                        | New probe supports read-only checks on its own disposable object                                       |
+| ListObjectVersions                      | No recorded live test             | Unknown                                        | New probe restricts inventory to its own generated key                                                 |
+| Unsigned/tampered GET                   | Denied                            | 403 / authorization                            | Historical privacy evidence for that object only                                                       |
 
 ## Application audit
 
@@ -51,14 +79,14 @@ group, HTTPS, no endpoint path/query/userinfo, path-style true/default,
 unversioned/default, and no session token. **This is not deployed configuration
 verification.** The adapter does not discover bucket versioning automatically.
 
-| Operation | Application input | Relevant S3 permission distinction |
-| --- | --- | --- |
-| PUT | Bucket, Key, bytes, ContentType, private CacheControl, ACL=private | PutObject, and provider-equivalent ACL authorization where required; never implies DeleteObject |
-| HEAD | Bucket, Key | GetObject; missing-key 404 visibility may require applicable ListBucket |
-| GET | Bucket, Key | GetObject; signed downloads also set response disposition/type/cache headers |
-| Ordinary DELETE | **Bucket, Key only** | DeleteObject on intended object resource/prefix |
-| Exact-version DELETE | Bucket, Key, VersionId | DeleteObjectVersion; retention/MFA constraints may additionally apply |
-| Version inventory | Bucket, Prefix=exact generated key, MaxKeys=100 | ListBucketVersions on the bucket with applicable prefix conditions |
+| Operation            | Application input                                                  | Relevant S3 permission distinction                                                              |
+| -------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| PUT                  | Bucket, Key, bytes, ContentType, private CacheControl, ACL=private | PutObject, and provider-equivalent ACL authorization where required; never implies DeleteObject |
+| HEAD                 | Bucket, Key                                                        | GetObject; missing-key 404 visibility may require applicable ListBucket                         |
+| GET                  | Bucket, Key                                                        | GetObject; signed downloads also set response disposition/type/cache headers                    |
+| Ordinary DELETE      | **Bucket, Key only**                                               | DeleteObject on intended object resource/prefix                                                 |
+| Exact-version DELETE | Bucket, Key, VersionId                                             | DeleteObjectVersion; retention/MFA constraints may additionally apply                           |
+| Version inventory    | Bucket, Prefix=exact generated key, MaxKeys=100                    | ListBucketVersions on the bucket with applicable prefix conditions                              |
 
 There are no application DELETE ACLs, If-Match/If-None-Match, MFA, expected-owner,
 request-payer, object-lock, or bypass-governance options. VersionId is supplied only
@@ -139,7 +167,7 @@ namespace in the source. Bucket-level diagnostic reads may be denied without
 preventing the ordinary DELETE experiment. Do not grant administrator access to
 make diagnostic checks green.
 
-**Operator-only test-bucket command, not executed in this investigation:**
+**Operator-only command: the controlled run above used this test authorization path. Do not rerun without fresh authorization and a cleanup plan:**
 
 ```sh
 node --conditions=react-server dist-worker/ops/s3-delete-probe-cli.js --test-bucket --execute
@@ -196,7 +224,7 @@ object or broadening credentials. This prepared command does not authorize its u
 
 ### Independent signed-request comparison if still needed
 
-Not performed: there is no new controlled live reproduction to compare. If the
+Not performed. The controlled private-test run now reproduces the denial, but no separately authorized second-signer comparison has been run. If the
 same-principal probe still returns 403 after policy review, retain the failed
 probe's private identity, and obtain authorization for a separate comparison.
 Use a second standard SigV4 implementation (for example an approved AWS CLI v2 /
@@ -217,21 +245,20 @@ single uncontrolled result.
 
 ## Discriminating causes and exact operator actions
 
-| Candidate | Evidence needed | Minimal action only if established |
-| --- | --- | --- |
-| Wrong credential/configuration | Rumpty principal identity and deployed web/worker target comparison; method-specific request trace | Correct the misconfigured deployment's reference/setting through an authorized release; no credential rotation justified yet |
-| Missing DeleteObject allow | Effective policy evaluation denies DeleteObject on intended object resource with no overriding deny | Grant that application principal `s3:DeleteObject` equivalent only for intended private objects/prefix |
-| Bucket/prefix/condition deny | Inspect identity + bucket/resource policies, conditions and explicit denies for the failed request | Correct only the unintended restriction; an Allow cannot override explicit Deny |
-| HEAD missing-key ambiguity | Same principal returns 403 for generated never-written key | Check applicable `s3:GetObject` and `s3:ListBucket` visibility/prefix semantics with Rumpty; never translate 403 to deletion success |
-| Versioning | Verified Enabled/Suspended state and returned version/delete-marker metadata | Use the deployment's correct existing cleanup mode and scoped ListBucketVersions/DeleteObjectVersion equivalents; do not switch mode to evade retention |
-| Retention/legal hold/MFA Delete | Authorized bucket/object metadata and provider policy trace | Follow retention policy/provider guidance; no bypass or hold removal. Object Lock may block permanent version deletion while ordinary marker creation still succeeds, so enabled lock alone does not explain ordinary DELETE 403 |
-| Unsupported options | Provider error/trace identifies a particular emitted SDK option | Implement a narrowly tested adapter correction only for the demonstrated incompatibility; none established here |
-| Signature/region/path-style | SignatureDoesNotMatch, InvalidAccessKeyId, AuthorizationHeaderMalformed, region hints or canonical-request trace | Correct only the demonstrated setting/signature issue; generic AccessDenied is insufficient evidence |
-| Provider API/gateway defect | Correct effective permission, matched signed-client reproduction, provider trace identifying method routing/parser rejection | Ask Rumpty support to correct gateway/API behavior; supply timestamps, safe operation/status/code and private provider-side correlation, never credentials or signed requests |
+| Candidate                       | Evidence needed                                                                                                              | Minimal action only if established                                                                                                                                                                                               |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Wrong credential/configuration  | Rumpty principal identity and deployed web/worker target comparison; method-specific request trace                           | Correct the misconfigured deployment's reference/setting through an authorized release; no credential rotation justified yet                                                                                                     |
+| Missing DeleteObject allow      | Effective policy evaluation denies DeleteObject on intended object resource with no overriding deny                          | Grant that application principal `s3:DeleteObject` equivalent only for intended private objects/prefix                                                                                                                           |
+| Bucket/prefix/condition deny    | Inspect identity + bucket/resource policies, conditions and explicit denies for the failed request                           | Correct only the unintended restriction; an Allow cannot override explicit Deny                                                                                                                                                  |
+| HEAD missing-key ambiguity      | Same principal returns 403 for generated never-written key                                                                   | Check applicable `s3:GetObject` and `s3:ListBucket` visibility/prefix semantics with Rumpty; never translate 403 to deletion success                                                                                             |
+| Versioning                      | Verified Enabled/Suspended state and returned version/delete-marker metadata                                                 | Use the deployment's correct existing cleanup mode and scoped ListBucketVersions/DeleteObjectVersion equivalents; do not switch mode to evade retention                                                                          |
+| Retention/legal hold/MFA Delete | Authorized bucket/object metadata and provider policy trace                                                                  | Follow retention policy/provider guidance; no bypass or hold removal. Object Lock may block permanent version deletion while ordinary marker creation still succeeds, so enabled lock alone does not explain ordinary DELETE 403 |
+| Unsupported options             | Provider error/trace identifies a particular emitted SDK option                                                              | Implement a narrowly tested adapter correction only for the demonstrated incompatibility; none established here                                                                                                                  |
+| Signature/region/path-style     | SignatureDoesNotMatch, InvalidAccessKeyId, AuthorizationHeaderMalformed, region hints or canonical-request trace             | Correct only the demonstrated setting/signature issue; generic AccessDenied is insufficient evidence                                                                                                                             |
+| Provider API/gateway defect     | Correct effective permission, matched signed-client reproduction, provider trace identifying method routing/parser rejection | Ask Rumpty support to correct gateway/API behavior; supply timestamps, safe operation/status/code and private provider-side correlation, never credentials or signed requests                                                    |
 
 No evidence currently justifies credential changes, policy broadening or an
-application DELETE modification. Recommended next action: review/run the dedicated
-private-test probe, then have the Rumpty operator inspect the production principal's
+application DELETE modification. The initial recommendation was a controlled test-bucket probe; that has now reproduced the denial. Have the Rumpty operator inspect the production principal's
 effective DeleteObject authorization and compare web/worker runtime settings.
 If necessary, authorize the separate production disposable probe afterward.
 
@@ -251,6 +278,6 @@ TypeScript, production build and worker build**. Commands run locally:
 
 Integration uses disposable local PostgreSQL 17 / Redis 7 and synthetic storage,
 with all 12 migrations applied only to the fresh test database. These tests cannot
-establish Rumpty's live policy or cryptographic signature acceptance. No live test-
-bucket, production-bucket, independent-signer or deployed web/worker comparison was
-performed. No production data/configuration changed; no commit, push or deployment.
+establish Rumpty's live policy or cryptographic signature acceptance. During that initial validation phase, no live comparison was performed. The later
+authorized private-test result is recorded above; no new production-bucket,
+independent-signer or deployed web/worker comparison is claimed. No production data/configuration changed; no commit, push or deployment.

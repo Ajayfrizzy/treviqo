@@ -1,19 +1,21 @@
 # First Rumpty production-like deployment
 
-Status update: first live checks partially connected S3 and AI model discovery; deployment acceptance is blocked. See [live verification results](LIVE_RUMPTY_VERIFICATION.md). The preparation record below is historical. No Rumpty credentials, endpoints, target project, console/CLI access or backup evidence were present in the workspace/process environment on 4 October 2026. Local fixture results are not evidence of live provider compatibility. Milestone 8 product features are out of scope.
+> Current runtime variable names/defaults and the four worker jobs are documented in [Rumpty deployment](RUMPTY_DEPLOYMENT.md). For direct DELETE troubleshooting use the separately gated private-test probe, not the older combined expiry/storage acceptance probe. Never interpret signed GET 403 as proof of deletion.
+
+Current live application: [treviqo.rumptycloud.app](https://treviqo.rumptycloud.app). This is the reusable release/acceptance procedure, originally prepared October 4. Historical validation below is not current acceptance. Direct storage deletion remains blocked; see [current findings and support status](S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status). Local fixtures do not establish live provider compatibility. All mutation/probe commands require an explicitly selected environment and operator authorization.
 
 ## Release artifacts and configuration
 
-Use the current working tree, including the Milestones 5–7 changes, as the release candidate. Do not accidentally build only the older committed revision. No commit/push is performed here. Keep auto-deployment disabled until an explicitly selected revision/image includes the full candidate. Record the deployed image digests in the acceptance record.
+Build from the explicitly reviewed release revision, including matching web/worker code and migrations. Keep automatic deployment disabled until that candidate is approved. Record image digests in the private acceptance record. These instructions do not authorize a release from an unreviewed working tree.
 
 Existing architecture remains web + worker + migration release job, with Rumpty PostgreSQL, Redis, private S3-compatible storage and AI. No new dependency/provider is added. `src/server/config/deployment.ts` is an explicit release preflight separate from credential-free build validation; `src/ops/deployment.ts` reuses the application adapters for bounded synthetic probes. It is an operator CLI, never a public HTTP endpoint. Worker image contains this CLI, migrations and synthetic AI fixtures.
 
-| Process | Required configuration |
-| --- | --- |
-| Web | NODE_ENV=production; APP_URL/NEXTAUTH_URL identical canonical HTTPS origin; generated SESSION_SECRET; DATABASE_URL; REDIS_URL; all five S3 variables; WORKER_REQUIRED=true |
-| Worker | NODE_ENV=production; APP_URL canonical HTTPS origin; DATABASE_URL; REDIS_URL; all five S3 variables for scheduled account/document deletion. Rumpty injects PORT for GET /health. No session/AI secrets required. |
-| Migration release job | DATABASE_URL for the selected target database, using a direct migration-capable connection. |
-| Operator probes | Web configuration for full checks; complete AI group for `--ai`. Uses same trust/network access as the application. |
+| Process               | Required configuration                                                                                                                                                                                            |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web                   | NODE_ENV=production; APP_URL/NEXTAUTH_URL identical canonical HTTPS origin; generated SESSION_SECRET; DATABASE_URL; REDIS_URL; all five S3 variables; WORKER_REQUIRED=true                                        |
+| Worker                | NODE_ENV=production; APP_URL canonical HTTPS origin; DATABASE_URL; REDIS_URL; all five S3 variables for scheduled account/document deletion. Rumpty injects PORT for GET /health. No session/AI secrets required. |
+| Migration release job | DATABASE_URL for the selected target database, using a direct migration-capable connection.                                                                                                                       |
+| Operator probes       | Web configuration for full checks; complete AI group for `--ai`. Uses same trust/network access as the application.                                                                                               |
 
 AI group: `RUMPTY_AI_BASE_URL`, `RUMPTY_AI_API_KEY`, `RUMPTY_AI_MODEL`. Base URL must be the actual Rumpty API base (including `/v1` if required), not the complete `/chat/completions` path. The existing adapter appends that path. `S3_FORCE_PATH_STYLE=true` is the default; change only per actual endpoint guidance. Keep DOCUMENT_MAX_FILE_MB within 1–20 (default 10).
 
@@ -27,8 +29,8 @@ APP_URL must contain no path/query/fragment/user credentials. PostgreSQL and Red
 2. Configure PostgreSQL backups/PITR if supported, retention and a pre-release snapshot for any existing database. Verify migration and runtime role privileges. Confirm Redis persistence/noeviction, authentication, ACL support for EVAL/sorted sets/TTL and networking. Do not share a Redis database/namespace with another Treviqo environment.
 3. Block public bucket policies/ACLs. App permissions are HeadBucket, private PutObject, GetObject, DeleteObject and signed response headers for the intended bucket. The synthetic probe uses `deployment-probes/<random UUID>.txt`; permit that prefix for the operator or use a dedicated acceptance bucket with the same policy. The download endpoint must be reachable by users' browsers. Check bucket versioning/lifecycle and retained versions; deletion of the current key is not erasure of backups/versions.
 4. Verify inference API protocol, available model identifier, context/output limits, credits, privacy/training/retention and log settings. No alternative provider fallback exists.
-5. Configure web HTTPS ingress/DNS, port 3000, request timeout >=90 seconds for extraction, body limits consistent with upload settings, bounded upload/parser/auth concurrency, per-client ingress limits and redacted logs. Each Argon2 operation uses 64 MiB; PDF subprocess heap cap is 128 MiB, not total RSS. Measure memory/capacity before opening real-worker access.
-6. Configure worker restart policy, >=90-second health startup grace and up to two-minute graceful shutdown. Worker has no public port. Configure monitoring for heartbeat, failed jobs, readiness and database/storage errors.
+5. Configure web HTTPS ingress/DNS, port 3000, request budget covering PDF preparation, up to two configured inference calls and persistence (four-minute application attempt bound), body limits consistent with upload settings, bounded upload/parser/auth concurrency, per-client ingress limits and redacted logs. Each Argon2 operation uses 64 MiB; PDF subprocess heap cap is 128 MiB, not total RSS. Measure memory/capacity before opening real-worker access.
+6. Configure worker restart policy, >=90-second health startup grace and shutdown grace longer than its 10-second forced-exit deadline. The worker exposes only GET /health on PORT (default 3001); restrict ingress to health monitoring. Configure monitoring for heartbeat, failed jobs, readiness and database/storage errors.
 7. Configure encrypted backups/object snapshots, restricted operators, retention and a restore drill. See the [existing recovery runbook](RUMPTY_DEPLOYMENT.md#milestone-7-worker-and-recovery-runbook). Record actual snapshot/restore evidence before acceptance; repository code cannot enable or prove console backup settings.
 
 Exact Rumpty menu names, image registry and build-target controls require the real console/account. No unsupported CLI or manifest format is invented here.
@@ -86,7 +88,7 @@ This reads PostgreSQL migration history and checks names/checksums/completion ag
 
 ## Controlled live probes
 
-Once real configuration is available, run from the intended Rumpty network. Only synthetic content is used; no real worker documents are needed.
+The following acceptance commands require a separately authorized target environment and synthetic data. They use the application environment, not the isolated `PROBE_*` credentials. Do not run them as part of the dedicated deletion investigation; use the [private-test deletion probe](S3_DELETE_AUTHORIZATION_INVESTIGATION.md) for that workflow. No acceptance command is authorization to modify production.
 
 ```sh
 docker run --rm --env-file .env.production.local treviqo-worker:candidate npm run deployment:check -- --storage
@@ -95,7 +97,7 @@ docker run --rm --env-file .env.production.local treviqo-worker:candidate npm ru
 
 Storage creates one random synthetic object, tests SDK read, signed download/attachment, unsigned denial, tampered-signature denial, two-second link expiry, deletion and denial after deletion. Cleanup runs even after a partial failure; output includes only a probe UUID to locate `deployment-probes/<UUID>.txt` if network failure prevents cleanup. Retained versions need provider lifecycle cleanup. A passing single-object probe does not prove all bucket policies or cross-user app authorization; inspect policies and perform the app checks below. Never use a public bucket to make a failing probe pass.
 
-AI performs at most 12 calls (classification + extraction for each of six types), no automatic retries, with current prompts/schema and grounded parsers. Reports only type, expected-value coverage and latency; strict acceptance may fail on missing/low-confidence/semantically different values despite valid protocol. Investigate the model/adapter using synthetic examples, retaining manual review; never weaken grounding/confirmation to force a pass. Fixture tests do not prove model accuracy. The probe does not write trusted fields or make legal/workflow decisions.
+AI performs classification and extraction for each of eight supported types (up to 16 calls; the operator console still has an outdated 12-call label), no automatic retries, with current prompts/schema and grounded parsers. Reports only type, expected-value coverage and latency; strict acceptance may fail on missing/low-confidence/semantically different values despite valid protocol. Investigate the model/adapter using synthetic examples, retaining manual review; never weaken grounding/confirmation to force a pass. Fixture tests do not prove model accuracy. The probe does not write trusted fields or make legal/workflow decisions.
 
 ## Start services and verify runtime
 
@@ -111,19 +113,19 @@ In the isolated production-like environment, register two synthetic worker accou
 
 During a planned acceptance window, stop/restart only the target worker: readiness should fail after the 45-second heartbeat expiry while liveness stays 200, then recover. Do not flush shared Redis or change all live job due dates to test recovery. Local `tests/production-smoke.mjs` assumes fixture AI responses and mutates test job scheduling: **use only disposable infrastructure**, not live acceptance.
 
-## Acceptance record and current blockers
+## Historical acceptance snapshot — 4 October 2026
 
-| Area | Current evidence/status |
-| --- | --- |
-| Rumpty PostgreSQL | Not connected; target URL/identity/backup status unavailable. No live migrations applied. |
-| Rumpty Redis/worker | Not connected; credentials/compute configuration unavailable. |
-| Rumpty storage/privacy | Not tested live; bucket endpoint/credentials/policy unavailable. |
-| Rumpty AI protocol/model | Not tested live; endpoint/key/model unavailable. Existing adapter compatibility remains an assumption. |
-| Public HTTPS health/readiness | Not tested live; canonical domain/ingress/worker unavailable. |
-| Backup/snapshot | Runbook prepared; no configured schedule, snapshot ID, or successful restore evidence supplied. |
-| Local validation | See results below; these validate tooling and application behavior, not real Rumpty. |
+| Area                          | Evidence at that time                                                                                  |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Rumpty PostgreSQL             | Not connected; target URL/identity/backup status unavailable. No live migrations applied.              |
+| Rumpty Redis/worker           | Not connected; credentials/compute configuration unavailable.                                          |
+| Rumpty storage/privacy        | Not tested live; bucket endpoint/credentials/policy unavailable.                                       |
+| Rumpty AI protocol/model      | Not tested live; endpoint/key/model unavailable. Existing adapter compatibility remains an assumption. |
+| Public HTTPS health/readiness | Not tested live; canonical domain/ingress/worker unavailable.                                          |
+| Backup/snapshot               | Runbook prepared; no configured schedule, snapshot ID, or successful restore evidence supplied.        |
+| Local validation              | See results below; these validate tooling and application behavior, not real Rumpty.                   |
 
-Before Milestone 8, fill the live acceptance results with date, target environment, image digests, migration status, synthetic probe results, operator policy checks, monitoring and successful restore evidence. Keep credentials/signed URLs out of this record. Missing live access is the current blocker, not an observed Rumpty incompatibility.
+The table records the original pre-deployment state, not current availability. See the [deployment guide](RUMPTY_DEPLOYMENT.md) and [current S3 status](S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status). For final acceptance, operators should record date, reviewed revision/image digests, migration status, synthetic results, policy checks, monitoring and successful restore evidence privately. Public summaries must exclude credentials, identifiers and signed URLs.
 
 ## Local validation record — 4 October 2026
 

@@ -1,8 +1,12 @@
 # Document deletion recovery investigation — 18 October 2026
 
+## Current status
+
+Recovery is implemented; direct DELETE remains blocked. A controlled private-test run reproduced the production investigation's 403 AccessDenied, and RumptyCloud support has been contacted. Its missing-key HEAD returned 404, while the object left after denied DELETE still returned 200. This is test-bucket evidence, not proof of production missing-key permissions. See [the consolidated results](S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status). Preserve pending rows until verified absence; do not edit database status to bypass verification.
+
 ## Findings and limits
 
-The reported `01_payslip.pdf` / Briarwell incident has not been reproduced against
+The reported misfiled-document incident has not been reproduced against
 production. No production object, metadata, credentials or permissions were changed.
 The filename is not a storage identifier; never locate or erase an object by filename
 alone. Use the owner's document ID and its exact stored key in an authorized operator

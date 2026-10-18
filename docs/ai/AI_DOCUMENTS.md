@@ -1,10 +1,30 @@
 # Treviqo AI Document Processing
 
+## Current implementation
+
+This section is authoritative for the current source; dated protocol notes below are historical. Eight extraction/manual-review categories are defined in [shared.ts](../../src/modules/extractions/shared.ts): employment contract, payslip, resignation letter, termination letter, exit letter, final settlement, pension statement and benefit document. Reimbursement evidence and Other can be stored but do not have separate extraction schemas.
+
+The [Rumpty adapter](../../src/server/ai/client.ts) sends ordinary non-streaming chat completions with temperature zero, system/user messages and bounded output. It sends no `response_format`, tools or provider-enforced JSON schema. Application parsing/grounding is authoritative. Classification requests 256 output tokens; extraction requests 2048. `RUMPTY_AI_TIMEOUT_MS` defaults to 60000 ms and allows 10000–90000 per call. The response cap is 64 KiB. Extraction attempts and browser waits allow four minutes. There is no automatic paid retry or fallback inference provider.
+
+PDF text preparation runs in a bounded local subprocess. Images/scans require transcription or manual fields; OCR is not implemented. Source text is untrusted data. Explicit type selection and distinctive document-purpose anchors avoid confusing benefit, payslip, pension and exit-letter schemas. Ambiguous categories pause for user selection. Narrow source-label/row recovery may retain unambiguous facts when model extraction is incomplete; it does not infer missing values or confirm them.
+
+Proposals contain a supported key, verbatim value and a source excerpt containing that value. Bounded parsing accepts supported harmless formatting variants and rejects ambiguity, malformed structure and ungrounded claims. Source recovery uses the same validation and review rules. Gross/net salary and employee/employer pension amounts remain distinct. Pension extraction supports at most three rows; completeness is user-assessed, never inferred by AI. Account/RSA identifiers are not requested.
+
+Original proposals and review revisions are preserved. Confirmed/Corrected fields can be selected as reviewed evidence; Proposed, Rejected and Unknown are not trusted facts. Classification confirmation is separate from field confirmation. Extraction never silently updates employment dates, selected exit type, portability or contribution confirmation. Semantic correctness still requires reading the original document.
+
+Review supports current results, partial/manual fields, prior attempts, correction history and retry. Expired runs are recovered by service reads/starts and the existing `extraction_cleanup` worker job. Current version constants live in [schema.ts](../../src/modules/extractions/schema.ts); do not use older version descriptions below to configure a deployment. Provider compatibility investigations remain in [the diagnosis record](../deployment/AI_EXTRACTION_DIAGNOSIS.md).
+
+## Historical design and evolution
+
+The initial field lists and milestone/protocol descriptions below record design evolution. They do not broaden today's supported types, trust policy, timing or identifier collection beyond the current contract above.
+
 ## Principle
+
 Rumpty AI performs narrow document-understanding tasks.
 It is not the legal or business decision-maker.
 
 ## Initial types
+
 - employment contract
 - payslip
 - resignation letter
@@ -17,6 +37,7 @@ It is not the legal or business decision-maker.
 - other
 
 ## Pipeline
+
 ```text
 Upload
  -> validate
@@ -30,6 +51,7 @@ Upload
 ```
 
 ## Prompt rules
+
 - one narrow purpose
 - strict JSON
 - explicit schema
@@ -40,6 +62,7 @@ Upload
 - grounded only in supplied content
 
 ## Contract fields
+
 - employer
 - employee if present
 - role
@@ -55,6 +78,7 @@ Upload
 - relevant exit-clause snippets
 
 ## Payslip fields
+
 - employer
 - employee
 - pay period
@@ -66,6 +90,7 @@ Upload
 - explicit reimbursements/allowances
 
 ## Resignation fields
+
 - letter date
 - notice date
 - proposed last day
@@ -73,6 +98,7 @@ Upload
 - reason if explicit
 
 ## Termination fields
+
 - letter date
 - effective date
 - stated reason
@@ -83,8 +109,9 @@ Upload
 Never classify lawfulness.
 
 ## Pension statement fields
+
 - PFA/provider
-- safe identifier where appropriate
+- identifiers excluded from the implemented pension schema
 - statement period
 - contributions
 - contribution dates
@@ -92,6 +119,7 @@ Never classify lawfulness.
 - employee/employer contribution values where distinguishable
 
 ## Final settlement fields
+
 - pay period
 - final salary
 - leave settlement
@@ -103,14 +131,18 @@ Never classify lawfulness.
 - total settlement
 
 ## Confidence
+
 Use:
+
 - high
 - medium
 - low
 - needs_review
 
 ## User confirmation
+
 Allow:
+
 - confirm
 - edit
 - reject
@@ -119,10 +151,12 @@ Allow:
 Store original proposed value plus confirmed/corrected value.
 
 ## Fixtures
+
 Create synthetic fixtures for contracts, payslips, resignation letters, pension statements, and final settlements.
 Automated tests should not repeatedly consume live inference credits.
 
 ## Versioning
+
 Record model, prompt/schema version, and extraction timestamp.
 
 ## Milestone 3 implementation
@@ -151,11 +185,11 @@ The model must never sum rows, infer contribution month from posting date, or as
 
 ## October 7 production extraction diagnosis
 
-The current candidate uses `evidence-v3` / `fields-v3`: a bounded sparse list of present `{key,value,evidence}` facts, expanded server-side to all review fields. Unknown/duplicate keys and missing evidence fail validation. Every sparse proposal starts `needs_review` / Proposed; no value becomes trusted automatically. Legacy complete cell responses retain strict validation. Classification requests 256 output tokens, extraction 2048, with a configurable bounded deadline (see below) and 64 KiB response cap. Live Rumpty currently does not reliably honor JSON structure/evidence requirements; manual entry remains necessary on failure. See [measured compatibility, failure-path analysis and validation](../deployment/AI_EXTRACTION_DIAGNOSIS.md). Earlier milestone protocol descriptions are historical.
+The October 7 candidate used `evidence-v3` / `fields-v3`: a bounded sparse list of present `{key,value,evidence}` facts, expanded server-side to all review fields. Unknown/duplicate keys and missing evidence fail validation. Every sparse proposal starts `needs_review` / Proposed; no value becomes trusted automatically. Legacy complete cell responses retain strict validation. Classification requests 256 output tokens, extraction 2048, with a configurable bounded deadline (see below) and 64 KiB response cap. Live Rumpty currently does not reliably honor JSON structure/evidence requirements; manual entry remains necessary on failure. See [measured compatibility, failure-path analysis and validation](../deployment/AI_EXTRACTION_DIAGNOSIS.md). Earlier milestone protocol descriptions are historical.
 
 ## 8 October 2026 compatibility and persistence update
 
-The current protocol is `evidence-v4` / `fields-v4`; this supersedes earlier
+The October 8 protocol was `evidence-v4` / `fields-v4`; this supersedes earlier
 strict-response and all-or-nothing parsing descriptions above. Classification
 asks only for type/evidence through ordinary chat messages, without provider
 structured-output options or appended schema text. One fenced/prose-wrapped JSON
@@ -176,7 +210,7 @@ for evidence, limitations and production follow-up.
 
 ## Compact extraction and salvage follow-up (v5)
 
-Current metadata is `evidence-v5` / `fields-v5`. Extraction uses a shorter key list
+That follow-up recorded `evidence-v5` / `fields-v5`. Extraction uses a shorter key list
 and one type-specific example, with verbatim value/evidence and omission instructions.
 It does not request confidence or use provider schema enforcement. All new parsed
 fields receive application-assigned `needs_review`; trusted values still require
@@ -208,7 +242,6 @@ available through collapsed history. See [the state model](../ui/UI_UX.md#extrac
 
 This correction changes no prompts, parser, persistence, APIs, rate limits or AI
 behavior. Protocol versions remain evidence-v5 / fields-v5.
-
 
 ## Bounded inference timing
 

@@ -1,5 +1,7 @@
 # Milestone 0 implementation record
 
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+
 Repository foundation implemented on October 3, 2026. **The milestone's live Rumpty success criterion remains pending real infrastructure configuration and deployment.** Nothing was committed or pushed.
 
 ## Architecture and scope
@@ -23,19 +25,19 @@ Server-only modules provide validated configuration, lazy PostgreSQL/Prisma and 
 
 ## Dependencies
 
-| Packages | Reason |
-| --- | --- |
-| `next`, `react`, `react-dom` | Application and mobile UI |
-| `next-auth` | Credentials, CSRF, and encrypted-session implementation |
-| `argon2` | Salted Argon2id password hashing and verification |
-| `@prisma/client`, `prisma` | PostgreSQL access, generation, migrations |
-| `ioredis` | Redis connection and atomic auth rate limiter |
-| `@aws-sdk/client-s3` | S3 protocol client with mandatory Rumpty endpoint; no AWS infrastructure provisioned |
-| `zod`, `server-only` | Environment validation and client/server import isolation |
-| TypeScript and Node/React types | Strict compile-time checks, Node 22 runtime alignment |
-| ESLint / Next.js ESLint config | Source validation |
-| Vitest | Unit/security and service integration tests |
-| Playwright | Responsive browser and authorization-boundary checks |
+| Packages                        | Reason                                                                               |
+| ------------------------------- | ------------------------------------------------------------------------------------ |
+| `next`, `react`, `react-dom`    | Application and mobile UI                                                            |
+| `next-auth`                     | Credentials, CSRF, and encrypted-session implementation                              |
+| `argon2`                        | Salted Argon2id password hashing and verification                                    |
+| `@prisma/client`, `prisma`      | PostgreSQL access, generation, migrations                                            |
+| `ioredis`                       | Redis connection and atomic auth rate limiter                                        |
+| `@aws-sdk/client-s3`            | S3 protocol client with mandatory Rumpty endpoint; no AWS infrastructure provisioned |
+| `zod`, `server-only`            | Environment validation and client/server import isolation                            |
+| TypeScript and Node/React types | Strict compile-time checks, Node 22 runtime alignment                                |
+| ESLint / Next.js ESLint config  | Source validation                                                                    |
+| Vitest                          | Unit/security and service integration tests                                          |
+| Playwright                      | Responsive browser and authorization-boundary checks                                 |
 
 The lockfile makes installation reproducible. A `deepmerge-ts` override to patched 8.x removes the Prisma configuration dependency advisory; generation, migrations, and builds were verified with that override. Prisma 6 was selected for its stable Node/PostgreSQL setup without an additional driver adapter.
 
@@ -47,24 +49,24 @@ The original migration created `User` with issuer/subject identity. The additive
 
 ## Original foundation validation results (before credentials correction)
 
-| Command/check | Final result |
-| --- | --- |
-| `npm run lint` | Passed |
-| `npm run typecheck` | Passed |
-| `npm test` | 17 tests passed |
-| `npm run build` | Passed, including a Node 22 Linux Docker build |
-| `npm run db:deploy` | Migration applied, subsequent runs had no pending migrations |
-| `npm run test:integration` | 3 tests passed against disposable PostgreSQL/Redis |
-| `npx prisma migrate diff --from-url postgresql://treviqo_test@127.0.0.1:55432/treviqo_test --to-schema-datamodel prisma/schema.prisma --exit-code` | No difference detected |
-| `npx playwright install chromium` | Browser available |
-| `npm run test:e2e` | 11 tests passed; 320/375/430/1280px |
-| `docker build --progress=plain --target runtime -t treviqo:milestone-0 .` | Passed |
-| `docker build --target migrate -t treviqo:migrate-0 .` | Passed |
-| `docker run --rm -e DATABASE_URL=postgresql://treviqo_test@host.docker.internal:55432/treviqo_test treviqo:migrate-0` | Passed; no pending migrations |
-| Production container smoke checks | Health 200, readiness 503 without credentials, current user 401, sign-in 200, browser redirect to sign-in, UID 1001 |
-| `npm audit --omit=dev` | Zero vulnerabilities |
-| `npm audit --json` | Five high development-only advisory entries from the unpatched `braces` dependency chain in Next.js lint tooling |
-| `git diff --check` | Passed (new application files are untracked) |
+| Command/check                                                                                                                                      | Final result                                                                                                        |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `npm run lint`                                                                                                                                     | Passed                                                                                                              |
+| `npm run typecheck`                                                                                                                                | Passed                                                                                                              |
+| `npm test`                                                                                                                                         | 17 tests passed                                                                                                     |
+| `npm run build`                                                                                                                                    | Passed, including a Node 22 Linux Docker build                                                                      |
+| `npm run db:deploy`                                                                                                                                | Migration applied, subsequent runs had no pending migrations                                                        |
+| `npm run test:integration`                                                                                                                         | 3 tests passed against disposable PostgreSQL/Redis                                                                  |
+| `npx prisma migrate diff --from-url postgresql://treviqo_test@127.0.0.1:55432/treviqo_test --to-schema-datamodel prisma/schema.prisma --exit-code` | No difference detected                                                                                              |
+| `npx playwright install chromium`                                                                                                                  | Browser available                                                                                                   |
+| `npm run test:e2e`                                                                                                                                 | 11 tests passed; 320/375/430/1280px                                                                                 |
+| `docker build --progress=plain --target runtime -t treviqo:milestone-0 .`                                                                          | Passed                                                                                                              |
+| `docker build --target migrate -t treviqo:migrate-0 .`                                                                                             | Passed                                                                                                              |
+| `docker run --rm -e DATABASE_URL=postgresql://treviqo_test@host.docker.internal:55432/treviqo_test treviqo:migrate-0`                              | Passed; no pending migrations                                                                                       |
+| Production container smoke checks                                                                                                                  | Health 200, readiness 503 without credentials, current user 401, sign-in 200, browser redirect to sign-in, UID 1001 |
+| `npm audit --omit=dev`                                                                                                                             | Zero vulnerabilities                                                                                                |
+| `npm audit --json`                                                                                                                                 | Five high development-only advisory entries from the unpatched `braces` dependency chain in Next.js lint tooling    |
+| `git diff --check`                                                                                                                                 | Passed (new application files are untracked)                                                                        |
 
 Local service commands used `DATABASE_URL=postgresql://treviqo_test@127.0.0.1:55432/treviqo_test` and `REDIS_URL=redis://127.0.0.1:56379`. These were isolated test containers using a synthetic trust-auth database, not credentials or production configuration. Temporary validation containers were removed afterward.
 

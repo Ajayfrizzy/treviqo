@@ -1,5 +1,7 @@
 # Responsive action and loading-state polish — 9 October 2026
 
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+
 ## Scope and affected components
 
 - `src/app/globals.css`: responsive content sizing, compact equal-width pairs,

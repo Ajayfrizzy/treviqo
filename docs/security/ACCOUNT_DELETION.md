@@ -1,5 +1,11 @@
 # Scheduled account deletion
 
+## Current operational limitation
+
+Scheduling is implemented, but seven days is the earliest cleanup eligibility time, **not a guaranteed erasure deadline**. Direct S3 deletion currently returns 403 AccessDenied in production and a controlled private test bucket. RumptyCloud support has been contacted. Accounts with unpurged documents stay disabled and retry; the worker does not remove database records first to bypass storage failure. See [current findings](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+
+Verified manual-object-removal recovery is implemented. Only an authorized operator should identify the exact object privately; a subsequent service retry must still verify absence and applicable version cleanup. An ambiguous 403, missing bucket or network error cannot establish absence. Active users retry individual pending documents through the existing owner-authorized flow; scheduled account cleanup remains worker-owned.
+
 Profile deletion requires the authenticated owner's current password and exact
 `DELETE`. The request schedules cleanup; it does not erase files or records.
 
@@ -38,8 +44,9 @@ navigation to clear private router state and shows scheduling confirmation.
 Normal session validation checks both account timestamps as well as session
 ownership/expiry. Session creation takes the same User lock and rejects disabled
 accounts, preventing a concurrent login from recreating access after revocation.
-Uploads use this lock before reservation and around storage PUT, and reject both
-pending and deleting accounts. Unfinished reservations remain available to the
+Uploads use this lock for reservation and reject both pending and deleting
+accounts. Storage PUT runs outside the database lock; the durable reservation
+and upload grace period protect against concurrent cleanup. Unfinished reservations remain available to the
 worker instead of blocking scheduling indefinitely. Already-authorized requests
 may finish; new requests cannot authenticate. Existing private signed download
 URLs can remain usable until their existing short expiry (up to 60 seconds).
@@ -108,7 +115,8 @@ message is shown merely because scheduling or a worker attempt succeeded.
 
 `S3_VERSIONING=unversioned` is the default compatibility mode. It uses HeadObject,
 DeleteObject, then HeadObject to verify absence. Already absent keys (404,
-NoSuchKey or NotFound) count as successfully erased, including manual removal.
+NoSuchKey or NotFound without conflicting denial/error status) can establish
+current-key absence, including manual removal, only under the configured bucket-mode contract.
 AccessDenied, unexpected failures and a still-accessible object fail closed.
 ListObjectVersions is not required in this mode. A non-null version ID returned
 by HEAD is rejected as a configuration mismatch.

@@ -1,10 +1,13 @@
 # Landing interactions — 10 October 2026
 
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+
 Added selectable Employment/Documents/Next chapter hero examples and expandable
 How it works steps. Short transitions and CTA arrow feedback make exploration
 responsive without automatic cycling. All content remains clearly illustrative.
 
 Affected components/files:
+
 - `src/components/public-previews.tsx`: HeroPreview and JourneyPreview client islands.
 - `src/components/public-landing.tsx`: composes those islands into the existing page.
 - `src/app/public.css`: scoped controls, transitions, responsive wrapping.
@@ -15,6 +18,7 @@ The public page remains statically prerendered. No backend, domain, AI, auth,
 routing, schema, environment or dependency changes. No commit, push or deployment.
 
 Validation:
+
 - `npm run validate`: lint, TypeScript, 319 unit tests across 26 files, production
   build and worker build passed.
 - `npm run lint && npm run typecheck`: passed after adding browser coverage.

@@ -1,5 +1,7 @@
 # Milestone 6 — Benefit Passport v1
 
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+
 Implemented locally on 4 October 2026, extending the existing uncommitted Milestone 5 work. No commit, push, deployment, live inference, or real-worker records were used.
 
 ## Approach and changes
@@ -51,18 +53,18 @@ Browser checks cover 320/375/430px, bottom-navigation selection, overflow, save/
 
 All database/browser/smoke validation uses disposable PostgreSQL 17/Redis and synthetic local protocol fixtures. No live Rumpty inference is required.
 
-| Command/check | Result |
-| --- | --- |
-| `npm run validate` (lint, typecheck, unit tests, production build) | Passed; 201 unit tests |
-| `npm run test:integration` | 70 passed |
-| `npm run test:e2e` | 45 passed |
-| `npm run db:deploy` | Eight additive migrations applied to fresh database |
-| `npx prisma migrate diff --from-url <disposable-url> --to-schema-datamodel prisma/schema.prisma --exit-code` | No difference; exit 0 |
-| `docker build --target runtime -t treviqo-m6:local .` | Passed |
-| `docker build --target migrate -t treviqo-m6-migrate:local .` | Passed |
-| `docker run --rm -e DATABASE_URL=<disposable-url> treviqo-m6-migrate:local` | Passed; no pending migrations |
-| `docker exec treviqo-m6-runtime node /app/tests/production-smoke.mjs` | Passed as UID 1001 with local TLS S3/inference fixtures |
-| `git diff --check` | Passed |
+| Command/check                                                                                                | Result                                                  |
+| ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------- |
+| `npm run validate` (lint, typecheck, unit tests, production build)                                           | Passed; 201 unit tests                                  |
+| `npm run test:integration`                                                                                   | 70 passed                                               |
+| `npm run test:e2e`                                                                                           | 45 passed                                               |
+| `npm run db:deploy`                                                                                          | Eight additive migrations applied to fresh database     |
+| `npx prisma migrate diff --from-url <disposable-url> --to-schema-datamodel prisma/schema.prisma --exit-code` | No difference; exit 0                                   |
+| `docker build --target runtime -t treviqo-m6:local .`                                                        | Passed                                                  |
+| `docker build --target migrate -t treviqo-m6-migrate:local .`                                                | Passed                                                  |
+| `docker run --rm -e DATABASE_URL=<disposable-url> treviqo-m6-migrate:local`                                  | Passed; no pending migrations                           |
+| `docker exec treviqo-m6-runtime node /app/tests/production-smoke.mjs`                                        | Passed as UID 1001 with local TLS S3/inference fixtures |
+| `git diff --check`                                                                                           | Passed                                                  |
 
 New suites: `tests/passport-rules.test.ts`, `tests/passport.integration.test.ts`, and `tests/e2e/passport.spec.ts`. They cover all category defaults, current portable/employer-linked assessments, missing/stale/proposed/rejected evidence, conflicting providers, masking, date unknowns/mismatches, source selection/ownership, reopen/re-close, optimistic conflicts, audit rollback, concurrent creates, and current finance-derived pension confirmation. The production smoke adds closed-entry derivation, pension status reuse, benefit assessment/audit and source-deletion invalidation.
 

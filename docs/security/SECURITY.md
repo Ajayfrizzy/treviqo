@@ -1,8 +1,19 @@
 # Treviqo Security Requirements
 
+## Current security boundaries
+
+Authentication is application-managed with NextAuth credentials, Argon2id password hashes, encrypted HttpOnly cookies and PostgreSQL session revocation/expiry. Registration requires first/last names, email and the shared password policy. Profile adds optional preferred name/country; it does not verify legal identity, email ownership or jurisdiction. Email verification, password recovery, MFA and social login are not implemented.
+
+Every protected API/service checks the user and relevant employment; same-user/different-employment evidence is not interchangeable. Original documents remain private, with bounded MIME/signature/size validation and short-lived authorized downloads. Reviewed fields are not provider-verified facts. Source text, credentials, object keys and signed URLs must not enter public diagnostic reports.
+
+Direct S3 DELETE currently receives 403 AccessDenied in production and the controlled private-test investigation. RumptyCloud support has been contacted; the precise policy/provider cause is unresolved. **Neither DELETE acknowledgment nor ambiguous HEAD 403 proves erasure.** Pending records and cleanup checkpoints are retained until absence is verifiable. See [current storage status](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status) and [scheduled account deletion](ACCOUNT_DELETION.md).
+
+The dated sections below preserve earlier implementation reviews. Current account deletion is scheduled, not immediate. Existing downloaded copies, provider backups/versions and inference retention need separate operational policies; local tests are not a penetration test or proof of provider privacy.
+
 Treviqo stores sensitive employment and benefit documents.
 
 ## Core rules
+
 - private storage
 - least privilege
 - ownership checks
@@ -12,12 +23,15 @@ Treviqo stores sensitive employment and benefit documents.
 - auditable sensitive actions
 
 ## Authentication
+
 Use production-appropriate auth.
 Require secure sessions and rate limiting where appropriate.
 Do not invent custom cryptography.
 
 ## Authorization
+
 Server-side checks for:
+
 - employments
 - documents
 - extractions
@@ -27,6 +41,7 @@ Server-side checks for:
 - reminders
 
 ## Object storage
+
 - private bucket
 - unpredictable keys
 - sanitized filenames
@@ -35,7 +50,9 @@ Server-side checks for:
 - ownership check before URL signing
 
 ## Sensitive data
+
 Do not intentionally store:
+
 - plaintext passwords (salted Argon2id hashes are permitted for application-managed authentication)
 - authentication PINs
 - bank login details
@@ -45,25 +62,31 @@ Do not intentionally store:
 Mask sensitive identifiers.
 
 ## Logging
+
 Do not log full document contents, passwords, tokens, or unnecessary identifiers.
 
 Audit examples:
+
 - upload/delete
 - extraction confirmed
 - employment closed
-- passport generated
-- export generated
+- benefit assessment saved/removed
+- account deletion scheduled/cancelled
 
 ## AI privacy
+
 Send only necessary content to inference.
 Record purpose/model/prompt version/timestamp.
 
 ## Deletion
-Delete object and derived extraction where feasible.
+
+Finalize document metadata and derived extraction cleanup only after object absence is verified. Authorization failures must remain pending for retry.
 Do not claim deletion if dependent copies remain.
 
 ## Rate limiting
+
 Consider for:
+
 - auth
 - uploads
 - AI extraction
@@ -71,11 +94,13 @@ Consider for:
 - expensive processing endpoints
 
 ## Secrets
+
 Use Rumpty environment/secret configuration.
 Never commit credentials.
 Provide `.env.example` with placeholders.
 
 ## Backups
+
 Use Rumpty snapshots/backups where available and document restore strategy.
 
 ## Foundation authentication security review
@@ -88,7 +113,7 @@ Application-managed credentials authentication runs with Treviqo on Rumpty Cloud
 - NextAuth handles credentials CSRF validation and encrypted HttpOnly/SameSite=Lax cookies. Production requires HTTPS and Secure cookies. POST auth routes also validate exact Origin. Registration requires same-origin JSON. Both routes enforce an actual streamed 4 KiB body limit. Configure ingress body/time/concurrency limits as well.
 - Redis is confirmed available on Rumpty (8.1). The existing global 300 requests/minute auth circuit-breaker remains. Registration and login additionally share 10 attempts per normalized email per 15 minutes, including successes; keys use standard HMAC-SHA256 so emails are not stored in Redis keys. Counters expire and failures are not cleared by successful authentication. Limiter outages fail closed. Add per-client ingress limits before public deployment; arbitrary forwarded headers are not trusted by the app. Account throttling can temporarily deny a targeted account access.
 - Encrypted JWT cookies reference PostgreSQL `AuthSession` rows with an absolute eight-hour lifetime. All protected-page/API session checks verify row existence, ownership, and expiry; client expiry alone never authorizes a request. Existing legacy cookies without a session ID are rejected. Logout removes the row and clears the browser cookie, invalidating copied cookies. If deletion fails, the auth route returns 503 without clearing cookies and the UI offers retry. A request already authorized before logout can finish.
-- `SESSION_SECRET` is environment-only and must be generated with sufficient entropy. Rotation invalidates every cookie. Session row IDs are not accepted as standalone bearer credentials or returned to browser JavaScript. Expired rows no longer authorize requests; schedule periodic database cleanup using `DELETE FROM "AuthSession" WHERE "expiresAt" < NOW()` through an operator-controlled maintenance job.
+- `SESSION_SECRET` is environment-only and must be generated with sufficient entropy. Rotation invalidates every cookie. Session row IDs are not accepted as standalone bearer credentials or returned to browser JavaScript. Expired rows no longer authorize requests; the current worker performs periodic cleanup through the `session_cleanup` job.
 - Protected layouts do not replace API authorization. Future record APIs must separately authenticate and check ownership. No document access or upload endpoints are introduced by this correction.
 - Email verification, password-reset email, recovery, MFA, password changes, session management UI, and social login are deferred. The entered email is an unverified login identifier and must not be treated as proof of mailbox ownership or used for automatic provider linking.
 - Configure auth/registration log redaction at ingress and monitoring: never capture request bodies, password hashes, or Cookie/Set-Cookie values. Errors in application code expose generic messages only.

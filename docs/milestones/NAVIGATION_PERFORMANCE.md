@@ -1,9 +1,11 @@
 # Navigation performance — 7 October 2026
 
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+
 ## Changes
 
 - `src/modules/auth/session.ts`: React request-scoped memoization shares the authenticated user lookup during a server render. Session expiry/revocation and ownership checks remain in place; there is no persistent authentication cache.
-- `src/app/(app)/page.tsx`: start employment and exit queries together; stream their sections independently behind Suspense while showing the heading and reminders link.
+- `src/app/(app)/home/page.tsx` (the Home page, originally at the app root): start employment and exit queries together; stream their sections independently behind Suspense while showing the heading and reminders link.
 - `src/app/(app)/documents/page.tsx`: fetch employments and documents concurrently, retaining filter ownership checks and the 404 response.
 - `src/components/navigation.tsx`: fully prefetch only the five primary tab destinations.
 - `src/components/extraction-review.tsx`: refresh the router after successful classification/review changes to invalidate prefetched content. Existing employment/exit/document save and deletion flows retain their own navigation/refresh ordering.
@@ -30,10 +32,10 @@ An early broad mutation-refresh approach interfered with document deletion navig
 
 One local standalone production run measured click-to-heading time, including Playwright action/assertion overhead:
 
-| Viewport | Exit | Passport | Documents | Profile | Home |
-| --- | --- | --- | --- | --- | --- |
-| 375px | 80 ms | 58 ms | 61 ms | 50 ms | 48 ms |
-| 1440px | 51 ms | 48 ms | 49 ms | 53 ms | 62 ms |
+| Viewport | Exit  | Passport | Documents | Profile | Home  |
+| -------- | ----- | -------- | --------- | ------- | ----- |
+| 375px    | 80 ms | 58 ms    | 61 ms     | 50 ms   | 48 ms |
+| 1440px   | 51 ms | 48 ms    | 49 ms     | 53 ms   | 62 ms |
 
 These are warm-prefetch local measurements, not a before/after speedup claim or a Rumpty latency benchmark. Full prefetching trades background requests for faster tab changes. There is no live cross-device synchronization; normal router-cache freshness still applies to changes made elsewhere.
 

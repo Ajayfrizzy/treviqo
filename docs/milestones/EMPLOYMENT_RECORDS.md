@@ -1,5 +1,7 @@
 # Milestone 1 — Employment Records & Mobile Shell
 
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+
 Implemented October 3, 2026. Workers can create, view, edit, and organize their own employment records. No later product workflows were introduced. Live Rumpty deployment remains pending configuration; nothing was committed or pushed.
 
 ## Behavior
@@ -23,7 +25,7 @@ Shared Zod validation is used by the browser and server. Names are trimmed and b
 - `prisma/schema.prisma` and `prisma/migrations/20261003020000_employment_records/migration.sql`.
 - New `src/modules/employments/validation.ts`, `service.ts`, `http.ts`, `page-user.ts`.
 - New `src/app/api/employments/route.ts` and `[id]/route.ts`.
-- Functional `src/app/(app)/page.tsx`; new employment new/detail/edit/not-found pages and `(app)/loading.tsx`, `(app)/error.tsx`.
+- Functional `src/app/(app)/home/page.tsx` (the Home page, originally at the app root); new employment new/detail/edit/not-found pages and `(app)/loading.tsx`, `(app)/error.tsx`.
 - New `src/components/employment-card.tsx`, `employment-form.tsx`; Home active-state handling in `navigation.tsx`; employment-specific additions in `src/app/globals.css`.
 - New `tests/employment.test.ts`, `employment-http.test.ts`, `employment.integration.test.ts`, `tests/e2e/employments.spec.ts`.
 - README and architecture, domain, security, UI, testing, and milestone documentation, plus this implementation record.
@@ -34,18 +36,18 @@ No dependencies, environment variables, or infrastructure providers were added. 
 
 All checks passed without skipped tests:
 
-| Command | Result |
-| --- | --- |
-| `npm run db:generate` | Prisma client generated |
-| `npm run lint` | Passed |
-| `npm run typecheck` | Passed |
-| `npm test` | 43 tests passed |
-| `npm run build` | Production compilation passed |
-| `npm run db:deploy` | All three committed migrations applied to disposable PostgreSQL 17 |
-| `npm run test:integration` | 12 tests passed, including existing authentication/Redis tests |
-| `npm run test:e2e` | 20 tests passed, including existing foundation checks |
-| `npx prisma migrate diff --from-url postgresql://treviqo_test@127.0.0.1:55432/treviqo_test --to-schema-datamodel prisma/schema.prisma --exit-code` | No difference detected |
-| `git diff --check` | Passed; repository implementation remains untracked as before |
+| Command                                                                                                                                            | Result                                                             |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| `npm run db:generate`                                                                                                                              | Prisma client generated                                            |
+| `npm run lint`                                                                                                                                     | Passed                                                             |
+| `npm run typecheck`                                                                                                                                | Passed                                                             |
+| `npm test`                                                                                                                                         | 43 tests passed                                                    |
+| `npm run build`                                                                                                                                    | Production compilation passed                                      |
+| `npm run db:deploy`                                                                                                                                | All three committed migrations applied to disposable PostgreSQL 17 |
+| `npm run test:integration`                                                                                                                         | 12 tests passed, including existing authentication/Redis tests     |
+| `npm run test:e2e`                                                                                                                                 | 20 tests passed, including existing foundation checks              |
+| `npx prisma migrate diff --from-url postgresql://treviqo_test@127.0.0.1:55432/treviqo_test --to-schema-datamodel prisma/schema.prisma --exit-code` | No difference detected                                             |
+| `git diff --check`                                                                                                                                 | Passed; repository implementation remains untracked as before      |
 
 Migration/integration/browser commands used explicitly exported `DATABASE_URL=postgresql://treviqo_test@127.0.0.1:55432/treviqo_test` and `REDIS_URL=redis://127.0.0.1:56379`. These refer to disposable local PostgreSQL/Redis containers with synthetic data, not Rumpty or production credentials. Validation containers were removed afterward.
 
