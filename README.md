@@ -10,6 +10,14 @@ Built for the **Devcenter Hacktober 2026 × RumptyCloud** hackathon, October 1�
 
 [Product overview](docs/product/PRODUCT.md) · [Reproducible demo](docs/product/DEMO.md) · [Documentation index](docs/README.md)
 
+## For hackathon judges
+
+| Judging criterion              | What to inspect                                                                                                                                                                                                                                                                       |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Platform Deployment            | Open the RumptyCloud app above and follow the [six-minute walkthrough](docs/product/DEMO.md#six-minute-live-walkthrough). Demonstrate working screens and evidence review; hosting alone does not prove every integration works.                                                      |
+| Code Quality & Tech Docs       | Inspect the [module boundaries](docs/architecture/ARCHITECTURE.md#current-implementation), [authorization rules](docs/security/SECURITY.md#current-security-boundaries), [test instructions](docs/testing/TESTING.md) and [deployment runbook](docs/deployment/RUMPTY_DEPLOYMENT.md). |
+| Innovation & Practical Utility | Follow one worker across employers: original evidence, explicit review, exit discrepancies, settlement/pension checks and unresolved actions stay connected through the Benefit Passport. See the [product boundaries](docs/product/PRODUCT.md).                                      |
+
 ## The product journey
 
 1. **Build your employment history.** Create multiple roles, record dates and employment status, and keep each employer's evidence separate.

@@ -1,10 +1,46 @@
-# Judge and developer demo
+# Judge-facing demo and verification guide
 
-Use [the live application](https://treviqo.rumptycloud.app) or a configured local instance from the [README](../../README.md#local-development). Allow approximately 15–20 minutes for setup and review; inference latency varies. A prepared account makes the presentation shorter, but no shared demo login or automatically seeded account is provided.
+Use [the live application](https://treviqo.rumptycloud.app) or a configured local instance from the [README](../../README.md#local-development). Target a **six-minute presentation** using a prepared fictional account. Allow 15–20 minutes or more for rehearsal/setup; inference latency varies. No shared demo login or automatically seeded account is provided. The steps below describe expected behavior, not a claim that this walkthrough was rerun against the live deployment.
 
 Use fictional data only. This guide creates records through the UI, never through database scripts. It does not delete records, change provider permissions or require a production diagnostic probe. Document/account deletion is deliberately outside the demo while direct S3 deletion remains blocked; see [operational status](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
 
-## Prepare the evidence
+## Six-minute live walkthrough
+
+Prepare the records, reviewed fields and due reminders using the detailed steps below before presenting. Leave one supported field available to review live. Show the real deployed origin, keep credentials and signed download URLs off screen, and use only fictional evidence. If an interaction fails, show its fallback or explain the limitation; do not narrate an expected result as observed success.
+
+Opening: **“Employment changes, but the worker still needs the evidence. Treviqo connects records, reviewed facts and follow-ups across employers.”**
+
+| Time      | Show and do                                                                                                                                                 | What the judge can verify                                                                                                                                                          |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0:00–0:40 | Open Home on RumptyCloud; show Cedar, Harbour and Meadow.                                                                                                   | **Platform Deployment:** the functional application and one worker's separate employment histories.                                                                                |
+| 0:40–1:40 | Open a Harbour document, its original evidence and review screen; confirm/correct one supported field. Use a prepared extraction if live inference is slow. | Rumpty AI proposes facts; the worker reviews them. Manual entry is a fallback, not an AI result.                                                                                   |
+| 1:40–2:40 | Show the Exit checklist and a source-linked unresolved action. If the optional redundancy evidence is prepared, show its warning and explicit correction.   | **Practical Utility:** discrepancies lead back to evidence; the app does not decide legal entitlement or silently change the exit type.                                            |
+| 2:40–3:40 | Show the selected settlement amounts/periods and pension contribution, then distinguish detected from worker-confirmed.                                     | Matching records are useful checks, not proof of payment or guaranteed pension reconciliation.                                                                                     |
+| 3:40–4:40 | Open Passport with Cedar and Harbour closed; show that Meadow remains active and benefits may remain Unknown.                                               | Continuity across completed jobs without mixing employers' evidence or automatically confirming benefits.                                                                          |
+| 4:40–5:30 | Open a due reminder, follow its source link and snooze one prompt.                                                                                          | Unresolved work remains actionable after employment ends.                                                                                                                          |
+| 5:30–6:00 | Open the [architecture](../architecture/ARCHITECTURE.md#current-implementation) and [testing guide](../testing/TESTING.md).                                 | **Code Quality & Tech Docs:** module boundaries, ownership checks, deterministic rules and reproducible validation commands. Do not imply tests were run during this presentation. |
+
+Close: **“The outcome is a personal continuity record with evidence and next actions—not an employer verdict or a benefit-transfer service.”** Mention the unresolved ordinary S3 DELETE limitation if discussing cleanup; verified manual-removal recovery does not make ordinary deletion work.
+
+## Fixture choice and the Zara journey
+
+The requested fictional **Zara Okonkwo → Harborpoint Logistics → Briarwell Consumer Services → Solaris Retail Technologies** journey has no matching fixture pack in this checkout. Its prior operator testing is not independently reproducible from the supplied repository files. Do not relabel the Harbour PDFs as those employers or claim this guide reproduces that prior test.
+
+For now, use Cedar / Harbour / Meadow below. To substitute Zara later, supply a clearly fictional, reviewable pack containing:
+
+- The three employment records' exact roles, dates and statuses, with no real personal identifiers.
+- Contracts/payslips for the evidenced employers, with consistent names, currencies and pay periods.
+- An explicit redundancy notice for the intended employer, plus the deliberately conflicting saved exit selection and the expected correction.
+- Settlement and pension statements with supported line items, coverage, contribution month, separate posting date and employee/employer amounts.
+- Benefit or exit evidence for each completed employment whose benefit assessment is demonstrated, plus an unresolved action/date that makes a reminder due.
+
+Include original PDFs and a source-text/expected-review manifest. Check employer association and rehearse the complete journey before claiming it works. These are missing inputs, not new fixture paths or delivered functionality.
+
+## Preparation and optional deeper verification
+
+The numbered steps are the reproducible setup and longer walkthrough. Complete them before the timed presentation; do not wait for multiple AI calls or worker sweeps on stage. The optional redundancy extension below requires preparing its stated fictional document first.
+
+### Prepare the evidence
 
 Use the existing synthetic PDFs below; their adjacent JSON files contain source text and expected fixture values, not live AI predictions. Download repository files to the device used for uploads.
 
@@ -62,6 +98,33 @@ Open Exit and start a case for Harbour:
 Expected: nine checks mix satisfied and unresolved states. Notice dates should appear consistent with the selected wording. A missing record or pending reimbursement should prompt clarification/action, not an accusation or a calculated debt. Creating the case does not close the employment.
 
 Show that evidence selectors contain only this employment's records. Documents saved under another employment are not eligible, even for the same signed-in user. Exit-type discrepancy warnings, where explicit document evidence conflicts, require review; they do not automatically change the selected exit type.
+
+### Optional redundancy discrepancy demonstration
+
+The existing [termination fixture](../../tests/fixtures/intelligence/termination_letter.json) says “role discontinued.” That wording and a Termination letter category alone **do not establish redundancy**. Do not expect that PDF to trigger the warning. The [browser scenario](../../tests/e2e/passport.spec.ts) exercises an explicit redundancy source separately; its injected text and mock marker are test machinery, not a judge-ready PDF or evidence of live AI accuracy.
+
+To demonstrate the behavior through the UI, first export the following clearly fictional text as a PDF using a local document editor. This is an optional operator-prepared artifact, not a bundled fixture. Upload it only under **Cedar Studio Demo**, as a Termination letter:
+
+```text
+SYNTHETIC DEMO ONLY — NOT A REAL EMPLOYMENT RECORD
+Cedar Studio Demo
+Notice of Role Redundancy
+Letter date: 31 August 2025
+Reason: Role redundancy following departmental restructuring
+Employment end date: 30 September 2025
+```
+
+Use the Cedar exit case from step 6, whose initially saved Contract completion is deliberately inconsistent for this demonstration. Extract and review the stated reason (or enter that exact reason manually from the original). Open Cedar's Exit checklist and Passport entry: **Exit type needs review** should link to the source. An evidence-backed proposal can be shown as an **unconfirmed extracted detail**; it must not be presented as a confirmed fact. Review the original, then explicitly edit the exit case to Redundancy and save. The warning should disappear; the saved type remains worker-entered. Harbour's entry must not acquire Cedar's warning.
+
+Do not infer redundancy from “role discontinued,” modify the document's wording during review, or claim a legal conclusion. If this extra PDF has not been prepared/rehearsed, omit the live redundancy segment and identify it as an optional verification, not an observed result.
+
+For developers, the existing focused browser scenario can be run on disposable test services after following the [testing setup](../testing/TESTING.md):
+
+```sh
+npm run test:e2e -- tests/e2e/passport.spec.ts -g "exit discrepancy stays informational"
+```
+
+This uses local fixtures and mutates test data. It is not a production probe and was not run as part of this documentation refinement.
 
 ## 4. Review settlement and pension
 

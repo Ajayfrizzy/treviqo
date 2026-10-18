@@ -145,4 +145,4 @@ Final result: **214 unit, 81 integration and 49 browser tests passed**, together
 
 ## Deployment blocker follow-up
 
-See [private-network execution, S3/AI diagnosis and manual backup fallback](RUMPTY_BLOCKERS.md) for current results and operator steps. Internal PostgreSQL/Redis DNS is expected to require a Rumpty-hosted workload; no public access is needed.
+See [private-network execution, S3/AI diagnosis and manual backup fallback](RUMPTY_BLOCKERS.md) for historical results and private-network context; use the [current deployment guidance](RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation) for present status. Internal PostgreSQL/Redis DNS is expected to require a Rumpty-hosted workload; no public access is needed.
