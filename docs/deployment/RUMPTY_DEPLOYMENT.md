@@ -327,3 +327,12 @@ without storage; production worker deployment preflight therefore requires S3.
 Run `npm run deployment:check -- --worker` with those variables to validate config,
 and add `--services --runtime` to check database/Redis and job health. Storage
 permissions/versioning still require the existing private-bucket acceptance checks.
+
+## Direct S3 DELETE authorization investigation
+
+For an operation-by-operation audit and an explicitly invoked disposable-object
+probe, see [S3 DELETE authorization investigation](S3_DELETE_AUTHORIZATION_INVESTIGATION.md).
+The probe uses separate confirmed `PROBE_*` configuration and does not run in the
+worker loop. Test-bucket success does not establish production-bucket permissions;
+a production disposable probe requires separate authorization. Never use a 403 as
+proof of object absence.

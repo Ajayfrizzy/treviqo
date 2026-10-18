@@ -13,6 +13,10 @@ let putFailure: "reset" | "timeout" | undefined;
 let releaseRead: (() => void) | undefined;
 let readStarted: (() => void) | undefined;
 const requests: string[] = [];
+const deleteWire: {
+  url: string;
+  headers: import("node:http").IncomingHttpHeaders;
+}[] = [];
 function reject(response: ServerResponse) {
   response.writeHead(400, { "content-type": "application/xml" });
   response.end(
@@ -55,6 +59,7 @@ const server = createServer(async (request, response) => {
     return;
   }
   if (request.method === "DELETE") {
+    deleteWire.push({ url: request.url!, headers: request.headers });
     if (denyDelete) {
       response.writeHead(403).end();
       return;
@@ -79,6 +84,7 @@ let endpoint: string;
 beforeEach(async () => {
   objects.clear();
   requests.length = 0;
+  deleteWire.length = 0;
   rejectAcl = false;
   denyDelete = false;
   missingHeadStatus = 404;
@@ -223,4 +229,35 @@ it("keeps real SDK missing-object 403 ambiguous and retries only after verified 
   });
   missingHeadStatus = 404;
   await storage.purge("synthetic");
+});
+
+it("sends an ordinary SigV4 DELETE without version, conditional, ACL or retention headers", async () => {
+  await getObjectStorage().put(
+    "synthetic",
+    Buffer.from("fixture"),
+    "text/plain",
+  );
+  await getObjectStorage().purge("synthetic");
+  expect(deleteWire).toHaveLength(1);
+  const request = deleteWire[0]!;
+  const url = new URL(request.url, endpoint);
+  expect(url.pathname).toBe("/private/synthetic");
+  expect([...url.searchParams.keys()].filter((key) => key !== "x-id")).toEqual(
+    [],
+  );
+  expect(request.headers.authorization).toMatch(
+    /^AWS4-HMAC-SHA256 Credential=fixture\/\d{8}\/test\/s3\/aws4_request,/,
+  );
+  for (const name of [
+    "if-match",
+    "if-none-match",
+    "x-amz-acl",
+    "x-amz-bypass-governance-retention",
+    "x-amz-mfa",
+    "x-amz-expected-bucket-owner",
+    "x-amz-security-token",
+  ]) {
+    expect(request.headers[name]).toBeUndefined();
+  }
+  expect(Number(request.headers["content-length"] ?? 0)).toBe(0);
 });
