@@ -46,3 +46,8 @@ it("never emits arbitrary names, messages, metadata or connection values", () =>
     log.mockRestore();
   }
 });
+it("reports a contradictory NotFound/403 as authorization failure", () => {
+  expect(
+    storageDiagnostic({ name: "NotFound", $metadata: { httpStatusCode: 403 } }),
+  ).toEqual({ category: "authorization", http: 403, code: "NotFound" });
+});

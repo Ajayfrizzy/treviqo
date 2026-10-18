@@ -322,3 +322,72 @@ it.each(["unversioned", "versioned"])(
     });
   },
 );
+
+it.each(["unversioned", "versioned"])(
+  "rejects contradictory missing-object names with denial/error HTTP status (%s)",
+  async (versioning) => {
+    configure();
+    vi.stubEnv("S3_VERSIONING", versioning);
+    const { HeadObjectCommand } = await import("@aws-sdk/client-s3");
+    for (const status of [403, 500]) {
+      const failure = Object.assign(new Error("private provider response"), {
+        name: "NotFound",
+        $metadata: { httpStatusCode: status },
+      });
+      mocks.send.mockImplementation(async (command) => {
+        if (command instanceof HeadObjectCommand) throw failure;
+        return { IsTruncated: false };
+      });
+      await expect(getObjectStorage().purge("private-key")).rejects.toBe(
+        failure,
+      );
+    }
+  },
+);
+
+it.each(["delete", "verification"])(
+  "distinguishes denied %s and recovers after manual removal without another DELETE",
+  async (phase) => {
+    configure();
+    const { DeleteObjectCommand } = await import("@aws-sdk/client-s3");
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    const denied = Object.assign(new Error("private provider response"), {
+      name: "AccessDenied",
+      $metadata: { httpStatusCode: 403 },
+    });
+    let deleted = false;
+    mocks.send.mockImplementation(async (command) => {
+      if (command instanceof DeleteObjectCommand) {
+        if (phase === "delete") throw denied;
+        deleted = true;
+        return {};
+      }
+      if (deleted) throw denied;
+      return {};
+    });
+    try {
+      await expect(getObjectStorage().purge("private-key")).rejects.toBe(
+        denied,
+      );
+      expect(log).toHaveBeenCalledWith(
+        `storage_failed operation=${phase === "delete" ? "delete_object" : "verify_object_absence"} category=authorization http=403 code=AccessDenied`,
+      );
+      expect(JSON.stringify(log.mock.calls)).not.toMatch(
+        /private-key|private provider/,
+      );
+      mocks.send.mockReset().mockRejectedValue(
+        Object.assign(new Error("gone"), {
+          name: "NotFound",
+          $metadata: { httpStatusCode: 404 },
+        }),
+      );
+      await getObjectStorage().purge("private-key");
+      expect(mocks.send).toHaveBeenCalledTimes(1);
+      expect(mocks.send.mock.calls[0]?.[0]).not.toBeInstanceOf(
+        DeleteObjectCommand,
+      );
+    } finally {
+      log.mockRestore();
+    }
+  },
+);

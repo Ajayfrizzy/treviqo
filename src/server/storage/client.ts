@@ -9,7 +9,11 @@ import {
   S3Client,
 } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { diagnoseStorage } from "./diagnostics";
+import {
+  diagnoseStorage,
+  isObjectAbsent,
+  logStorageFailure,
+} from "./diagnostics";
 import { getEnv } from "@/server/config/env";
 export interface PrivateObjectStorage {
   checkConnection(): Promise<void>;
@@ -129,12 +133,6 @@ export function getObjectStorage(): PrivateObjectStorage {
       // enumeration is opt-in for a deployment explicitly configured as versioned.
       if (env.S3_VERSIONING === "unversioned") {
         const abortSignal = AbortSignal.timeout(10000);
-        const absent = (error: unknown) =>
-          error instanceof Error &&
-          error.name !== "NoSuchBucket" &&
-          (["NoSuchKey", "NotFound"].includes(error.name) ||
-            (error as { $metadata?: { httpStatusCode?: number } }).$metadata
-              ?.httpStatusCode === 404);
         const exists = async () => {
           try {
             const head = await client.send(
@@ -142,12 +140,16 @@ export function getObjectStorage(): PrivateObjectStorage {
               { abortSignal },
             );
             if (head.VersionId && head.VersionId !== "null")
-              throw new Error(
-                "Versioned object requires versioned cleanup configuration",
+              throw Object.assign(
+                new Error(
+                  "Versioned object requires versioned cleanup configuration",
+                ),
+                { name: "VersioningMismatch" },
               );
             return true;
           } catch (error) {
-            if (absent(error)) return false;
+            if (isObjectAbsent(error)) return false;
+            logStorageFailure("verify_object_absence", error);
             throw error;
           }
         };
@@ -158,9 +160,15 @@ export function getObjectStorage(): PrivateObjectStorage {
               abortSignal,
             });
           } catch (error) {
-            if (!absent(error)) throw error;
+            if (!isObjectAbsent(error)) {
+              logStorageFailure("delete_object", error);
+              throw error;
+            }
           }
-          if (await exists()) throw new Error("Object remains accessible");
+          if (await exists())
+            throw Object.assign(new Error("Object remains accessible"), {
+              name: "ObjectStillPresent",
+            });
           return;
         } finally {
           client.destroy();
@@ -179,11 +187,16 @@ export function getObjectStorage(): PrivateObjectStorage {
         } catch (error) {
           // A concurrent cleanup or a retry may find this version already gone.
           // Still require the final inventory and HEAD checks; never swallow denial.
-          if (!(
+          const status = (error as { $metadata?: { httpStatusCode?: number } })
+            ?.$metadata?.httpStatusCode;
+          const missingVersion =
             error instanceof Error &&
-            ["NoSuchKey", "NoSuchVersion"].includes(error.name)
-          ))
+            error.name === "NoSuchVersion" &&
+            (status === undefined || status === 404);
+          if (!isObjectAbsent(error) && !missingVersion) {
+            logStorageFailure("delete_object", error);
             throw error;
+          }
         }
       };
       try {
@@ -242,18 +255,13 @@ export function getObjectStorage(): PrivateObjectStorage {
               abortSignal,
             });
           } catch (error) {
-            if (
-              error instanceof Error &&
-              error.name !== "NoSuchBucket" &&
-              ((error as { $metadata?: { httpStatusCode?: number } }).$metadata
-                ?.httpStatusCode === 404 ||
-                error.name === "NoSuchKey" ||
-                error.name === "NotFound")
-            )
-              return;
+            if (isObjectAbsent(error)) return;
+            logStorageFailure("verify_object_absence", error);
             throw error;
           }
-          throw new Error("Object remains accessible");
+          throw Object.assign(new Error("Object remains accessible"), {
+            name: "ObjectStillPresent",
+          });
         }
         throw new Error("Object version cleanup incomplete");
       } finally {

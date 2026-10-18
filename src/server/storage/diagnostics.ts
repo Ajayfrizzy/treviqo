@@ -5,6 +5,7 @@ type StorageOperation =
   | "get_object"
   | "delete_object"
   | "purge_object"
+  | "verify_object_absence"
   | "sign_download";
 const categories = {
   AbortError: "timeout",
@@ -30,6 +31,8 @@ const categories = {
   InvalidRequest: "incompatible_request",
   NotImplemented: "incompatible_request",
   AuthorizationHeaderMalformed: "incompatible_request",
+  ObjectStillPresent: "object_still_present",
+  VersioningMismatch: "configuration",
   NoSuchBucket: "not_found",
   NoSuchKey: "not_found",
   NotFound: "not_found",
@@ -66,15 +69,18 @@ export function storageDiagnostic(error: unknown) {
     }
     current = record(current.cause);
   }
-  const category = code
-    ? categories[code]
-    : http === 401
-      ? "authentication"
-      : http === 403
-        ? "authorization"
-        : typeof http === "number" && http >= 500
-          ? "provider"
-          : "unknown";
+  const category =
+    http === 403 && (!code || categories[code] === "not_found")
+      ? "authorization"
+      : code
+        ? categories[code]
+        : http === 401
+          ? "authentication"
+          : http === 403
+            ? "authorization"
+            : typeof http === "number" && http >= 500
+              ? "provider"
+              : "unknown";
   return { category, http, code: code ?? "unknown" };
 }
 export function logStorageFailure(operation: StorageOperation, error: unknown) {
@@ -95,4 +101,19 @@ export function diagnoseStorage<Args extends unknown[], Result>(
       throw error;
     }
   };
+}
+
+/** A denial or conflicting HTTP response must never become proof of absence. */
+export function isObjectAbsent(error: unknown): boolean {
+  const value = record(error);
+  const status = record(value.$metadata).httpStatusCode;
+  const code = value.name;
+  if (code === "NoSuchBucket") return false;
+  if (
+    storageDiagnostic(error).category === "authorization" ||
+    storageDiagnostic(error).category === "authentication"
+  )
+    return false;
+  if (status !== undefined) return status === 404;
+  return code === "NoSuchKey" || code === "NotFound";
 }

@@ -6,6 +6,8 @@ import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 const objects = new Map<string, Buffer>();
 let rejectAcl = false;
+let denyDelete = false;
+let missingHeadStatus = 404;
 let holdRead = false;
 let putFailure: "reset" | "timeout" | undefined;
 let releaseRead: (() => void) | undefined;
@@ -25,6 +27,10 @@ const server = createServer(async (request, response) => {
     return;
   }
   if (request.method === "HEAD") {
+    response.statusCode =
+      key === "/private/" || key === "/private" || objects.has(key)
+        ? 200
+        : missingHeadStatus;
     response.end();
     return;
   }
@@ -49,6 +55,10 @@ const server = createServer(async (request, response) => {
     return;
   }
   if (request.method === "DELETE") {
+    if (denyDelete) {
+      response.writeHead(403).end();
+      return;
+    }
     objects.delete(key);
     response.writeHead(204).end();
     return;
@@ -70,6 +80,8 @@ beforeEach(async () => {
   objects.clear();
   requests.length = 0;
   rejectAcl = false;
+  denyDelete = false;
+  missingHeadStatus = 404;
   holdRead = false;
   putFailure = undefined;
   vi.spyOn(console, "error").mockImplementation(() => {});
@@ -185,4 +197,30 @@ it("aborts a stalled PUT and reports only a safe timeout category", async () => 
   expect(console.error).toHaveBeenCalledWith(
     "storage_failed operation=put_object category=timeout http=unknown code=AbortError",
   );
+});
+
+it("verifies real SDK deletion and recovers manual absence without DELETE permission", async () => {
+  const storage = getObjectStorage();
+  await storage.put("synthetic", Buffer.from("fixture"), "application/pdf");
+  await storage.purge("synthetic");
+  expect(requests.slice(-3)).toEqual(["HEAD", "DELETE", "HEAD"]);
+  denyDelete = true;
+  requests.length = 0;
+  await storage.purge("synthetic");
+  expect(requests).toEqual(["HEAD"]);
+});
+it("keeps real SDK missing-object 403 ambiguous and retries only after verified 404", async () => {
+  const storage = getObjectStorage();
+  await storage.put("synthetic", Buffer.from("fixture"), "application/pdf");
+  denyDelete = true;
+  await expect(storage.purge("synthetic")).rejects.toMatchObject({
+    $metadata: { httpStatusCode: 403 },
+  });
+  objects.clear();
+  missingHeadStatus = 403;
+  await expect(storage.purge("synthetic")).rejects.toMatchObject({
+    $metadata: { httpStatusCode: 403 },
+  });
+  missingHeadStatus = 404;
+  await storage.purge("synthetic");
 });
