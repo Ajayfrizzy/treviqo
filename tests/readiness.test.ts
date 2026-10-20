@@ -63,6 +63,7 @@ it("bounds hung infrastructure checks", async () => {
   await vi.advanceTimersByTimeAsync(3100);
   expect((await response).status).toBe(503);
   expect(vi.mocked(console.error).mock.calls).toEqual([
+    ["runtime_failed operation=readiness_redis category=deadline"],
     ["readiness_failed redis"],
   ]);
   vi.useRealTimers();
@@ -97,6 +98,7 @@ it.each([
   expect(await response.text()).toBe('{"status":"unavailable"}');
   expect(response.headers.get("cache-control")).toBe("no-store");
   expect(vi.mocked(console.error).mock.calls).toEqual([
+    [`runtime_failed operation=readiness_${label} category=unknown`],
     [`readiness_failed ${label}`],
   ]);
 });
@@ -107,6 +109,8 @@ it("logs multiple failures once in stable order, without internal errors", async
   expect(response.status).toBe(503);
   expect(await response.json()).toEqual({ status: "unavailable" });
   expect(vi.mocked(console.error).mock.calls).toEqual([
+    ["runtime_failed operation=readiness_storage category=unknown"],
+    ["runtime_failed operation=readiness_worker category=worker_unhealthy"],
     ["readiness_failed storage,worker"],
   ]);
 });

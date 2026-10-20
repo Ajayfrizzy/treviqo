@@ -1,4 +1,8 @@
 import "server-only";
+import {
+  logRuntimeFailure,
+  type RuntimeOperation,
+} from "@/server/diagnostics/runtime";
 import { getEnv } from "@/server/config/env";
 import { workerHealthy } from "@/server/jobs/health";
 import { getDb } from "@/server/db/client";
@@ -11,7 +15,11 @@ async function bounded(check: () => Promise<unknown>) {
     await Promise.race([
       Promise.resolve().then(check),
       new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new Error("timeout")), 3000);
+        timer = setTimeout(
+          () =>
+            reject(Object.assign(new Error(), { name: "ReadinessTimeout" })),
+          3000,
+        );
       }),
     ]);
   } finally {
@@ -38,7 +46,7 @@ export async function isReady() {
           (env.NODE_ENV === "production" ? "true" : "false")) === "true" &&
         !(await workerHealthy())
       )
-        throw new Error("Worker unavailable");
+        throw Object.assign(new Error(), { name: "WorkerUnavailable" });
     },
     auth: async () => {
       if (!authConfigured()) throw new Error("Auth unavailable");
@@ -48,6 +56,13 @@ export async function isReady() {
   const results = await Promise.allSettled(
     entries.map(([, check]) => bounded(check)),
   );
+  results.forEach((result, index) => {
+    if (result.status === "rejected")
+      logRuntimeFailure(
+        `readiness_${entries[index]![0]}` as RuntimeOperation,
+        result.reason,
+      );
+  });
   const failed = entries
     .filter((_, index) => results[index]?.status !== "fulfilled")
     .map(([label]) => label);

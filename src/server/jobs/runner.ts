@@ -1,4 +1,5 @@
 import "server-only";
+import { logRuntimeFailure } from "@/server/diagnostics/runtime";
 import { randomUUID } from "node:crypto";
 import type { PrismaClient } from "@prisma/client";
 import type Redis from "ioredis";
@@ -70,85 +71,97 @@ export function jobRunner(
   return {
     async tick() {
       const now = clock();
-      await redis.ping(); // No dependency failure may be mistaken for successful background work.
-      await db.backgroundJob.createMany({
-        data: jobIds.map((id) => ({ id, dueAt: now })),
-        skipDuplicates: true,
-      });
-      await db.backgroundJob.updateMany({
-        where: { state: "running", leaseUntil: { lte: now } },
-        data: {
-          state: "pending",
-          leaseToken: null,
-          leaseUntil: null,
-          dueAt: now,
-          errorCode: "lease_expired",
-          attempts: { increment: 1 },
-        },
-      });
-      const due = await db.backgroundJob.findMany({
-        where: {
-          id: { in: [...jobIds] },
-          state: "pending",
-          dueAt: { lte: now },
-        },
-        select: { id: true, dueAt: true },
-      });
-      // PostgreSQL is the durable outbox. Loss of Redis contents is repaired each tick.
-      for (const job of due)
-        await redis.zadd(QUEUE, job.dueAt.getTime(), job.id);
-      const id = await popDue(redis, now.getTime());
-      if (id && validJob(id)) {
-        const token = randomUUID();
-        const claim = await db.backgroundJob.updateMany({
-          where: { id, state: "pending", dueAt: { lte: now } },
+      let phase: "worker_database" | "worker_redis" = "worker_redis";
+      try {
+        await redis.ping(); // No dependency failure may be mistaken for successful background work.
+        phase = "worker_database";
+        await db.backgroundJob.createMany({
+          data: jobIds.map((id) => ({ id, dueAt: now })),
+          skipDuplicates: true,
+        });
+        await db.backgroundJob.updateMany({
+          where: { state: "running", leaseUntil: { lte: now } },
           data: {
-            state: "running",
-            leaseToken: token,
-            leaseUntil: new Date(now.getTime() + 120000),
+            state: "pending",
+            leaseToken: null,
+            leaseUntil: null,
+            dueAt: now,
+            errorCode: "lease_expired",
+            attempts: { increment: 1 },
           },
         });
-        if (claim.count) {
-          const job = await db.backgroundJob.findUniqueOrThrow({
-            where: { id },
+        const due = await db.backgroundJob.findMany({
+          where: {
+            id: { in: [...jobIds] },
+            state: "pending",
+            dueAt: { lte: now },
+          },
+          select: { id: true, dueAt: true },
+        });
+        // PostgreSQL is the durable outbox. Loss of Redis contents is repaired each tick.
+        phase = "worker_redis";
+        for (const job of due)
+          await redis.zadd(QUEUE, job.dueAt.getTime(), job.id);
+        const id = await popDue(redis, now.getTime());
+        if (id && validJob(id)) {
+          phase = "worker_database";
+          const token = randomUUID();
+          const claim = await db.backgroundJob.updateMany({
+            where: { id, state: "pending", dueAt: { lte: now } },
+            data: {
+              state: "running",
+              leaseToken: token,
+              leaseUntil: new Date(now.getTime() + 120000),
+            },
           });
-          try {
-            const result = await perform(id, job.cursor);
-            const end = clock();
-            await db.backgroundJob.updateMany({
-              where: {
-                id,
-                leaseToken: token,
-                state: "running",
-                leaseUntil: { gt: end },
-              },
-              data: {
-                state: "pending",
-                leaseToken: null,
-                leaseUntil: null,
-                cursor: result.cursor,
-                dueAt: new Date(end.getTime() + (result.more ? 0 : 60000)),
-                attempts: 0,
-                errorCode: null,
-                ...(!result.more ? { lastSucceededAt: end } : {}),
-              },
+          if (claim.count) {
+            const job = await db.backgroundJob.findUniqueOrThrow({
+              where: { id },
             });
-          } catch {
-            await db.backgroundJob.updateMany({
-              where: { id, leaseToken: token, state: "running" },
-              data: {
-                state: "pending",
-                leaseToken: null,
-                leaseUntil: null,
-                dueAt: new Date(clock().getTime() + retryDelay(job.attempts)),
-                attempts: { increment: 1 },
-                errorCode: "job_failed",
-              },
-            });
+            try {
+              const result = await perform(id, job.cursor);
+              const end = clock();
+              await db.backgroundJob.updateMany({
+                where: {
+                  id,
+                  leaseToken: token,
+                  state: "running",
+                  leaseUntil: { gt: end },
+                },
+                data: {
+                  state: "pending",
+                  leaseToken: null,
+                  leaseUntil: null,
+                  cursor: result.cursor,
+                  dueAt: new Date(end.getTime() + (result.more ? 0 : 60000)),
+                  attempts: 0,
+                  errorCode: null,
+                  ...(!result.more ? { lastSucceededAt: end } : {}),
+                },
+              });
+            } catch (error) {
+              logRuntimeFailure("worker_job", error);
+              console.error(`worker_job_failed job=${id}`);
+              await db.backgroundJob.updateMany({
+                where: { id, leaseToken: token, state: "running" },
+                data: {
+                  state: "pending",
+                  leaseToken: null,
+                  leaseUntil: null,
+                  dueAt: new Date(clock().getTime() + retryDelay(job.attempts)),
+                  attempts: { increment: 1 },
+                  errorCode: "job_failed",
+                },
+              });
+            }
           }
         }
+        phase = "worker_redis";
+        await redis.set(HEARTBEAT, String(clock().getTime()), "EX", 45);
+      } catch (error) {
+        logRuntimeFailure(phase, error);
+        throw error;
       }
-      await redis.set(HEARTBEAT, String(clock().getTime()), "EX", 45);
     },
   };
 }

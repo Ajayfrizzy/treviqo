@@ -265,3 +265,66 @@ The probe uses separate confirmed `PROBE_*` configuration and does not run in th
 worker loop. Test-bucket success does not establish production-bucket permissions;
 a production disposable probe requires separate authorization. Never use a 403 as
 proof of object absence.
+
+## Diagnosing database and worker readiness — 20 October 2026
+
+Observed operator evidence: web `readiness_failed database,worker` at 04:25:33 and 04:38:26, repeated worker-only readiness failures, and worker `Worker dependencies unavailable; retrying.` at 04:26:13. These are supplied log times; their timezone and instance correlation have not been independently established. They do not establish a common cause with S3 DELETE authorization. No production inspection or restart was performed in this investigation.
+
+### What each signal means
+
+- Web `/api/health` reports process liveness only; it can be 200 throughout an infrastructure outage.
+- Web readiness runs database, Redis, storage, worker and auth checks concurrently, each with a three-second deadline. `database` means one of the sequential User/Reminder/BackgroundJob reads failed or the whole database check exceeded that deadline. It does not distinguish connectivity, pool contention, missing schema or slow queries by itself. Deadline expiry does not cancel the underlying query.
+- `worker` is required by default in production unless explicitly overridden. It can mean the worker-health check returned false, threw on Redis/database access, or exceeded the readiness deadline. Repeated worker-only failures mean that readiness invocation's other checks passed; they do not prove a healthy database history.
+- The worker retry message means `tick()` or its subsequent health check threw. A tick starts with Redis PING, initializes/reclaims/reads durable jobs in PostgreSQL, repairs the Redis due queue, claims at most one job, processes it and publishes a heartbeat. Failure before heartbeat publication can eventually expire the shared heartbeat.
+- A processing or success-checkpoint failure is caught inside the job runner, logged, and rescheduled with a lease-token/state condition. If retry persistence succeeds, the tick can still publish a heartbeat. If retry persistence fails, the error escapes to the runtime. A fresh heartbeat is therefore not sufficient proof of completed jobs.
+- Shared health requires a finite heartbeat no more than five seconds in the future and no more than 45 seconds old, all four configured job rows, fewer than five attempts each, due dates less than five minutes overdue, and a completed sweep within two hours. A never-completed job has a two-minute startup allowance. Redis expires the heartbeat key after 45 seconds; a missing key fails health at real-world timestamps.
+- Worker HTTP `/health` reads only its own in-memory snapshot. Startup is unhealthy until a tick and shared health check both succeed. A failed tick/check clears the snapshot; a hung tick/check can leave the previous snapshot until it becomes 45 seconds old. Clock rollback also fails local health. HTTP does not execute work or query dependencies and cannot borrow another instance's healthy snapshot.
+
+Ticks wait ten seconds after completing/failing; this is not a ten-second execution deadline. Completed sweeps recur after 60 seconds; additional batches are immediately due for a later tick. Failed jobs back off from ten seconds to thirty minutes. Expired two-minute leases are reclaimed on a subsequent successful tick and increment attempts. Five failures make health false but do not permanently disable retries. Do not clear attempts, leases, job rows or Redis to make health appear green.
+
+PostgreSQL uses one lazily created Prisma client per process, with provider logging disabled. Connection/pool settings come from the runtime `DATABASE_URL`; no application-wide transaction override is configured. Reminder reconciliation uses serializable interactive transactions with Prisma defaults; account cleanup includes separately bounded transactions. Connection failures, pool timeouts, transaction expiry and serialization conflicts can therefore occur at different stages. Redis uses lazy connection, a two-second connection timeout, 2.5-second command timeout, one retry per request and no automatic reconnect strategy; a client in `end` state is recreated on a subsequent `getRedis()` call.
+
+### Safe diagnostics added by this investigation
+
+These diagnostics exist in source and require a future authorized deployment before they can appear in production. Existing summary logs and public health response bodies are preserved.
+
+- `runtime_failed operation=readiness_database category=...` distinguishes the failed readiness check and an allowlisted category.
+- `runtime_failed operation=worker_database|worker_redis category=...` identifies the failing tick/shared-health dependency boundary.
+- `runtime_failed operation=worker_job category=...` and `worker_job_failed job=...` identify a caught processing/checkpoint failure. Only the four fixed scheduled-job names are emitted, never a record ID or cursor.
+- `runtime_failed operation=worker_tick|worker_health category=...` distinguishes exceptions from the runtime's two phases.
+- `worker_health_failed reason=...` distinguishes invalid/future/expired heartbeats, missing jobs, retry thresholds, overdue jobs, stale sweeps and jobs that never completed.
+
+Categories include database connectivity/authentication/schema/pool-timeout/transaction/conflict, DNS, refused/reset connections and readiness deadlines. Unrecognized errors remain `unknown`; Redis protocol errors use `redis_command`. No error-message parsing, raw error codes, messages, stacks, provider payloads, connection URLs, credentials or user data are logged. Categories narrow the investigation; they cannot prove a provider outage or explain every error. A permanently stuck operation may not emit a failure until it rejects; inspect snapshot/heartbeat age as well.
+
+### Exact read-only production verification
+
+1. In Rumpty, inspect **both** service configurations and all running instances privately. Confirm matching intended PostgreSQL database and Redis service/namespace, current release, startup command, runtime secret version and instance start time. Compare values privately; report only matches, timestamps and status. A local `.env` or Git revision does not prove deployed configuration. Do not print environment dumps. Both processes cache clients; configuration changes do not update an already running process automatically.
+2. Confirm web ingress probes `/api/health` and `/api/ready`, worker probes `/health`, the injected port matches the listener, the worker is always on, startup grace is at least 90 seconds and shutdown grace exceeds ten seconds. Do not change these settings during this inspection. Correlate logs by instance and normalized timezone, including restarts, memory/CPU pressure and provider database connection limits.
+3. From each service's network context, use the provider's private SQL console/read-only connection to run `SELECT 1;`, then the query below. Apply a session-local three-second statement timeout in the read-only transaction. Report success, elapsed time and safe error category only; never copy raw database errors containing connection or query details. Do not run migrations or job ticks.
+
+```sql
+BEGIN READ ONLY;
+SET LOCAL statement_timeout = '3s';
+SELECT 1;
+SELECT 1 FROM "User" LIMIT 1;
+SELECT 1 FROM "Reminder" LIMIT 1;
+SELECT "id", "state", "attempts", "dueAt", "createdAt", "lastSucceededAt",
+       "leaseUntil",
+       CASE WHEN "errorCode" IN ('job_failed', 'lease_expired')
+            THEN "errorCode" ELSE NULL END AS "safeErrorCode"
+FROM "BackgroundJob"
+WHERE "id" IN ('reminders', 'session_cleanup', 'account_cleanup', 'extraction_cleanup');
+COMMIT;
+```
+
+4. Using an authenticated private Redis console for that same configured service, run only the following read commands. Report PING status, TTL and computed heartbeat age, never connection details. Compare the heartbeat milliseconds with current UTC epoch milliseconds. Repeat after at least one normal tick interval without changing the queue.
+
+```text
+PING
+TTL treviqo:worker:heartbeat
+GET treviqo:worker:heartbeat
+ZCARD treviqo:jobs:due
+```
+
+5. Compare all four jobs' attempt counts, due times, lease expiry and last completed sweeps with the thresholds above. Readiness can fail while Redis PING and `SELECT 1` succeed: those checks do not establish application table access, transaction capacity or completed jobs. Inspect migration status and provider connection/pool/lock metrics privately if needed, without collecting query texts or user rows. A SQL console success is only a control unless it uses the same role and network as the affected runtime.
+6. Collect the next safe diagnostic categories after a separately authorized release, or ask the operator/provider for equivalent read-only evidence now. Do not run `worker --once`, `deployment:check --services`, cleanup, queue resets or test suites against production: some of those commands perform writes. Keep S3 authorization findings separate unless a failing account-cleanup operation explicitly identifies storage; per-account cleanup can catch/retry storage failures without failing the entire scheduled sweep.

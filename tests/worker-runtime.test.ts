@@ -98,3 +98,28 @@ it("preserves one-shot mode without HTTP or a new health dependency", async () =
   expect(tick).toHaveBeenCalledTimes(1);
   expect(healthy).not.toHaveBeenCalled();
 });
+it("reports a safe tick category and preserves one-shot failure behavior", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  const onError = vi.fn();
+  try {
+    expect(
+      await runWorker({
+        tick: async () => {
+          throw Object.assign(new Error("private connection URL"), {
+            code: "P2024",
+          });
+        },
+        healthy: async () => true,
+        signal: new AbortController().signal,
+        once: true,
+        onError,
+      }),
+    ).toBe(false);
+    expect(onError).toHaveBeenCalledOnce();
+    expect(log.mock.calls).toEqual([
+      ["runtime_failed operation=worker_tick category=database_pool_timeout"],
+    ]);
+  } finally {
+    log.mockRestore();
+  }
+});
