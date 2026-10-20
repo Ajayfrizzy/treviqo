@@ -19,7 +19,8 @@ it.each([
   expect(runtimeCategory(error)).toBe(category);
 });
 it("never serializes messages, stacks, metadata or unrecognized codes", () => {
-  const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+  const spy = vi.spyOn(process.stderr, "write").mockReturnValue(true);
+  vi.spyOn(console, "error").mockImplementation(() => {});
   const secret = "postgres://private:password@host/user-document";
   logRuntimeFailure(
     "worker_job",
@@ -30,7 +31,8 @@ it("never serializes messages, stacks, metadata or unrecognized codes", () => {
       meta: { query: secret },
     }),
   );
+  expect(console.error).not.toHaveBeenCalled();
   expect(spy.mock.calls).toEqual([
-    ["runtime_failed operation=worker_job category=unknown"],
+    ["runtime_failed operation=worker_job category=unknown\n"],
   ]);
 });

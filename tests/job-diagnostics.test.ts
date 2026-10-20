@@ -40,7 +40,10 @@ function fixture() {
     ),
   };
 }
-beforeEach(() => vi.spyOn(console, "error").mockImplementation(() => {}));
+beforeEach(() => {
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  vi.spyOn(process.stderr, "write").mockReturnValue(true);
+});
 afterEach(() => vi.restoreAllMocks());
 it("distinguishes Redis tick failure and does not record a heartbeat", async () => {
   const { db, redis, runner } = fixture();
@@ -51,8 +54,8 @@ it("distinguishes Redis tick failure and does not record a heartbeat", async () 
   await expect(runner.tick()).rejects.toBe(error);
   expect(db.backgroundJob.createMany).not.toHaveBeenCalled();
   expect(redis.set).not.toHaveBeenCalled();
-  expect(console.error).toHaveBeenCalledWith(
-    "runtime_failed operation=worker_redis category=connection_refused",
+  expect(process.stderr.write).toHaveBeenCalledWith(
+    "runtime_failed operation=worker_redis category=connection_refused\n",
   );
 });
 it("distinguishes database tick failure from Redis connectivity", async () => {
@@ -63,8 +66,8 @@ it("distinguishes database tick failure from Redis connectivity", async () => {
   db.backgroundJob.createMany.mockRejectedValue(error);
   await expect(runner.tick()).rejects.toBe(error);
   expect(redis.set).not.toHaveBeenCalled();
-  expect(console.error).toHaveBeenCalledWith(
-    "runtime_failed operation=worker_database category=database_connectivity",
+  expect(process.stderr.write).toHaveBeenCalledWith(
+    "runtime_failed operation=worker_database category=database_connectivity\n",
   );
 });
 it("logs a caught job failure while preserving fenced retry and heartbeat", async () => {
@@ -94,8 +97,8 @@ it("logs a caught job failure while preserving fenced retry and heartbeat", asyn
     "EX",
     45,
   );
-  expect(console.error).toHaveBeenCalledWith(
-    "runtime_failed operation=worker_job category=database_transaction",
+  expect(process.stderr.write).toHaveBeenCalledWith(
+    "runtime_failed operation=worker_job category=database_transaction\n",
   );
   expect(console.error).toHaveBeenCalledWith(
     "worker_job_failed job=session_cleanup",
@@ -114,7 +117,7 @@ it("surfaces failed retry persistence as a database tick failure without a heart
     .mockRejectedValueOnce(error);
   await expect(runner.tick()).rejects.toBe(error);
   expect(redis.set).not.toHaveBeenCalled();
-  expect(console.error).toHaveBeenCalledWith(
-    "runtime_failed operation=worker_database category=database_connection_closed",
+  expect(process.stderr.write).toHaveBeenCalledWith(
+    "runtime_failed operation=worker_database category=database_connection_closed\n",
   );
 });

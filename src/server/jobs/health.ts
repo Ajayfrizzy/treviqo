@@ -16,7 +16,9 @@ export async function workerHealthy(now = new Date()) {
       | "job_stale"
       | "job_never_completed",
   ) => {
-    console.error(`worker_health_failed reason=${reason}`);
+    // This check also runs during Server Component rendering. Do not replay
+    // expected degraded-health diagnostics into the browser error overlay.
+    process.stderr.write(`worker_health_failed reason=${reason}\n`);
     return false;
   };
   try {

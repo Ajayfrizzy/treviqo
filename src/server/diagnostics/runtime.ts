@@ -49,7 +49,9 @@ export type RuntimeOperation =
   | "worker_redis"
   | "worker_job";
 export function logRuntimeFailure(operation: RuntimeOperation, error: unknown) {
-  console.error(
-    `runtime_failed operation=${operation} category=${runtimeCategory(error)}`,
+  // React replays console calls made during Server Component rendering in the
+  // browser. Operational diagnostics belong only in the server log stream.
+  process.stderr.write(
+    `runtime_failed operation=${operation} category=${runtimeCategory(error)}\n`,
   );
 }

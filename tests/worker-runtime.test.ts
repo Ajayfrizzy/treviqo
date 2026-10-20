@@ -99,7 +99,7 @@ it("preserves one-shot mode without HTTP or a new health dependency", async () =
   expect(healthy).not.toHaveBeenCalled();
 });
 it("reports a safe tick category and preserves one-shot failure behavior", async () => {
-  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  const log = vi.spyOn(process.stderr, "write").mockReturnValue(true);
   const onError = vi.fn();
   try {
     expect(
@@ -117,7 +117,7 @@ it("reports a safe tick category and preserves one-shot failure behavior", async
     ).toBe(false);
     expect(onError).toHaveBeenCalledOnce();
     expect(log.mock.calls).toEqual([
-      ["runtime_failed operation=worker_tick category=database_pool_timeout"],
+      ["runtime_failed operation=worker_tick category=database_pool_timeout\n"],
     ]);
   } finally {
     log.mockRestore();

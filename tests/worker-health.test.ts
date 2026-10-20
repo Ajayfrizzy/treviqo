@@ -18,11 +18,15 @@ const jobs = () =>
     lastSucceededAt: now,
   }));
 beforeEach(() => {
+  vi.spyOn(process.stderr, "write").mockReturnValue(true);
   vi.spyOn(console, "error").mockImplementation(() => {});
   mock.get.mockResolvedValue(String(now.getTime()));
   mock.findMany.mockResolvedValue(jobs());
 });
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  expect(console.error).not.toHaveBeenCalled();
+  vi.restoreAllMocks();
+});
 it("accepts current heartbeat and completed sweeps silently", async () => {
   expect(await workerHealthy(now)).toBe(true);
   expect(console.error).not.toHaveBeenCalled();
@@ -39,8 +43,8 @@ it.each([
     mock.get.mockResolvedValue(value);
     expect(await workerHealthy(now)).toBe(false);
     expect(mock.findMany).not.toHaveBeenCalled();
-    expect(console.error).toHaveBeenCalledWith(
-      `worker_health_failed reason=${reason}`,
+    expect(process.stderr.write).toHaveBeenCalledWith(
+      `worker_health_failed reason=${reason}\n`,
     );
   },
 );
@@ -57,15 +61,15 @@ it.each([
   Object.assign(rows[0]!, patch);
   mock.findMany.mockResolvedValue(rows);
   expect(await workerHealthy(now)).toBe(false);
-  expect(console.error).toHaveBeenCalledWith(
-    `worker_health_failed reason=${reason}`,
+  expect(process.stderr.write).toHaveBeenCalledWith(
+    `worker_health_failed reason=${reason}\n`,
   );
 });
 it("reports missing configured jobs", async () => {
   mock.findMany.mockResolvedValue(jobs().slice(1));
   expect(await workerHealthy(now)).toBe(false);
-  expect(console.error).toHaveBeenCalledWith(
-    "worker_health_failed reason=jobs_missing",
+  expect(process.stderr.write).toHaveBeenCalledWith(
+    "worker_health_failed reason=jobs_missing\n",
   );
 });
 it.each([
@@ -79,8 +83,8 @@ it.each([
     });
     mock[method].mockRejectedValueOnce(error);
     await expect(workerHealthy(now)).rejects.toBe(error);
-    expect(console.error).toHaveBeenCalledWith(
-      `runtime_failed operation=${phase} category=${category}`,
+    expect(process.stderr.write).toHaveBeenCalledWith(
+      `runtime_failed operation=${phase} category=${category}\n`,
     );
   },
 );

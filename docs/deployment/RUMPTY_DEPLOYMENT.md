@@ -286,7 +286,7 @@ PostgreSQL uses one lazily created Prisma client per process, with provider logg
 
 ### Safe diagnostics added by this investigation
 
-These diagnostics exist in source and require a future authorized deployment before they can appear in production. Existing summary logs and public health response bodies are preserved.
+These diagnostics exist in source and require a future authorized deployment before they can appear in production. Existing summary logs and public health response bodies are preserved. Runtime categories and worker-health reasons are written directly to server stderr: React must not replay these operational diagnostics into the browser console or development error overlay during Server Component rendering.
 
 - `runtime_failed operation=readiness_database category=...` distinguishes the failed readiness check and an allowlisted category.
 - `runtime_failed operation=worker_database|worker_redis category=...` identifies the failing tick/shared-health dependency boundary.
