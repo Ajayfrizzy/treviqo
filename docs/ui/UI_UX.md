@@ -1,24 +1,38 @@
 # Treviqo UI/UX Rules
 
+## Current navigation and review behavior
+
+The current source exposes six sections: Home, Exit, Reminders, Passport, Documents and Profile. Below 600px, the bottom bar shows Home, Exit, Reminders, Passport and **More**, which opens Documents/Profile in a keyboard-accessible dialog. At 600–799px all six links appear in the bottom bar; from 800px the sidebar expands the same information architecture. See [navigation.tsx](../../src/components/navigation.tsx).
+
+Exit uses four steps: Exit details; Notice; Money and pension; Records and benefits. Registration collects first/last names and signs in on success; Profile supports optional preferred name/country. Extraction review supports eight schemas, manual entry, four-minute request waiting and explicit review/correction. No screen turns AI confidence into confirmation. Current secondary/Cancel actions use outlines, not the historical shared green treatment.
+
+Older milestone sections below record the evolution from placeholders and five destinations. Their earlier navigation, profile, timing and absent-feature statements are historical, not current UX requirements. Reminders now have their own destination and no external notification delivery. See the [demo](../product/DEMO.md) for current navigation through the product.
+
 ## Feel
+
 Calm, trustworthy, modern, personal, simple, mobile-native.
 
 Do not make Treviqo look like enterprise HR software.
 
 ## Mobile first
+
 Design and validate smartphone layouts first.
 
 ## Bottom navigation
+
 1. Home
 2. Exit
-3. Passport
-4. Documents
-5. Profile
+3. Reminders
+4. Passport
+5. Documents
+6. Profile
 
 Desktop can use a sidebar with the same information architecture.
 
 ## Home
+
 Show:
+
 - current employment
 - active exit
 - next action
@@ -28,18 +42,22 @@ Show:
 Avoid analytics-heavy dashboards.
 
 ## Exit flow
-Use steps:
-1. exit type
-2. dates
-3. money/items to review
-4. benefits
-5. documents
-6. readiness result
+
+Use four steps:
+
+1. Exit details (type and dates)
+2. Notice
+3. Money and pension
+4. Records and benefits
+
+Then show the saved checklist; it is not a legal readiness verdict.
 
 Support save-and-return.
 
 ## Checklist
+
 Each item shows:
+
 - title
 - state
 - explanation
@@ -47,6 +65,7 @@ Each item shows:
 - next action
 
 States:
+
 - Complete
 - Pending
 - Missing
@@ -56,10 +75,13 @@ States:
 Do not rely on color alone.
 
 ## Documents
+
 Use mobile-friendly cards/rows, clear progress, processing state, and extraction review.
 
 ## Extraction review
+
 Show:
+
 - field
 - proposed value
 - source snippet where available
@@ -67,11 +89,14 @@ Show:
 - edit/confirm controls
 
 ## Passport
+
 Use a personal career/benefit timeline.
 Mask sensitive identifiers by default.
 
 ## Copy
+
 Prefer:
+
 - Needs clarification
 - Confirm with your employer
 - Not identified in uploaded documents
@@ -82,7 +107,9 @@ Prefer:
 Avoid loaded legal language.
 
 ## Interactions
+
 Prefer:
+
 - bottom sheets
 - step flows
 - cards
@@ -92,6 +119,7 @@ Prefer:
 Avoid dense grids and desktop-only patterns.
 
 ## Accessibility
+
 - semantic HTML
 - keyboard support
 - labels
@@ -102,7 +130,9 @@ Avoid dense grids and desktop-only patterns.
 - no color-only meaning
 
 ## States
+
 Every core feature needs:
+
 - empty
 - loading
 - processing
@@ -110,6 +140,7 @@ Every core feature needs:
 - success
 
 ## Future native app
+
 Do not create web flows that depend on desktop conventions.
 
 ## Milestone 1 implementation
@@ -319,3 +350,17 @@ wrap on narrow screens and retain at least 48px targets. There is no auto-cyclin
 scroll interception or new animation dependency.
 
 See [landing interaction validation](../milestones/LANDING_INTERACTIONS.md).
+
+## Authenticated semantic UI — 15 October 2026
+
+The authenticated shell uses scoped `product.css` tokens and shared `product-ui` components. Soft green marks completed/confirmed states, amber review, blue documents/information, orange exit actions, violet history, and neutral inactive states. Red remains destructive. Text labels accompany every status; color alone does not convey meaning. Icons reuse the navigation stroke family through `UiIcon`.
+
+This dated layout was superseded below 600px by the current More sheet described at the top of this guide. Reminders became a first-class navigation destination. At that milestone, below 600px, six links formed two rows of three with readable labels and 52px targets; 600–799px uses one row, and desktop uses the sidebar. Content reserves space for the fixed bottom navigation. No count query was added to the layout.
+
+Home uses compact counts, semantic icons and actionable attention rows. Employment and document cards have restrained accents and metadata hierarchy. Exit list cards show existing type/date data without fabricated progress; detail shows actual complete and not-applicable counts with its existing safety explanation. The wizard shows all four steps with an explicit current step, retaining validation and save behavior.
+
+Reminders use compact cards and secondary snooze/dismiss actions. Passport separates employment, exit, pension, benefits and document availability; assessment messages, trust disclaimers, stale warnings, dates and source links remain visible. The short assessment basis is intentionally not collapsed because it explains the limits of the assessment. Profile receives limited section accents. Shared empty states provide a marker and existing next action. Hover motion is limited to dashboard feedback and respects reduced motion.
+
+No APIs, queries, persistence, domain rules, extraction, worker, authentication or account-deletion behavior change in this pass.
+
+Validation for this pass: `npm run validate` passed lint, TypeScript, 432 unit tests, production build and worker build. Final `npm run test:e2e` passed all 169 tests, including populated product screens at 320, 375, 430, 768, 1024, 1280 and 1440px. Lint/TypeScript and production build were rechecked after refinements. An earlier browser run was stopped when it retained the obsolete disclosure test during the visible-disclaimer refinement; the final full run passed. Screenshots are generated under ignored `test-results/product-*.png`. Semantic text/tint contrast ranges from 5.75:1 to 7.33:1. Physical-device Safari, safe-area/virtual-keyboard behavior and text enlargement remain manual checks.

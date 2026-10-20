@@ -1,3 +1,9 @@
+import {
+  IconBadge,
+  StatusChip,
+  EmptyState,
+  documentTone,
+} from "@/components/product-ui";
 import { DocumentFilter } from "@/components/document-filter";
 import Link from "@/components/action-link";
 import { documentPageUser } from "@/modules/documents/page-user";
@@ -63,16 +69,42 @@ export default async function Documents({
           {documents.length ? (
             <div className="employment-list">
               {documents.map((doc) => (
-                <article className="card document-card" key={doc.id}>
-                  <span className="badge">
-                    {documentStatusLabels[doc.status]}
-                  </span>
+                <article
+                  className={`card document-card tone-${documentTone[doc.documentType]}`}
+                  key={doc.id}
+                >
+                  <div className="card-topline">
+                    <IconBadge
+                      icon={
+                        doc.documentType === "employment_contract"
+                          ? "work"
+                          : doc.documentType === "benefit_document" ||
+                              doc.documentType === "pension_statement"
+                            ? "passport"
+                            : "documents"
+                      }
+                      tone={documentTone[doc.documentType]}
+                    />
+                    <StatusChip
+                      tone={
+                        doc.status === "ready"
+                          ? "success"
+                          : doc.status === "failed"
+                            ? "review"
+                            : "neutral"
+                      }
+                    >
+                      {documentStatusLabels[doc.status]}
+                    </StatusChip>
+                  </div>
                   <h2>
                     <Link className="touch-link" href={`/documents/${doc.id}`}>
                       {doc.sanitizedFilename}
                     </Link>
                   </h2>
-                  <p>{documentTypes[doc.documentType]}</p>
+                  <p className="document-category">
+                    {documentTypes[doc.documentType]}
+                  </p>
                   <p>
                     {doc.employment.employerName} · {doc.employment.roleTitle}
                   </p>
@@ -91,19 +123,17 @@ export default async function Documents({
               ))}
             </div>
           ) : (
-            <section className="card">
-              <h2>No documents yet</h2>
+            <EmptyState title="No documents yet" icon="documents" tone="info">
               <p>
                 {query.employmentId
                   ? "No documents for this employment. Upload your first file when you are ready."
                   : "Use Upload document above to add a contract or payslip. Your originals stay here as evidence for reviews and exit checks."}
               </p>
-            </section>
+            </EmptyState>
           )}
         </>
       ) : (
-        <section className="card">
-          <h2>Add an employment first</h2>
+        <EmptyState title="Add an employment first" icon="work" tone="info">
           <p>
             Keep contracts, payslips, and exit evidence privately with the job
             they belong to. Add your employment, then upload your first file.
@@ -111,7 +141,7 @@ export default async function Documents({
           <Link className="button-link" href="/employments/new">
             Add employment
           </Link>
-        </section>
+        </EmptyState>
       )}
     </>
   );

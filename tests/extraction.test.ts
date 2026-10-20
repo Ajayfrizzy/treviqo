@@ -99,7 +99,8 @@ it("bounds source/review inputs and rejects ownership injection", () => {
     startSchema.safeParse({ mode: "ai", text: "x".repeat(18001) }).success,
   ).toBe(false);
   expect(
-    startSchema.safeParse({ mode: "manual", type: "benefit_document" }).success,
+    startSchema.safeParse({ mode: "manual", type: "unsupported_document" })
+      .success,
   ).toBe(false);
   expect(startSchema.safeParse({ mode: "ai", userId: "other" }).success).toBe(
     false,
@@ -156,10 +157,10 @@ it("validates every expected realistic payslip field against the synthetic sourc
     "payslip",
     fixture.text,
   );
-  expect(fields).toHaveLength(11);
-  expect(fields.every((f) => f.value === fixture.fields[f.key].value)).toBe(
-    true,
-  );
+  expect(fields).toHaveLength(13);
+  expect(
+    fields.every((f) => f.value === (fixture.fields[f.key]?.value ?? null)),
+  ).toBe(true);
 });
 it("expands sparse model proposals without weakening evidence, duplicate, or key checks", () => {
   const source = "Employer: Harbour Workshop Ltd";
@@ -189,7 +190,6 @@ it("expands sparse model proposals without weakening evidence, duplicate, or key
     [{ ...field, evidence: "invented excerpt" }],
     [{ ...field, value: "invented employer" }],
     [{ ...field, key: "legal_entitlement" }],
-    [{ key: "employer", value: field.value }],
   ]) {
     expect(() => parse(invalid)).toThrow();
   }
@@ -213,7 +213,7 @@ it("retains six grounded proposals while discarding two invalid ones", () => {
           value: "Explicit",
           evidence: "Explicit source",
         },
-        { key: "probation", value: "Explicit" },
+        { key: "probation", value: "Unstated" },
       ],
     }),
     "employment_contract",
@@ -289,7 +289,13 @@ it.each([
 ])("salvages a grounded partial proposal without confirming it: %s", (raw) => {
   const result = parseFields(raw, "employment_contract", source);
   expect(result.filter((field) => field.value)).toEqual([
-    { ...proposal, confidence: "needs_review" },
+    {
+      ...proposal,
+      ...(raw.includes(" Acme Ltd ")
+        ? { value: " Acme Ltd ", evidence: " Employer: Acme Ltd " }
+        : {}),
+      confidence: "needs_review",
+    },
   ]);
   expect(result.partial).toBe(true);
 });
@@ -299,8 +305,6 @@ it.each([
   { value: "  " },
   { value: "Inferred Company" },
   { value: 12 },
-  { evidence: undefined },
-  { evidence: "" },
   { evidence: "Employer: Made-up Ltd" },
 ])("retains valid fields beside a rejected candidate: %j", (override) => {
   const invalid = { ...proposal, ...override };
@@ -361,7 +365,7 @@ it("uses deterministic compact type-specific prompts with no completeness reques
     expect(prompt).toEqual(extractionPrompt(source, type));
     expect(prompt.system).toContain("Omit fields you cannot ground");
     expect(prompt.system).toContain(
-      "Copy value and its containing evidence excerpt exactly",
+      "Copy the value exactly as it appears inside the evidence excerpt",
     );
     expect(prompt.system).not.toContain("entries_complete");
     expect(prompt.system).not.toContain('"confidence":');

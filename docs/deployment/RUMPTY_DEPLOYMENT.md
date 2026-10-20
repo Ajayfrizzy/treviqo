@@ -1,132 +1,61 @@
-# Treviqo Rumpty Cloud Deployment
+# RumptyCloud deployment and operations
 
-## Principle
-Use Rumpty infrastructure wherever the platform provides the needed capability.
+## Current deployment and known limitation
 
-Avoid competing infrastructure providers.
+Live application: [treviqo.rumptycloud.app](https://treviqo.rumptycloud.app). The supplied live address is not a claim that every operational acceptance check, backup restore or provider capability has passed. Web and worker are separate processes using RumptyCloud PostgreSQL, Redis, private S3-compatible storage and Rumpty AI for request-driven extraction.
 
-## Confirmed foundation services
+**Direct S3 DeleteObject is currently denied with HTTP 403 AccessDenied in both production and a controlled private test bucket. RumptyCloud support has been contacted.** Manual removal can be reconciled by the implemented verified-absence recovery, but normal deletion remains unresolved. Scheduled account cleanup can remain pending beyond its seven-day eligibility date. Do not broaden credentials, treat a 403 as absence, or finalize database rows without verification. See [current results and troubleshooting](S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
 
-Confirmed from the participant dashboard and onboarding: PostgreSQL, Redis 8.1, S3-compatible object storage, AI inference, and application deployment/compute. Managed OIDC/identity provider support is not assumed. Authentication is application-managed credentials authentication hosted with Treviqo on Rumpty Cloud, backed by Treviqo PostgreSQL.
+## Runtime topology and environment
 
-## Services used/planned
-- application compute/deployment
-- PostgreSQL
-- Redis
-- S3-compatible object storage
-- AI inference
-- worker compute
-- volumes where needed
-- snapshots/backups
-- monitoring/status tooling
+Use `runtime` (Next.js web/API), `worker` (Node.js jobs) and `migrate` (Prisma release job) targets in the root [Dockerfile](../../Dockerfile). The default target remains web. Use matching web/worker revisions and configure secrets at runtime, never in Docker build arguments. No separate API service is needed.
 
-## Target topology
-```text
-Rumpty App/Compute
-  - web
-  - API
+[.env.example](../../.env.example) and [environment validation](../../src/server/config/env.ts) define application variable names. Rumpty resource display names are not automatically translated: `S3_BUCKET` is passed directly as the S3 Bucket parameter; obtain the S3 storage identifier from the provider connection settings. Keep internal identifiers out of public documentation/logs.
 
-Rumpty PostgreSQL
-  - source of truth
+| Variables                                                    | Use and requirements                                                                                                                   |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `APP_URL`, `NEXTAUTH_URL`                                    | Web: matching canonical HTTPS origins in production; worker needs HTTPS APP_URL only                                                   |
+| `SESSION_SECRET`                                             | Web auth: private generated secret, minimum 32 characters; no fixture/predictable value in release acceptance                          |
+| `DATABASE_URL`                                               | Web, worker and migrations; private PostgreSQL connection, provider-required TLS and bounded pool                                      |
+| `REDIS_URL`                                                  | Web and worker; private Redis, persistence/noeviction and required EVAL/sorted-set/TTL access                                          |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`                      | Explicit private storage target; production endpoint uses HTTPS                                                                        |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`                   | Static credential pair scoped to the intended bucket/object resources; required by both web and account-cleanup worker                 |
+| `S3_FORCE_PATH_STYLE`                                        | `true` default; change only to match verified provider addressing                                                                      |
+| `S3_VERSIONING`                                              | `unversioned` default or `versioned`; must reflect actual retained-version behavior, never selected to bypass a denial                 |
+| `DOCUMENT_MAX_FILE_MB`                                       | Default 10, allowed integer 1–20 MiB; align ingress body/concurrency limits                                                            |
+| `RUMPTY_AI_BASE_URL`, `RUMPTY_AI_API_KEY`, `RUMPTY_AI_MODEL` | Optional complete group on web; base includes `/v1` if required, adapter appends `/chat/completions`; blank group retains manual entry |
+| `RUMPTY_AI_TIMEOUT_MS`                                       | Default 60000, range 10000–90000 ms per inference call                                                                                 |
+| `WORKER_REQUIRED`                                            | Defaults true in production, false in development/test; false is not accepted by production release preflight                          |
+| `PORT`, `HOSTNAME`, `NODE_ENV`                               | Runtime settings: web defaults port 3000; worker health defaults 3001 if PORT is absent                                                |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`          | Local Compose only; not an additional application connection mechanism                                                                 |
 
-Rumpty Redis
-  - queues/cache/locks
+Do not share a Redis namespace/database between environments. Web and worker configuration is independent; matching variable names do not prove matching values/principals. Compare them privately during release review. Missing configuration fails closed; health checks do not replace permission tests.
 
-Rumpty Private Bucket
-  - employment documents
+## Build, release and operational checks
 
-Rumpty AI
-  - classification
-  - extraction
+See [the ordered release procedure](FIRST_RUMPTY_DEPLOYMENT.md). Apply committed migrations through the migration target without reset or destructive schema push. Production secrets are excluded from the image. Keep the worker always on, with restart policy and monitoring; no inference credentials are needed by its four jobs (`reminders`, `session_cleanup`, `account_cleanup`, `extraction_cleanup`).
 
-Rumpty Worker
-  - document jobs
-  - reminders
-  - pension follow-up
+Web `/api/health` checks liveness. `/api/ready` checks required database/schema, Redis, auth, bucket connectivity and worker health. Worker `GET /health` reports local in-memory progress and becomes unhealthy when stale. None of these proves DELETE permission, public-access policy, AI availability or backup recoverability.
+
+Operator commands use exported runtime variables; they do not load `.env` automatically:
+
+```sh
+npm run worker:build
+npm run deployment:check -- --worker
+npm run worker:health
 ```
 
-## GitHub integration
-Where supported:
-- connect repo
-- deploy protected main
-- use preview environments when useful
-- use CVE scanning
+The preflight command validates configuration; `--services --runtime` additionally contacts configured services and inspects runtime health. Storage/AI mutation probes are explicit operator actions, not routine readiness checks. Use the separate [private-test DELETE probe](S3_DELETE_AUTHORIZATION_INVESTIGATION.md#reviewable-explicit-operator-probe) only with designated test credentials and authorization. Do not rerun failed-cleanup probes casually.
 
-## Environments
-Ideal:
-- local
-- Rumpty preview/staging
-- Rumpty production
+## Inference and storage operations
 
-If credits limit this, prioritize production while keeping configuration clean.
+Current inference uses ordinary chat completions without `response_format`; application schema/grounding checks are authoritative. Eight extraction types are supported. Per-call timing, four-minute attempt/browser bounds, manual fallback and expired-attempt recovery are described in [AI documents](../ai/AI_DOCUMENTS.md#current-implementation). Size ingress request budgets for preparation, up to two inference calls and persistence; a fixed 90-second budget may be insufficient. Never increase timeouts to conceal unresolved provider behavior.
 
-## Expected environment variables
-```text
-DATABASE_URL=
-REDIS_URL=
+Private S3 operations require distinct read/write/delete permissions. In unversioned mode, purge verifies HEAD/DELETE/HEAD. Versioned mode requires exact-key version inventory/deletion and final absence verification. Retention, backups and downloaded copies require separate policies. Protect original documents from public access independently of application auth. Keep TLS validation enabled and signed query strings out of logs.
 
-S3_ENDPOINT=
-S3_REGION=
-S3_BUCKET=
-S3_ACCESS_KEY_ID=
-S3_SECRET_ACCESS_KEY=
+## Historical rollout notes
 
-RUMPTY_AI_BASE_URL=
-RUMPTY_AI_API_KEY=
-RUMPTY_AI_MODEL=
-
-APP_URL=
-SESSION_SECRET=
-```
-
-Actual names should follow Rumpty docs.
-
-## PostgreSQL
-- Prisma migrations
-- repeatable deployment
-- no destructive production reset
-
-## Redis
-Prefer internal/private connections where practical.
-
-## Object storage
-Private bucket only.
-
-## AI
-Test:
-- schema adherence
-- contract extraction
-- payslip extraction
-- length limits
-- latency
-- errors
-
-Always keep manual fallback.
-
-## Scale-to-zero
-If the plan scales to zero, account for cold starts during judging.
-Warm the app before demo.
-
-## Persistence
-Do not store important state on ephemeral app disks.
-
-## Backups
-Take snapshots/backups before judging and document recovery.
-
-## Production checklist
-- public app reachable
-- HTTPS
-- migrations applied
-- private docs tested
-- AI works
-- Redis jobs work
-- secrets configured
-- logging available
-- mobile path tested
-- README updated
-
-## Hackathon evidence
-Document which Rumpty services Treviqo uses and why.
+The milestone notes below retain rollout context. Earlier “not deployed”, absent-feature, schema-count and fixture-only statements refer to those dates. The current configuration and four-job contract above take precedence; apply all committed migrations appropriate to the selected release, not just an individual milestone migration.
 
 ## Milestone 0 runbook
 
@@ -138,20 +67,20 @@ No Rumpty endpoints, credentials, or deployment project were supplied for the in
 4. Set secrets through Rumpty's secret/environment configuration. Never pass secrets as Docker build arguments. Generate `SESSION_SECRET` using `openssl rand -base64 48` and store its output directly in secret configuration.
 5. Build `docker build --target migrate -t treviqo-migrate .` and execute that image as a one-off release job with `DATABASE_URL` injected. It runs `prisma migrate deploy`. Back up existing data before migrations; never use `migrate reset` in production.
 6. Build `docker build --target runtime -t treviqo .` and deploy port 3000 behind Rumpty HTTPS ingress. Set the environment variables below. Use `/api/health` for liveness and `/api/ready` for readiness. Add edge request limits to health/readiness/auth routes; the application enforces a global circuit-breaker plus per-email throttling. Keep clocks synchronized for session expiry.
-7. Verify a real registration, duplicate-email handling, sign-in, refresh/navigation, `/api/me`, sign-out, invalid/expired session rejection, mobile navigation, private network access, bucket privacy, logs, and a PostgreSQL backup restore. Enable HTTPS/HSTS at ingress. No job or AI connectivity is needed until those milestones.
+7. Verify a real registration, duplicate-email handling, sign-in, refresh/navigation, `/api/me`, sign-out, invalid/expired session rejection, mobile navigation, private network access, bucket privacy, logs, and a PostgreSQL backup restore. Enable HTTPS/HSTS at ingress. That foundation-only scope is historical; current production readiness includes worker health.
 
 ### Implemented runtime variables
 
-| Variables | Purpose |
-| --- | --- |
-| `APP_URL`, `NEXTAUTH_URL` | Identical canonical app origin; HTTPS in production |
-| `SESSION_SECRET` | At least 32 characters of generated entropy; encrypts sessions |
-| `DATABASE_URL` | Rumpty PostgreSQL connection string |
-| `REDIS_URL` | Rumpty Redis connection string |
-| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET` | Explicit Rumpty object-storage location |
-| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Least-privilege bucket credentials |
-| `DOCUMENT_MAX_FILE_MB` | Upload limit in MiB; default 10, integer 1–20 |
-| `S3_FORCE_PATH_STYLE` | `true` by default; change only to match Rumpty endpoint support |
+| Variables                                  | Purpose                                                         |
+| ------------------------------------------ | --------------------------------------------------------------- |
+| `APP_URL`, `NEXTAUTH_URL`                  | Identical canonical app origin; HTTPS in production             |
+| `SESSION_SECRET`                           | At least 32 characters of generated entropy; encrypts sessions  |
+| `DATABASE_URL`                             | Rumpty PostgreSQL connection string                             |
+| `REDIS_URL`                                | Rumpty Redis connection string                                  |
+| `S3_ENDPOINT`, `S3_REGION`, `S3_BUCKET`    | Explicit Rumpty object-storage location                         |
+| `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY` | Least-privilege bucket credentials                              |
+| `DOCUMENT_MAX_FILE_MB`                     | Upload limit in MiB; default 10, integer 1–20                   |
+| `S3_FORCE_PATH_STYLE`                      | `true` by default; change only to match Rumpty endpoint support |
 
 `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` are local Compose inputs only. `NODE_ENV`, `PORT`, and `HOSTNAME` are supplied by the Docker runtime. AI environment variables are optional as a complete group for Milestone 3; leave all three blank to retain manual review without inference.
 
@@ -175,23 +104,23 @@ Block public bucket policies/ACLs independently. Verify an unsigned object reque
 
 Set ingress body limits consistently with `DOCUMENT_MAX_FILE_MB`, bounded request timeouts, per-client request limits, and concurrent upload limits sized for memory (up to the configured bytes per in-flight request plus buffering overhead). PUT aborts after 30 seconds and DELETE after 10 seconds. Redact signed query strings from logs. Validate network timeouts, least privilege, TLS, privacy, and backup restoration on Rumpty before release.
 
-Recovery: monitor stale Uploaded/Processing rows older than 15 minutes, Failed rows, and Deleting rows. Confirm the upload process is no longer running; have the owner retry removal from the detail page, or run an authenticated/operator-controlled reconciliation using the same deletion service. The durable key enables cleanup even after an ambiguous PUT or database commit. Retry after outages; do not delete metadata first, blindly mark Ready, or purge unknown objects by filename. No automatic reconciliation worker is included. Reconcile restored metadata with bucket contents before restoring traffic.
+Recovery: monitor stale Uploaded/Processing rows older than 15 minutes, Failed rows, and Deleting rows. Confirm the upload process is no longer running; have the owner retry removal from the detail page, or run an authenticated/operator-controlled reconciliation using the same deletion service. The durable key enables cleanup even after an ambiguous PUT or database commit. Retry after outages; do not delete metadata first, blindly mark Ready, or purge unknown objects by filename. Active-account single-document cleanup requires an owner-authorized retry; scheduled account cleanup uses the worker. Reconcile restored metadata with bucket contents before restoring traffic.
 
 ### Milestone 3 inference configuration
 
 Apply `20261003040000_document_intelligence` before rollout. Configure the complete group below using real Rumpty configuration, never build arguments:
 
-| Variable | Purpose |
-| --- | --- |
+| Variable             | Purpose                                                                                        |
+| -------------------- | ---------------------------------------------------------------------------------------------- |
 | `RUMPTY_AI_BASE_URL` | HTTPS API base; include `/v1` if the provider requires it; adapter appends `/chat/completions` |
-| `RUMPTY_AI_API_KEY` | Environment-only Bearer credential |
-| `RUMPTY_AI_MODEL` | Explicit model identifier; recorded per attempt |
+| `RUMPTY_AI_API_KEY`  | Environment-only Bearer credential                                                             |
+| `RUMPTY_AI_MODEL`    | Explicit model identifier; recorded per attempt                                                |
 
-The current adapter assumes OpenAI-compatible chat completions, `response_format: json_object`, system/user messages, `max_tokens`, and `choices[0].message.content` with finish_reason `stop`. This was verified against fixtures, not live Rumpty. Verify the provider contract/context window/JSON support/model availability, then adjust only the adapter if necessary. There is no competing inference provider fallback. Missing AI configuration leaves manual entry usable; core readiness does not invoke paid inference.
+The adapter uses OpenAI-compatible chat completions, system/user messages, `max_tokens`, and `choices[0].message.content` with finish_reason `stop`; it does not send `response_format`. This was verified against fixtures, not live Rumpty. Verify the provider contract/context window/JSON support/model availability, then adjust only the adapter if necessary. There is no competing inference provider fallback. Missing AI configuration leaves manual entry usable; core readiness does not invoke paid inference.
 
-Text PDFs use a local parser subprocess included in the standalone image through Next tracing. No extra OS binary or persistent disk is needed. Allow child-process execution and allocate container memory for app plus concurrent parser processes (128 MiB V8 heap limit is not a total RSS cap). Configure a request timeout of at least 90 seconds, bounded concurrency, and per-client ingress limits. Two-minute persisted leases make interrupted attempts retryable; there is no durable background queue. Source content is not sent as a signed storage URL. Bucket credentials now also require server-side GetObject.
+Text PDFs use a local parser subprocess included in the standalone image through Next tracing. No extra OS binary or persistent disk is needed. Allow child-process execution and allocate container memory for app plus concurrent parser processes (128 MiB V8 heap limit is not a total RSS cap). Configure ingress budgets for the current bounded extraction workflow, bounded concurrency and per-client limits. Four-minute attempts make interruptions recoverable; the worker reaps expired attempts, while inference itself is request-driven. Source content is not sent as a signed storage URL. Bucket credentials now also require server-side GetObject.
 
-Before enabling real-worker inference, test synthetic examples for all four schemas, source grounding, confidence behavior, timeout/invalid-response/manual fallback, and mobile review. Verify Rumpty retention/training/privacy settings and restrict provider logs; do not assume zero retention. Backups containing excerpts/revisions remain sensitive. Live accuracy, capacity, TLS, and inference protocol checks have not been performed by automated fixtures.
+Before enabling real-worker inference, test synthetic examples for all eight supported extraction schemas, source grounding, confidence behavior, timeout/invalid-response/manual fallback, and mobile review. Verify Rumpty retention/training/privacy settings and restrict provider logs; do not assume zero retention. Backups containing excerpts/revisions remain sensitive. Live accuracy, capacity, TLS, and inference protocol checks have not been performed by automated fixtures.
 
 ### Milestone 4 release notes
 
@@ -201,13 +130,13 @@ Apply `20261003050000_exit_checker` before rolling out the new app. It adds Exit
 
 Apply `20261003060000_settlement_pension` using the migration target before rolling out the new runtime. It adds owned finance records and audit actions without resetting existing data. No new dependencies, secrets, environment variables or background workers are required. Existing optional Rumpty inference variables enable both new schemas; manual entry remains available.
 
-Validate all six extraction types with synthetic evidence on the real Rumpty model, especially separate contribution periods/posting dates, employee/employer amounts, three-entry limits and schema adherence. Confirm private storage, ingress concurrency/body limits, TLS, backup/restore and worker isolation before release. Saved follow-up dates do not schedule jobs or send notifications. Local Docker validation is not a live deployment.
+Validate all eight extraction types with synthetic evidence on the real Rumpty model, especially separate contribution periods/posting dates, employee/employer amounts, three-entry limits and schema adherence. Confirm private storage, ingress concurrency/body limits, TLS, backup/restore and worker isolation before release. Saved follow-up dates drive in-app reminders through the worker; they do not send external notifications. Local Docker validation is not a live deployment.
 
 ### Milestone 6 release notes
 
 Apply additive migration `20261004000000_benefit_passport` before deploying the runtime. It adds Benefit assessment enums/table and audit metadata; Passport entries themselves derive from original closed employments and need no backfill or generation job. No new environment variables, dependencies, provider services or background processes are introduced.
 
-Validate own/foreign/anonymous Passport access, source deletion/revision, reopened employment, masked identifiers and narrow-screen navigation on Rumpty before release. Existing private storage, TLS, database backups and ingress requirements remain. Benefit assessments are worker judgements against evidence, not provider verification. No reminder scheduler or export job is enabled.
+Validate own/foreign/anonymous Passport access, source deletion/revision, reopened employment, masked identifiers and narrow-screen navigation on Rumpty before release. Existing private storage, TLS, database backups and ingress requirements remain. Benefit assessments are worker judgements against evidence, not provider verification. The reminder scheduler is implemented; Passport export is not.
 
 ## Milestone 7 worker and recovery runbook
 
@@ -229,8 +158,8 @@ Restore drill:
 
 1. Record backup timestamps, application version and migration version. Restore into isolated Rumpty PostgreSQL and a **private** bucket with separate credentials; do not overwrite production to test recovery. Disable public routing and stop workers/writes during recovery.
 2. Restore database and compatible object snapshot. Apply committed migrations with the release image. Reconcile object metadata against available versions; absent bytes must remain unavailable, never replaced with fabricated evidence. Review retention/deletion implications of restoring previously deleted objects and purge them according to the agreed retention policy.
-3. Revoke restored authentication sessions (`DELETE FROM "AuthSession"`) before serving users. Rotate session secrets where appropriate. Reset the two BackgroundJob rows to pending, clear leaseToken/leaseUntil/cursor, set attempts=0, lastSucceededAt=NULL, createdAt/dueAt/updatedAt to now; this restarts a complete reminder sweep. Preserve Reminder rows so saved snoozes/dismissals survive.
-4. Delete only `treviqo:jobs:due` and `treviqo:worker:heartbeat` in the isolated Redis namespace. Never use FLUSHALL against a shared service. Start worker, verify both completed jobs and health, then start web. Restored reminders independently revalidate current evidence.
+3. Revoke restored authentication sessions (`DELETE FROM "AuthSession"`) before serving users. Rotate session secrets where appropriate. Reset the four configured BackgroundJob rows (`reminders`, `session_cleanup`, `account_cleanup`, `extraction_cleanup`) to pending, clear leaseToken/leaseUntil/cursor, set attempts=0, lastSucceededAt=NULL, createdAt/dueAt/updatedAt to now; this restarts a complete reminder sweep. Preserve Reminder rows so saved snoozes/dismissals survive.
+4. Delete only `treviqo:jobs:due` and `treviqo:worker:heartbeat` in the isolated Redis namespace. Never use FLUSHALL against a shared service. Start worker, verify completed sweeps for all four configured jobs and health, then start web. Restored reminders independently revalidate current evidence.
 5. Verify migration drift, login/logout/revocation, own/foreign access, private signed document download/anonymous denial, source deletion, reminder reconciliation and readiness. Confirm stale evidence does not retain trusted confirmation. Record measured data loss/recovery duration and operator sign-off before any traffic cutover.
 
 Redis is not the backup of record for reminders. Audit retention and document deletion policy still require product/operator decisions; no automatic audit purge is included. Keep backups containing sensitive evidence private and restrict their lifetime/access.
@@ -241,11 +170,11 @@ Follow [the ordered deployment and live acceptance procedure](FIRST_RUMPTY_DEPLO
 
 ## First live verification
 
-[Live integration report](LIVE_RUMPTY_VERIFICATION.md): S3 upload/read/signing and AI authentication/model discovery verified; private database/Redis access, S3 deletion/expiry behavior and inference completion remain blockers. No live migration or deployment has occurred.
+[Live integration report](LIVE_RUMPTY_VERIFICATION.md): S3 upload/read/signing and AI authentication/model discovery verified; private database/Redis access, S3 deletion/expiry behavior and inference completion remain blockers. That October 4 report predates the current live application; use it as historical evidence only.
 
 ## Deployment blocker follow-up
 
-See [private-network execution, S3/AI diagnosis and manual backup fallback](RUMPTY_BLOCKERS.md) for current results and operator steps. Internal PostgreSQL/Redis DNS is expected to require a Rumpty-hosted workload; no public access is needed.
+See [private-network execution, S3/AI diagnosis and manual backup fallback](RUMPTY_BLOCKERS.md) for historical results and private-network context; use the [current deployment guidance](RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation) for present status. Internal PostgreSQL/Redis DNS is expected to require a Rumpty-hosted workload; no public access is needed.
 
 ### Scheduled deletion rollout
 
@@ -327,3 +256,75 @@ without storage; production worker deployment preflight therefore requires S3.
 Run `npm run deployment:check -- --worker` with those variables to validate config,
 and add `--services --runtime` to check database/Redis and job health. Storage
 permissions/versioning still require the existing private-bucket acceptance checks.
+
+## Direct S3 DELETE authorization investigation
+
+For an operation-by-operation audit and an explicitly invoked disposable-object
+probe, see [S3 DELETE authorization investigation](S3_DELETE_AUTHORIZATION_INVESTIGATION.md).
+The probe uses separate confirmed `PROBE_*` configuration and does not run in the
+worker loop. Test-bucket success does not establish production-bucket permissions;
+a production disposable probe requires separate authorization. Never use a 403 as
+proof of object absence.
+
+## Diagnosing database and worker readiness — 20 October 2026
+
+Observed operator evidence: web `readiness_failed database,worker` at 04:25:33 and 04:38:26, repeated worker-only readiness failures, and worker `Worker dependencies unavailable; retrying.` at 04:26:13. These are supplied log times; their timezone and instance correlation have not been independently established. They do not establish a common cause with S3 DELETE authorization. No production inspection or restart was performed in this investigation.
+
+### What each signal means
+
+- Web `/api/health` reports process liveness only; it can be 200 throughout an infrastructure outage.
+- Web readiness runs database, Redis, storage, worker and auth checks concurrently, each with a three-second deadline. `database` means one of the sequential User/Reminder/BackgroundJob reads failed or the whole database check exceeded that deadline. It does not distinguish connectivity, pool contention, missing schema or slow queries by itself. Deadline expiry does not cancel the underlying query.
+- `worker` is required by default in production unless explicitly overridden. It can mean the worker-health check returned false, threw on Redis/database access, or exceeded the readiness deadline. Repeated worker-only failures mean that readiness invocation's other checks passed; they do not prove a healthy database history.
+- The worker retry message means `tick()` or its subsequent health check threw. A tick starts with Redis PING, initializes/reclaims/reads durable jobs in PostgreSQL, repairs the Redis due queue, claims at most one job, processes it and publishes a heartbeat. Failure before heartbeat publication can eventually expire the shared heartbeat.
+- A processing or success-checkpoint failure is caught inside the job runner, logged, and rescheduled with a lease-token/state condition. If retry persistence succeeds, the tick can still publish a heartbeat. If retry persistence fails, the error escapes to the runtime. A fresh heartbeat is therefore not sufficient proof of completed jobs.
+- Shared health requires a finite heartbeat no more than five seconds in the future and no more than 45 seconds old, all four configured job rows, fewer than five attempts each, due dates less than five minutes overdue, and a completed sweep within two hours. A never-completed job has a two-minute startup allowance. Redis expires the heartbeat key after 45 seconds; a missing key fails health at real-world timestamps.
+- Worker HTTP `/health` reads only its own in-memory snapshot. Startup is unhealthy until a tick and shared health check both succeed. A failed tick/check clears the snapshot; a hung tick/check can leave the previous snapshot until it becomes 45 seconds old. Clock rollback also fails local health. HTTP does not execute work or query dependencies and cannot borrow another instance's healthy snapshot.
+
+Ticks wait ten seconds after completing/failing; this is not a ten-second execution deadline. Completed sweeps recur after 60 seconds; additional batches are immediately due for a later tick. Failed jobs back off from ten seconds to thirty minutes. Expired two-minute leases are reclaimed on a subsequent successful tick and increment attempts. Five failures make health false but do not permanently disable retries. Do not clear attempts, leases, job rows or Redis to make health appear green.
+
+PostgreSQL uses one lazily created Prisma client per process, with provider logging disabled. Connection/pool settings come from the runtime `DATABASE_URL`; no application-wide transaction override is configured. Reminder reconciliation uses serializable interactive transactions with Prisma defaults; account cleanup includes separately bounded transactions. Connection failures, pool timeouts, transaction expiry and serialization conflicts can therefore occur at different stages. Redis uses lazy connection, a two-second connection timeout, 2.5-second command timeout, one retry per request and no automatic reconnect strategy; a client in `end` state is recreated on a subsequent `getRedis()` call.
+
+### Safe diagnostics added by this investigation
+
+These diagnostics exist in source and require a future authorized deployment before they can appear in production. Existing summary logs and public health response bodies are preserved. Runtime categories and worker-health reasons are written directly to server stderr: React must not replay these operational diagnostics into the browser console or development error overlay during Server Component rendering.
+
+- `runtime_failed operation=readiness_database category=...` distinguishes the failed readiness check and an allowlisted category.
+- `runtime_failed operation=worker_database|worker_redis category=...` identifies the failing tick/shared-health dependency boundary.
+- `runtime_failed operation=worker_job category=...` and `worker_job_failed job=...` identify a caught processing/checkpoint failure. Only the four fixed scheduled-job names are emitted, never a record ID or cursor.
+- `runtime_failed operation=worker_tick|worker_health category=...` distinguishes exceptions from the runtime's two phases.
+- `worker_health_failed reason=...` distinguishes invalid/future/expired heartbeats, missing jobs, retry thresholds, overdue jobs, stale sweeps and jobs that never completed.
+
+Categories include database connectivity/authentication/schema/pool-timeout/transaction/conflict, DNS, refused/reset connections and readiness deadlines. Unrecognized errors remain `unknown`; Redis protocol errors use `redis_command`. No error-message parsing, raw error codes, messages, stacks, provider payloads, connection URLs, credentials or user data are logged. Categories narrow the investigation; they cannot prove a provider outage or explain every error. A permanently stuck operation may not emit a failure until it rejects; inspect snapshot/heartbeat age as well.
+
+### Exact read-only production verification
+
+1. In Rumpty, inspect **both** service configurations and all running instances privately. Confirm matching intended PostgreSQL database and Redis service/namespace, current release, startup command, runtime secret version and instance start time. Compare values privately; report only matches, timestamps and status. A local `.env` or Git revision does not prove deployed configuration. Do not print environment dumps. Both processes cache clients; configuration changes do not update an already running process automatically.
+2. Confirm web ingress probes `/api/health` and `/api/ready`, worker probes `/health`, the injected port matches the listener, the worker is always on, startup grace is at least 90 seconds and shutdown grace exceeds ten seconds. Do not change these settings during this inspection. Correlate logs by instance and normalized timezone, including restarts, memory/CPU pressure and provider database connection limits.
+3. From each service's network context, use the provider's private SQL console/read-only connection to run `SELECT 1;`, then the query below. Apply a session-local three-second statement timeout in the read-only transaction. Report success, elapsed time and safe error category only; never copy raw database errors containing connection or query details. Do not run migrations or job ticks.
+
+```sql
+BEGIN READ ONLY;
+SET LOCAL statement_timeout = '3s';
+SELECT 1;
+SELECT 1 FROM "User" LIMIT 1;
+SELECT 1 FROM "Reminder" LIMIT 1;
+SELECT "id", "state", "attempts", "dueAt", "createdAt", "lastSucceededAt",
+       "leaseUntil",
+       CASE WHEN "errorCode" IN ('job_failed', 'lease_expired')
+            THEN "errorCode" ELSE NULL END AS "safeErrorCode"
+FROM "BackgroundJob"
+WHERE "id" IN ('reminders', 'session_cleanup', 'account_cleanup', 'extraction_cleanup');
+COMMIT;
+```
+
+4. Using an authenticated private Redis console for that same configured service, run only the following read commands. Report PING status, TTL and computed heartbeat age, never connection details. Compare the heartbeat milliseconds with current UTC epoch milliseconds. Repeat after at least one normal tick interval without changing the queue.
+
+```text
+PING
+TTL treviqo:worker:heartbeat
+GET treviqo:worker:heartbeat
+ZCARD treviqo:jobs:due
+```
+
+5. Compare all four jobs' attempt counts, due times, lease expiry and last completed sweeps with the thresholds above. Readiness can fail while Redis PING and `SELECT 1` succeed: those checks do not establish application table access, transaction capacity or completed jobs. Inspect migration status and provider connection/pool/lock metrics privately if needed, without collecting query texts or user rows. A SQL console success is only a control unless it uses the same role and network as the affected runtime.
+6. Collect the next safe diagnostic categories after a separately authorized release, or ask the operator/provider for equivalent read-only evidence now. Do not run `worker --once`, `deployment:check --services`, cleanup, queue resets or test suites against production: some of those commands perform writes. Keep S3 authorization findings separate unless a failing account-cleanup operation explicitly identifies storage; per-account cleanup can catch/retry storage failures without failing the entire scheduled sweep.

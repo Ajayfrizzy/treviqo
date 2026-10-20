@@ -1,99 +1,67 @@
 # Treviqo Architecture
 
-## Principles
-- modular
-- mobile-first
-- secure by default
-- Rumpty-only infrastructure where equivalent services exist
-- no dependency on privileged employer/bank/PFA/insurer APIs
-- simple enough to ship reliably in 30 days
+## Current implementation
 
-Avoid premature microservices. Prefer a modular monolith.
+Next.js App Router hosts React pages and Node.js route handlers in one strict-TypeScript modular monolith. A separately deployed Node.js worker imports the same domain services. PostgreSQL is the source of truth; no employer, bank, PFA or insurer integration is required. Runtime infrastructure is hosted on RumptyCloud.
 
-## High-level architecture
-
-```text
-Mobile-first Web Client
-        |
-        v
-Next.js / React
-        |
-        v
-Node.js / TypeScript API
-        |
-        +----------------------+
-        |                      |
-        v                      v
-PostgreSQL                Object Storage
-        |                      |
-        v                      v
-Domain Data              Private Documents
-        |
-        +----------------------+
-        |                      |
-        v                      v
-Redis / Queue            Rumpty AI Inference
-        |                      |
-        v                      v
-Background Jobs          Structured Extraction
+```mermaid
+flowchart TD
+  Browser[Mobile / desktop browser] --> Web[Next.js pages and API routes]
+  Web --> Modules[Authorized domain services]
+  Modules --> DB[(PostgreSQL / Prisma)]
+  Modules --> Redis[(Redis rate limits / due queue)]
+  Modules --> S3[Private S3-compatible documents]
+  Modules --> AI[Rumpty AI inference]
+  Worker[Node.js background worker] --> Modules
+  Worker --> Redis
+  Worker --> DB
 ```
 
-## Suggested modules
-- auth
-- users
-- employments
-- documents
-- extractions
-- benefits
-- exitCases
-- settlements
-- pensions
-- passport
-- reminders
-- audit
+| Boundary                         | Implemented responsibility                                                                | Source                                                                           |
+| -------------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Web/API                          | Rendering, request validation, session checks and response transport                      | `src/app/`, `src/components/`                                                    |
+| Authentication/profile/account   | Argon2id credentials, revocable sessions, personal profile and seven-day account deletion | `src/modules/auth/`, `profile/`, `account/` under `src/modules/`                 |
+| Employment/documents/extractions | Owned records, private originals, proposed/reviewed fields and revision history           | `src/modules/employments/`, `documents/`, `extractions/` under `src/modules/`    |
+| Exit/finance/Passport/reminders  | Deterministic decisions and owner/employment-scoped evidence reuse                        | `src/modules/exits/`, `finance/`, `passport/`, `reminders/` under `src/modules/` |
+| Infrastructure                   | Validated runtime environment, Prisma, Redis, S3 and AI adapters                          | `src/server/`                                                                    |
+| Worker                           | Continuous loop, health endpoint, durable job dispatch                                    | `src/worker/`, `src/server/jobs/`                                                |
 
-## PostgreSQL
-Source of truth for structured state.
-Use JSON only for versioned extraction payloads, provider metadata, or audit context—not instead of proper domain fields.
+### Data and ownership
 
-## Object storage
-Private S3-compatible bucket for contracts, payslips, pension statements, settlement docs, exit docs, and benefit docs.
+See [the Prisma schema](../../prisma/schema.prisma). Employer name is stored on Employment; there is no independent Employer table. Passport entries and checklist results are derived, not stored as PassportEntry/ExitChecklistItem tables. Persistent records include User, AuthSession, Employment, EmploymentDocument, DocumentExtraction, ExtractedField, ExtractionFieldRevision, ExitCase, SettlementItem, PensionVerification, Benefit, Reminder, BackgroundJob and AuditEvent.
 
-Store metadata in PostgreSQL:
-- object key
-- original/sanitized filename
-- MIME
-- size
-- owner
-- document type
-- timestamps
+Every server operation checks the authenticated user and relevant employment. Composite ownership foreign keys reinforce those boundaries. A user's documents from another employment cannot satisfy this employment's evidence checks. Private storage keys are not public document URLs. Signed downloads are short-lived bearer links issued only after authorization/audit.
 
-## Redis
-Use for:
-- queues
-- locks
-- short-lived cache
-- rate-limit/idempotency state where useful
+Mutations use atomic writes/audits and appropriate row locks/version checks. Exit, finance, Passport and reminder display reads use owner-filtered queries; they are not guaranteed to be one cross-query snapshot. Mutations recheck current evidence/version under their transaction. Source changes invalidate derived confirmation rather than silently copying old values.
 
-Not a primary datastore.
+### Background work
 
-## AI boundary
-Document -> text/content -> AI extraction -> proposed fields -> user review -> trusted fields.
+PostgreSQL BackgroundJob rows hold durable due times, cursors, attempts and two-minute leases. Redis stores fixed job IDs in a due sorted set and a heartbeat; lost queue state is reconstructed from PostgreSQL. Database locks/leases provide ownership fencing, not Redis application locks. Redis also enforces request rate limits and is not the domain datastore or a general document cache.
 
-## Rules boundary
-Rules consume trusted data and output checklist state, explanations, next actions, and reminder triggers.
+Four recurring jobs are defined in [queue.ts](../../src/server/jobs/queue.ts):
 
-## Deployment target
-- web service
-- API service if separated
-- PostgreSQL
-- Redis
-- private bucket
-- worker process
-- Rumpty AI
+- `reminders`: reconcile unresolved exit actions and pension follow-ups in batches of 20 cases.
+- `session_cleanup`: remove expired sessions in batches of 500; access checks already enforce expiry.
+- `account_cleanup`: process due scheduled account deletion with verified object checkpoints and per-account backoff.
+- `extraction_cleanup`: fail expired extraction attempts in bounded batches of 20.
 
-## Future native app
-The future React Native/Expo app must reuse the API, domain model, auth model, rules engine, and document pipeline.
+The loop ticks every 10 seconds; completed sweeps become due after 60 seconds. Redis loss, lease expiry and retries are recoverable. There is no background inference queue: extraction runs in the request flow outside database transactions. The worker does not infer legal/benefit decisions, send external notifications or clean arbitrary pending documents for active accounts.
+
+### Evidence and provider boundaries
+
+Original documents remain in private S3 storage. PostgreSQL stores metadata, reviews and selected excerpts. Local bounded PDF text preparation feeds Rumpty inference; narrow source-label recovery and manual entry retain proposed/unreviewed status. Reviewed facts feed deterministic rules; no model decides legal entitlement or benefit portability. See [AI contract](../ai/AI_DOCUMENTS.md#current-implementation).
+
+Account deletion schedules cleanup seven days ahead and disables normal access immediately. A pending document is finalized only after verifiable object absence. Normal S3 DELETE is currently denied by the provider; [recovery and current limits](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status) apply to both web and worker workflows.
+
+### Deployment and future clients
+
+Web, worker and migration images are explicit Docker targets; web remains the default. Each deployed process has separate runtime environment configuration. Matching source code does not guarantee matching credentials or permissions. See [deployment](../deployment/RUMPTY_DEPLOYMENT.md) for health, backups and release operations.
+
+Native mobile is future work. Shared TypeScript domain boundaries and APIs support that direction, but no native client or mobile-auth compatibility guarantee is delivered.
+
+## Historical implementation detail
+
+The milestone sections below preserve earlier architectural decisions and validation context. Their absent-feature statements and earlier read/persistence descriptions are superseded by the current implementation above.
 
 ## Milestone 0 implementation
 
@@ -164,8 +132,9 @@ The Milestone 7 worker extends this monolith with PostgreSQL durable job/cursor/
 Account deletion now uses the existing background-job outbox/Redis worker, not
 browser-driven permanent cleanup. User schedule/start timestamps define active,
 pending and deleting states; per-account retry metadata and document checkpoints
-support bounded cleanup. Auth session creation, scheduling and cancellation share
-the User lock with upload reservation/PUT. The credentials provider can return a
+support bounded cleanup. Auth session creation, scheduling and cancellation use the User lock, as does
+upload reservation. Storage PUT runs outside that database lock; the durable
+reservation and upload grace period protect cleanup. The credentials provider can return a
 verified pending/processing state without creating a session; cancellation requires
 fresh credentials and creates a fresh session afterward. See
 [account lifecycle details](../security/ACCOUNT_DELETION.md).

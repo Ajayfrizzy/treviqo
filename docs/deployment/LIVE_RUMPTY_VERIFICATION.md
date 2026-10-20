@@ -1,27 +1,29 @@
 # First live Rumpty integration verification — 4 October 2026
 
+> Historical investigation record. Do not treat its original deployment status, model protocol or test counts as current. See the [deployment guide](RUMPTY_DEPLOYMENT.md), [current AI contract](../ai/AI_DOCUMENTS.md#current-implementation) and [current storage-deletion status](S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+
 Result: **partial connectivity verified; deployment acceptance blocked**. Configuration was loaded from ignored `.env`. No configuration values, credentials, connection strings, signed URLs or model outputs are included in this report. No commit, push, deployment, schema mutation or architecture change occurred. Only synthetic storage/inference content was used.
 
 ## Results
 
-| Check | Observed result |
-| --- | --- |
-| Production preflight | Failed: APP_URL/NEXTAUTH_URL remain matching HTTP localhost origins. Separately, WORKER_REQUIRED is explicitly false, which release acceptance rejects. |
-| PostgreSQL | Prisma connectivity failed. Configured hostname is internal and does not resolve from this machine. TLS mode is require. Database state is **unknown**, not assumed empty. |
-| Database/migrations | No migrations applied. Could not inspect tables or migration history; no baseline/reset/resolve attempted. Run the documented inspection and migration procedure from the authorized Rumpty network. |
-| Redis | Configured internal hostname does not resolve locally; PING failed. URL uses redis rather than rediss; verify the provider's private-network transport guidance instead of changing protocol by guesswork. |
-| S3 connectivity | HTTPS endpoint resolved; HeadBucket succeeded. |
-| S3 write/read | Private synthetic PutObject succeeded; SDK read and signed GET returned identical bytes. Signed GET returned HTTP 200 with attachment disposition. |
-| S3 privacy | Unsigned GET and all-zero tampered signature returned HTTP 403. This verifies the tested object, not every bucket policy. |
-| S3 expiry | After the two-second signature lifetime plus 3.5-second wait, GET returned HTTP 500. Bytes were not returned, but this is not the expected 401/403/404 denial; provider expiry behavior needs investigation. |
-| S3 deletion | DeleteObject returned AccessDenied/403. Cleanup could not finish, and deletion/revocation behavior is not accepted. See residual object below. |
-| AI authentication/model | `/models` without authorization returned 401; configured Bearer credential returned 200 and listed the configured model (one listed model). Credential and model identifier are valid for discovery. |
-| AI application classification | Existing synthetic employment-contract classification payload with JSON response format exceeded the application's 25-second deadline. No classification/extraction response was available to validate. |
-| AI longer diagnostic | One explicit classification diagnostic with a 60-second timeout also aborted without HTTP response; observed wall time approximately 80 seconds. No timeout change was made to the application. |
-| AI minimal extraction | A final one-field synthetic employer extraction with max_tokens=128 also aborted without response (25-second abort signal; approximately 91 seconds observed wall time). JSON/schema/grounding and the six-type extraction suite remain unverified; no further paid attempts were made. |
-| Worker | Health lookup unavailable because Redis/PostgreSQL are unreachable. No job dispatched, session cleanup run, scheduling modified or heartbeat fabricated. |
-| Health/readiness | Local production standalone runtime, bound to loopback, returned `/api/health` 200 with Treviqo status and `/api/ready` 503 with generic unavailable status. This is not public Rumpty HTTPS ingress verification. |
-| Backups/snapshots | Still unverified: no snapshot ID, retention configuration or successful restore evidence available. |
+| Check                         | Observed result                                                                                                                                                                                                                                                                         |
+| ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Production preflight          | Failed: APP_URL/NEXTAUTH_URL remain matching HTTP localhost origins. Separately, WORKER_REQUIRED is explicitly false, which release acceptance rejects.                                                                                                                                 |
+| PostgreSQL                    | Prisma connectivity failed. Configured hostname is internal and does not resolve from this machine. TLS mode is require. Database state is **unknown**, not assumed empty.                                                                                                              |
+| Database/migrations           | No migrations applied. Could not inspect tables or migration history; no baseline/reset/resolve attempted. Run the documented inspection and migration procedure from the authorized Rumpty network.                                                                                    |
+| Redis                         | Configured internal hostname does not resolve locally; PING failed. URL uses redis rather than rediss; verify the provider's private-network transport guidance instead of changing protocol by guesswork.                                                                              |
+| S3 connectivity               | HTTPS endpoint resolved; HeadBucket succeeded.                                                                                                                                                                                                                                          |
+| S3 write/read                 | Private synthetic PutObject succeeded; SDK read and signed GET returned identical bytes. Signed GET returned HTTP 200 with attachment disposition.                                                                                                                                      |
+| S3 privacy                    | Unsigned GET and all-zero tampered signature returned HTTP 403. This verifies the tested object, not every bucket policy.                                                                                                                                                               |
+| S3 expiry                     | After the two-second signature lifetime plus 3.5-second wait, GET returned HTTP 500. Bytes were not returned, but this is not the expected 401/403/404 denial; provider expiry behavior needs investigation.                                                                            |
+| S3 deletion                   | DeleteObject returned AccessDenied/403. Cleanup could not finish, and deletion/revocation behavior is not accepted. See residual object below.                                                                                                                                          |
+| AI authentication/model       | `/models` without authorization returned 401; configured Bearer credential returned 200 and listed the configured model (one listed model). Credential and model identifier are valid for discovery.                                                                                    |
+| AI application classification | Existing synthetic employment-contract classification payload with JSON response format exceeded the application's 25-second deadline. No classification/extraction response was available to validate.                                                                                 |
+| AI longer diagnostic          | One explicit classification diagnostic with a 60-second timeout also aborted without HTTP response; observed wall time approximately 80 seconds. No timeout change was made to the application.                                                                                         |
+| AI minimal extraction         | A final one-field synthetic employer extraction with max_tokens=128 also aborted without response (25-second abort signal; approximately 91 seconds observed wall time). JSON/schema/grounding and the six-type extraction suite remain unverified; no further paid attempts were made. |
+| Worker                        | Health lookup unavailable because Redis/PostgreSQL are unreachable. No job dispatched, session cleanup run, scheduling modified or heartbeat fabricated.                                                                                                                                |
+| Health/readiness              | Local production standalone runtime, bound to loopback, returned `/api/health` 200 with Treviqo status and `/api/ready` 503 with generic unavailable status. This is not public Rumpty HTTPS ingress verification.                                                                      |
+| Backups/snapshots             | Still unverified: no snapshot ID, retention configuration or successful restore evidence available.                                                                                                                                                                                     |
 
 The full production preflight was not bypassed or marked passed. Independent S3/AI connectivity diagnostics used the unchanged adapters with development-mode environment parsing solely because the local HTTP app origin otherwise prevents provider initialization. The real provider endpoints remained HTTPS; certificate verification remained enabled. The local web health smoke explicitly used production mode.
 
@@ -29,7 +31,7 @@ The full production preflight was not bypassed or marked passed. Independent S3/
 
 One synthetic object remains because the configured credential cannot delete it:
 
-`deployment-probes/e8c9635a-b2f4-46c8-a135-d87549cbd7db.txt`
+The exact synthetic key is retained only in the private operator record; it is intentionally omitted from public documentation.
 
 Contents are a short deployment-test marker with no personal data. Grant the intended restricted DeleteObject permission and remove this exact key with the existing storage adapter, or delete it through the Rumpty console. Check retained versions/lifecycle separately. Do not broaden to a public bucket or delete unrelated objects. No additional storage objects were created after discovering this failure.
 

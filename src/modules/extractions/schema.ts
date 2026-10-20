@@ -1,3 +1,4 @@
+import { deriveEvidenceFromSource, valueGrounded } from "./grounding";
 import { z } from "zod";
 import {
   confidenceSchema,
@@ -5,12 +6,12 @@ import {
   supportedTypes,
   type ExtractionType,
 } from "./shared";
-export const PROMPT_VERSION = "evidence-v5";
-export const SCHEMA_VERSION = "fields-v5";
+export const PROMPT_VERSION = "evidence-v12";
+export const SCHEMA_VERSION = "fields-v12";
 const cell = z
   .object({
-    value: z.string().trim().min(1).max(1000).nullable(),
-    evidence: z.string().trim().min(1).max(1600).nullable(),
+    value: z.string().min(1).max(1000).nullable(),
+    evidence: z.string().min(1).max(1600).nullable(),
     confidence: confidenceSchema,
   })
   .strict();
@@ -55,20 +56,32 @@ export function proposalsSchema(type: ExtractionType) {
 }
 export const normalizeEvidence = (text: string) =>
   text.replace(/\s+/g, " ").trim();
-export function groundedCell(input: z.infer<typeof cell>, source: string) {
+export function groundedCell(
+  input: z.infer<typeof cell>,
+  source: string,
+  key = "",
+) {
   const evidence = input.evidence && normalizeEvidence(input.evidence);
   // Unsupported proposals are discarded, never silently promoted to trusted data.
   if (
     !input.value ||
     !evidence ||
     !normalizeEvidence(source).includes(evidence) ||
-    !evidence.includes(normalizeEvidence(input.value))
+    !valueGrounded(key, input.value, evidence)
   )
     return { value: null, evidence: null, confidence: "needs_review" as const };
-  return { ...input, evidence };
+  return { ...input, confidence: "needs_review" as const };
 }
 // Bounded structural salvage only: one complete JSON object or array, possibly
 // fenced or wrapped in prose. Never invent delimiters or splice broken objects.
+class JsonStructureError extends Error {
+  constructor(
+    public readonly reason:
+      "invalid_json" | "multiple_json_candidates" | "truncated_json",
+  ) {
+    super("Invalid extraction structure");
+  }
+}
 function decodeValue(raw: string): unknown {
   if (raw.length > 65536) throw new Error("Oversized output");
   let start = -1,
@@ -82,6 +95,8 @@ function decodeValue(raw: string): unknown {
       if (c === "{" || c === "[") {
         start = i;
         stack.push(c);
+      } else if (c === "}" || c === "]") {
+        throw new JsonStructureError("invalid_json");
       }
       continue;
     }
@@ -102,8 +117,11 @@ function decodeValue(raw: string): unknown {
       }
     }
   }
-  if (start >= 0 || candidates.length !== 1)
-    throw new Error("Ambiguous output");
+  // Never select/merge one payload from several, even if one looks like an example.
+  if (candidates.length > 1)
+    throw new JsonStructureError("multiple_json_candidates");
+  if (start >= 0) throw new JsonStructureError("truncated_json");
+  if (candidates.length !== 1) throw new JsonStructureError("invalid_json");
   return JSON.parse(candidates[0]!);
 }
 function record(value: unknown): value is Record<string, unknown> {
@@ -133,12 +151,17 @@ const aliases: Record<string, ExtractionType | "other"> = {
   salary_slip: "payslip",
   resignation_letter: "resignation_letter",
   resignation: "resignation_letter",
+  exit_letter: "exit_letter",
+  exit_confirmation_letter: "exit_letter",
   termination_letter: "termination_letter",
   termination: "termination_letter",
   final_settlement: "final_settlement",
   final_settlement_document: "final_settlement",
   final_settlement_statement: "final_settlement",
   pension_statement: "pension_statement",
+  benefit_document: "benefit_document",
+  benefit_summary: "benefit_document",
+  employee_benefit_summary: "benefit_document",
   other: "other",
 };
 export function parseClassification(raw: string, source: string) {
@@ -194,8 +217,49 @@ const fieldAliases: Record<string, string> = {
   job_title: "role",
   role_title: "role",
 };
+export class ExtractionParseError extends Error {
+  constructor(public readonly counts: Record<string, number>) {
+    super("No grounded proposals");
+  }
+}
 export function parseFields(raw: string, type: ExtractionType, source: string) {
-  const decoded = decodeValue(raw);
+  const counts = {
+    invalid_json: 0,
+    multiple_json_candidates: 0,
+    truncated_json: 0,
+    invalid_structure: 0,
+    unsupported_key: 0,
+    missing_evidence: 0,
+    evidence_recovered: 0,
+    evidence_ambiguous: 0,
+    evidence_not_found: 0,
+    evidence_mismatch: 0,
+    value_mismatch: 0,
+    conflicting_duplicate: 0,
+  };
+  try {
+    return parseFieldEntries(raw, type, source, counts);
+  } catch (error) {
+    if (error instanceof ExtractionParseError) throw error;
+    if (!Object.values(counts).some(Boolean)) counts.invalid_structure++;
+    throw new ExtractionParseError(counts);
+  }
+}
+function parseFieldEntries(
+  raw: string,
+  type: ExtractionType,
+  source: string,
+  counts: ExtractionParseError["counts"],
+) {
+  let decoded: unknown;
+  try {
+    decoded = decodeValue(raw);
+  } catch (error) {
+    const reason =
+      error instanceof JsonStructureError ? error.reason : "invalid_json";
+    counts[reason]!++;
+    throw new ExtractionParseError(counts);
+  }
   let entries: unknown[];
   if (Array.isArray(decoded)) entries = decoded;
   else if (record(decoded)) {
@@ -226,6 +290,7 @@ export function parseFields(raw: string, type: ExtractionType, source: string) {
   let partial = false;
   for (const entry of entries) {
     if (!record(entry)) {
+      counts.invalid_structure!++;
       partial = true;
       continue;
     }
@@ -233,10 +298,12 @@ export function parseFields(raw: string, type: ExtractionType, source: string) {
     try {
       item = normalizeProperties(entry);
     } catch {
+      counts.invalid_structure!++;
       partial = true;
       continue;
     }
     if (typeof item.key !== "string") {
+      counts.invalid_structure!++;
       partial = true;
       continue;
     }
@@ -245,8 +312,66 @@ export function parseFields(raw: string, type: ExtractionType, source: string) {
       ? fieldAliases[normalized]!
       : normalized;
     if (!Object.hasOwn(allowed, key) || key === "entries_complete") {
-      if (item.value !== null) partial = true;
+      if (item.value !== null) {
+        partial = true;
+        counts.unsupported_key!++;
+      }
       continue;
+    }
+    if (
+      typeof item.value === "string" &&
+      item.value.trim() &&
+      item.value.length <= 1000 &&
+      (item.evidence == null ||
+        (typeof item.evidence === "string" && !item.evidence.trim()))
+    ) {
+      const prefix = /^(contribution_[1-3])_/.exec(key)?.[1];
+      // Use only explicitly proposed sibling context, never inferred context or
+      // another row's fields. Conflicting duplicates cannot disambiguate a row.
+      const contexts = new Map<string, string>();
+      let conflict = false;
+      if (prefix)
+        for (const candidate of entries) {
+          if (!record(candidate)) continue;
+          let sibling: Record<string, unknown>;
+          try {
+            sibling = normalizeProperties(candidate);
+          } catch {
+            continue;
+          }
+          if (typeof sibling.key !== "string") continue;
+          const siblingKey = normalizeKey(sibling.key);
+          if (
+            ![
+              `${prefix}_period`,
+              `${prefix}_date`,
+              `${prefix}_employer`,
+            ].includes(siblingKey)
+          )
+            continue;
+          if (
+            typeof sibling.value !== "string" ||
+            !sibling.value.trim() ||
+            sibling.value.length > 1000
+          )
+            continue;
+          if (
+            contexts.has(siblingKey) &&
+            contexts.get(siblingKey) !== sibling.value
+          )
+            conflict = true;
+          contexts.set(siblingKey, sibling.value);
+        }
+      const recovery = conflict
+        ? { evidence: null, reason: "evidence_ambiguous" as const }
+        : deriveEvidenceFromSource(
+            key,
+            item.value,
+            source,
+            [...contexts].map(([key, value]) => ({ key, value })),
+          );
+      counts[recovery.reason]!++;
+      if (recovery.evidence !== null) item.evidence = recovery.evidence;
     }
     const parsed = cell.safeParse({
       value: item.value,
@@ -254,12 +379,29 @@ export function parseFields(raw: string, type: ExtractionType, source: string) {
       confidence: "needs_review",
     });
     if (!parsed.success) {
+      if (
+        typeof item.evidence !== "string" ||
+        !normalizeEvidence(item.evidence)
+      )
+        counts.missing_evidence!++;
+      else counts.invalid_structure!++;
       partial = true;
       continue;
     }
-    const grounded = groundedCell(parsed.data, source);
+    const grounded = groundedCell(parsed.data, source, key);
     if (!grounded.value) {
-      if (item.value !== null || item.evidence !== null) partial = true;
+      if (item.value !== null || item.evidence !== null) {
+        partial = true;
+        if (!parsed.data.evidence || !normalizeEvidence(parsed.data.evidence))
+          counts.missing_evidence!++;
+        else if (
+          !normalizeEvidence(source).includes(
+            normalizeEvidence(parsed.data.evidence),
+          )
+        )
+          counts.evidence_mismatch!++;
+        else counts.value_mismatch!++;
+      }
       continue;
     }
     const previous = valid.get(key);
@@ -267,12 +409,13 @@ export function parseFields(raw: string, type: ExtractionType, source: string) {
       previous &&
       normalizeEvidence(previous.value!) !== normalizeEvidence(grounded.value)
     ) {
+      counts.conflicting_duplicate!++;
       conflicting.add(key);
       valid.delete(key);
       partial = true;
     } else if (!conflicting.has(key) && !previous) valid.set(key, grounded);
   }
-  if (!valid.size) throw new Error("No grounded proposals");
+  if (!valid.size) throw new ExtractionParseError(counts);
   // Partial means coverage is incomplete or proposals were omitted, not that
   // the remaining values are trusted. Pension completeness is always manual.
   partial ||=
@@ -286,5 +429,5 @@ export function parseFields(raw: string, type: ExtractionType, source: string) {
       confidence: "needs_review" as const,
     }),
   }));
-  return Object.assign(fields, { partial });
+  return Object.assign(fields, { partial, counts });
 }

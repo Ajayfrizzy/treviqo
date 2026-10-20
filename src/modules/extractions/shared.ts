@@ -4,8 +4,10 @@ export const supportedTypes = [
   "payslip",
   "resignation_letter",
   "termination_letter",
+  "exit_letter",
   "final_settlement",
   "pension_statement",
+  "benefit_document",
 ] as const;
 export type ExtractionType = (typeof supportedTypes)[number];
 const pensionRows = Object.fromEntries(
@@ -23,9 +25,35 @@ const pensionRows = Object.fromEntries(
   ),
 );
 export const fieldLabels = {
+  exit_letter: {
+    employer: "Employer",
+    employee: "Employee",
+    role: "Role",
+    letter_date: "Letter date",
+    last_working_day: "Confirmed last working day",
+    exit_type: "Stated exit type",
+    asset_return_wording: "Asset return / clearance wording",
+    settlement_reference: "Settlement wording",
+    pension_reference: "Pension wording",
+  },
+  benefit_document: {
+    employer: "Employer",
+    employee: "Employee",
+    role: "Role",
+    health_plan_wording: "Health plan — coverage and continuation",
+    group_life_wording: "Group life — eligibility and end conditions",
+    pension_wording: "Pension — account ownership wording",
+    health_provider: "Health plan provider",
+    group_life_provider: "Group life provider",
+    pension_provider: "Pension provider",
+  },
   final_settlement: {
     pay_period: "Pay period",
     final_salary: "Final salary",
+    final_gross_salary: "Final gross salary",
+    final_net_salary: "Final net salary",
+    tax_deduction: "Tax deduction",
+    settlement_status: "Recorded settlement status",
     leave: "Leave settlement",
     reimbursement: "Reimbursement",
     bonus: "Bonus / commission",
@@ -62,6 +90,9 @@ export const fieldLabels = {
     employer: "Employer",
     employee: "Employee",
     pay_period: "Pay period",
+    payment_date: "Payment date",
+    employer_pension_contribution:
+      "Employer pension contribution (separate from net pay)",
     gross_pay: "Gross pay",
     net_pay: "Net pay",
     basic_salary: "Basic salary",
@@ -157,6 +188,7 @@ export interface ExtractionRecord {
   errorCode: string | null;
   createdAt: string;
   fields: ReviewField[];
+  needsTypeConfirmation?: boolean;
 }
 export const failureMessages: Record<string, string> = {
   unreadable:
@@ -172,10 +204,90 @@ export const failureMessages: Record<string, string> = {
   interrupted: "This attempt was interrupted. Retry or enter fields manually.",
 };
 export function labelFor(type: string | null, key: string) {
-  if (key === "document_type") return "Suggested document category";
+  if (key === "document_type") return "Document category";
   return (
     (
       fieldLabels[type as ExtractionType] as Record<string, string> | undefined
     )?.[key] ?? key
   );
+}
+
+// Shared invariant for persistence, review APIs and rendering. Unknown types
+// never gain a schema through a cast or fallback field label.
+export function fieldAllowed(type: string | null, key: string): boolean {
+  if (key === "document_type") return true;
+  return (
+    !!type &&
+    Object.hasOwn(fieldLabels, type) &&
+    Object.hasOwn(fieldLabels[type as ExtractionType], key)
+  );
+}
+export function reviewFields(record: ExtractionRecord) {
+  if (record.needsTypeConfirmation) return [];
+  return record.fields.filter(
+    (field) =>
+      field.key !== "document_type" &&
+      fieldAllowed(record.documentType, field.key),
+  );
+}
+const usefulManualFields: Record<ExtractionType, readonly string[]> = {
+  exit_letter: [
+    "employer",
+    "last_working_day",
+    "exit_type",
+    "asset_return_wording",
+  ],
+  benefit_document: [
+    "health_plan_wording",
+    "group_life_wording",
+    "pension_wording",
+  ],
+  employment_contract: ["employer", "role", "start_date", "notice_period"],
+  payslip: ["pay_period", "gross_pay", "net_pay"],
+  resignation_letter: ["letter_date", "proposed_last_day", "notice_period"],
+  termination_letter: ["letter_date", "effective_date", "reason"],
+  final_settlement: ["pay_period", "final_salary", "total"],
+  pension_statement: [
+    "provider",
+    "statement_start",
+    "statement_end",
+    "entries_complete",
+  ],
+};
+export function groupReviewFields(record: ExtractionRecord) {
+  const fields = reviewFields(record);
+  const proposed = fields.filter(
+    (f) =>
+      f.proposedValue !== null ||
+      f.value !== null ||
+      f.reviewState !== "proposed",
+  );
+  const empty = fields.filter((f) => !proposed.includes(f));
+  const useful =
+    usefulManualFields[record.documentType as ExtractionType] ?? [];
+  return {
+    proposed,
+    manual: empty.filter((f) => useful.includes(f.key)),
+    optional: empty.filter((f) => !useful.includes(f.key)),
+  };
+}
+
+export function extractionReadyMessage(record: ExtractionRecord): string {
+  if (
+    record.needsTypeConfirmation ||
+    record.errorCode === "needs_type_confirmation"
+  )
+    return "The file is saved, but its category needs confirmation before extraction can continue.";
+  if (record.sourceKind === "manual")
+    return "Manual fields are ready. Enter only details stated in your document.";
+  return "Details are ready for your review. Nothing is confirmed automatically.";
+}
+
+// Category confirmation and empty manual slots are not extracted proposals.
+export function reviewedFieldCounts(record: ExtractionRecord) {
+  const counts = { confirmed: 0, corrected: 0, rejected: 0, unknown: 0 };
+  for (const field of reviewFields(record)) {
+    if (field.reviewState !== "proposed") counts[field.reviewState]++;
+  }
+  return counts;
 }

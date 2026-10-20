@@ -21,6 +21,12 @@ const schema = z.object({
   REDIS_URL: optional(z.string().regex(/^rediss?:\/\//)),
   RUMPTY_AI_BASE_URL: optional(url),
   RUMPTY_AI_API_KEY: optional(z.string().min(1)),
+  RUMPTY_AI_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(10000)
+    .max(90000)
+    .default(60000),
   RUMPTY_AI_MODEL: optional(z.string().min(1).max(160)),
   DOCUMENT_MAX_FILE_MB: z.coerce.number().int().min(1).max(20).default(10),
   S3_ENDPOINT: optional(url),

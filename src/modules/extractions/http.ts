@@ -1,5 +1,9 @@
 import { limitWorkflow, limitResponse } from "@/server/rate-limit";
 import "server-only";
+import {
+  transientDatabaseError,
+  DATABASE_UNAVAILABLE_MESSAGE,
+} from "@/server/db/retry";
 import { ZodError } from "zod";
 import { getCurrentUser } from "@/modules/auth/session";
 import { readSmallBody, sameOrigin } from "@/modules/auth/request";
@@ -56,6 +60,8 @@ export async function extractionRequest(request: Request, documentId: string) {
   } catch (error) {
     const limited = limitResponse(error);
     if (limited) return limited;
+    if (transientDatabaseError(error))
+      return json({ error: DATABASE_UNAVAILABLE_MESSAGE }, 503);
     if (error instanceof DocumentError)
       return json({ error: error.message }, error.status);
     if (error instanceof ZodError)

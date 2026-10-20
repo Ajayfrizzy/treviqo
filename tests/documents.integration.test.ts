@@ -123,7 +123,7 @@ it("does not upload an object when metadata reservation fails", async () => {
 });
 it("cleans up ambiguous failed puts and retains a failed record", async () => {
   store.failPut = true;
-  await expect(upload()).rejects.toThrow("Upload failed");
+  await expect(upload()).rejects.toThrow("The file could not be saved");
   expect(store.objects.size).toBe(0);
   const [doc] = await service().list(a);
   expect(doc?.status).toBe("failed");
@@ -146,7 +146,7 @@ it("retains an inaccessible reservation if finalize/audit fails after upload", a
   vi.spyOn(db, "$transaction").mockImplementation((async (
     ...args: Parameters<typeof db.$transaction>
   ) => {
-    if (++calls === 3) throw new Error("commit failed");
+    if (++calls === 2) throw new Error("commit failed");
     return transaction(...args);
   }) as typeof db.$transaction);
   await expect(upload()).rejects.toThrow();
@@ -232,4 +232,211 @@ it("does not return a signed URL when its audit write fails", async () => {
       where: { documentId: doc.id, action: "document_access_issued" },
     }),
   ).toBe(0);
+});
+
+it("makes S3 calls only after reservation commit and without database locks", async () => {
+  const original = store.put.bind(store);
+  vi.spyOn(store, "put").mockImplementation(async (key, bytes) => {
+    const reserved = await db.employmentDocument.findFirstOrThrow({
+      where: { userId: a },
+    });
+    expect(reserved).toMatchObject({ status: "uploaded", objectKey: key });
+    await db.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${a} FOR UPDATE NOWAIT`;
+      await tx.$queryRaw`SELECT "id" FROM "EmploymentDocument" WHERE "id" = ${reserved.id} FOR UPDATE NOWAIT`;
+    });
+    await original(key, bytes);
+  });
+  expect((await upload()).status).toBe("ready");
+});
+it("keeps reservation and object key when failure status persistence also fails", async () => {
+  store.failPut = true;
+  store.failDelete = true;
+  vi.spyOn(db.employmentDocument, "updateMany").mockRejectedValueOnce(
+    new Error("private-db-host"),
+  );
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  await expect(upload()).rejects.toMatchObject({
+    status: 503,
+    message: "The file could not be saved. Please try again.",
+  });
+  const row = await db.employmentDocument.findFirstOrThrow({
+    where: { userId: a },
+  });
+  expect(row.status).toBe("uploaded");
+  expect(store.objects.has(row.objectKey)).toBe(true);
+  expect(log.mock.calls).toEqual([
+    ["document_upload_storage_failed"],
+    ["document_upload_finalize_failed"],
+  ]);
+});
+it("returns safe DB outage text without replaying upload reservation writes", async () => {
+  const { Prisma } = await import("@prisma/client");
+  const transaction = vi.spyOn(db, "$transaction").mockRejectedValueOnce(
+    new Prisma.PrismaClientKnownRequestError("private-host", {
+      code: "P1001",
+      clientVersion: "test",
+    }),
+  );
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  await expect(upload()).rejects.toMatchObject({
+    status: 503,
+    message:
+      "Treviqo temporarily lost connection to the database. Please retry.",
+  });
+  expect(transaction).toHaveBeenCalledTimes(1);
+  expect(store.writes).toBe(0);
+  expect(log.mock.calls).toEqual([["document_upload_db_unavailable"]]);
+});
+it("rolls back ready status when final audit fails and leaves the uploaded object recoverable", async () => {
+  const guarded = db.$extends({
+    query: {
+      auditEvent: {
+        async create() {
+          throw new Error("private-audit-error");
+        },
+      },
+    },
+  });
+  await expect(
+    documentService(guarded as unknown as typeof db, () => store).upload(
+      a,
+      { employmentId: job },
+      pdf,
+      "fixture.pdf",
+      "application/pdf",
+      100000,
+    ),
+  ).rejects.toMatchObject({ status: 503 });
+  const row = await db.employmentDocument.findFirstOrThrow({
+    where: { userId: a },
+  });
+  expect(row.status).toBe("uploaded");
+  expect(store.objects.has(row.objectKey)).toBe(true);
+  expect(await db.auditEvent.count({ where: { documentId: row.id } })).toBe(0);
+});
+it("reports finalization connectivity loss safely and does not delete successfully uploaded bytes", async () => {
+  const { Prisma } = await import("@prisma/client");
+  const transaction = db.$transaction.bind(db);
+  let calls = 0;
+  vi.spyOn(db, "$transaction").mockImplementation((async (
+    ...args: Parameters<typeof db.$transaction>
+  ) => {
+    if (++calls === 2)
+      throw new Prisma.PrismaClientKnownRequestError("private endpoint", {
+        code: "P1001",
+        clientVersion: "test",
+      });
+    return transaction(...args);
+  }) as typeof db.$transaction);
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  await expect(upload()).rejects.toMatchObject({
+    status: 503,
+    message:
+      "Treviqo temporarily lost connection to the database. Please retry.",
+  });
+  const row = await db.employmentDocument.findFirstOrThrow({
+    where: { userId: a },
+  });
+  expect(row.status).toBe("uploaded");
+  expect(store.objects.get(row.objectKey)).toEqual(pdf);
+  expect(store.removals).toBe(0);
+  expect(calls).toBe(2);
+  expect(log.mock.calls).toEqual([["document_upload_finalize_failed"]]);
+});
+it("retries document reads once on connectivity loss without exposing provider details", async () => {
+  const { Prisma } = await import("@prisma/client");
+  await upload();
+  const query = vi
+    .spyOn(db.employmentDocument, "findMany")
+    .mockRejectedValueOnce(
+      new Prisma.PrismaClientKnownRequestError("private endpoint", {
+        code: "P1001",
+        clientVersion: "test",
+      }),
+    );
+  expect(await service().list(a)).toHaveLength(1);
+  expect(query).toHaveBeenCalledTimes(2);
+});
+it("does not compensate a finalization that committed before its acknowledgement was lost", async () => {
+  const { Prisma } = await import("@prisma/client");
+  const transaction = db.$transaction.bind(db);
+  let calls = 0;
+  vi.spyOn(db, "$transaction").mockImplementation((async (
+    ...args: Parameters<typeof db.$transaction>
+  ) => {
+    const result = await transaction(...args);
+    if (++calls === 2)
+      throw new Prisma.PrismaClientKnownRequestError("private endpoint", {
+        code: "P1001",
+        clientVersion: "test",
+      });
+    return result;
+  }) as typeof db.$transaction);
+  await expect(upload()).rejects.toMatchObject({ status: 503 });
+  const row = await db.employmentDocument.findFirstOrThrow({
+    where: { userId: a },
+  });
+  expect(row.status).toBe("ready");
+  expect(store.objects.get(row.objectKey)).toEqual(pdf);
+  expect(store.removals).toBe(0);
+  expect(
+    await db.auditEvent.count({
+      where: { documentId: row.id, action: "document_uploaded" },
+    }),
+  ).toBe(1);
+});
+
+it("requires verified purge and preserves pending metadata and audit when verification fails", async () => {
+  const doc = await upload();
+  const row = await db.employmentDocument.findUniqueOrThrow({
+    where: { id: doc.id },
+  });
+  const purge = vi
+    .spyOn(store, "purge")
+    .mockRejectedValueOnce(new Error("sensitive provider detail"));
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  await expect(service().remove(a, doc.id)).rejects.toMatchObject({
+    status: 503,
+    message:
+      "Storage cleanup could not be verified. Deletion is pending; please retry.",
+  });
+  expect(purge).toHaveBeenCalledWith(row.objectKey);
+  expect(log).toHaveBeenCalledWith("document_delete_storage_failed");
+  expect(JSON.stringify(log.mock.calls)).not.toContain(
+    "sensitive provider detail",
+  );
+  expect(
+    await db.employmentDocument.findUnique({ where: { id: doc.id } }),
+  ).toMatchObject({ status: "deleting", objectKey: row.objectKey });
+  expect(
+    await db.auditEvent.count({
+      where: { documentId: doc.id, action: "document_deleted" },
+    }),
+  ).toBe(0);
+  await service().remove(a, doc.id);
+  expect(store.objects.has(row.objectKey)).toBe(false);
+  expect(
+    await db.employmentDocument.findUnique({ where: { id: doc.id } }),
+  ).toMatchObject({ status: "deleted" });
+});
+it("allows retry after verified storage cleanup but failed database finalization", async () => {
+  const doc = await upload();
+  vi.spyOn(db, "$transaction").mockRejectedValueOnce(
+    new Error("database failure"),
+  );
+  await expect(service().remove(a, doc.id)).rejects.toThrow();
+  expect(store.objects.size).toBe(0);
+  expect(
+    await db.employmentDocument.findUnique({ where: { id: doc.id } }),
+  ).toMatchObject({ status: "deleting" });
+  await service().remove(a, doc.id);
+  expect(
+    await db.employmentDocument.findUnique({ where: { id: doc.id } }),
+  ).toMatchObject({ status: "deleted" });
+  expect(
+    await db.auditEvent.count({
+      where: { documentId: doc.id, action: "document_deleted" },
+    }),
+  ).toBe(1);
 });

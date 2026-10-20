@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { getDocumentAI, INFERENCE_TIMEOUT_MS } from "@/server/ai/client";
+import { getDocumentAI } from "@/server/ai/client";
 import { parseEnv } from "@/server/config/env";
 import { classificationPrompt } from "@/modules/extractions/prompts";
 const task = classificationPrompt("Synthetic employment contract");
@@ -120,9 +120,9 @@ it("bounds stalled headers and stalled response bodies without automatic retries
     const pending = expect(
       getDocumentAI().complete(task),
     ).rejects.toMatchObject({ code: "timeout", message: "AI timeout" });
-    await vi.advanceTimersByTimeAsync(INFERENCE_TIMEOUT_MS);
+    await vi.advanceTimersByTimeAsync(60000);
     await pending;
-    expect(timeout).toHaveBeenCalledWith(INFERENCE_TIMEOUT_MS);
+    expect(timeout).toHaveBeenCalledWith(60000);
     expect(fetcher).toHaveBeenCalledTimes(1);
     timeout.mockRestore();
     vi.useRealTimers();
@@ -141,5 +141,39 @@ it("retains only safe provider failure metadata and does not retry 429 or 503", 
       message: "AI http",
     });
     expect(fetcher).toHaveBeenCalledTimes(1);
+  }
+});
+
+it("validates the inference timeout bounds and default", () => {
+  expect(parseEnv({}).RUMPTY_AI_TIMEOUT_MS).toBe(60000);
+  for (const value of ["10000", "45000", "90000"])
+    expect(parseEnv({ RUMPTY_AI_TIMEOUT_MS: value }).RUMPTY_AI_TIMEOUT_MS).toBe(
+      Number(value),
+    );
+  for (const value of ["0", "9999", "90001", "NaN", "Infinity", "10000.5", ""])
+    expect(() => parseEnv({ RUMPTY_AI_TIMEOUT_MS: value })).toThrow(
+      "RUMPTY_AI_TIMEOUT_MS",
+    );
+});
+it("uses the configured bound independently for classification and extraction", async () => {
+  configure();
+  vi.stubEnv("RUMPTY_AI_TIMEOUT_MS", "90000");
+  const timeout = vi.spyOn(AbortSignal, "timeout");
+  const fetcher = vi
+    .fn()
+    .mockImplementation(async () =>
+      Response.json({
+        choices: [{ finish_reason: "stop", message: { content: "{}" } }],
+      }),
+    );
+  vi.stubGlobal("fetch", fetcher);
+  try {
+    const ai = getDocumentAI();
+    await ai.complete(task);
+    await ai.complete({ ...task, maxTokens: 2048 });
+    expect(timeout.mock.calls).toEqual([[90000], [90000]]);
+    expect(fetcher).toHaveBeenCalledTimes(2);
+  } finally {
+    timeout.mockRestore();
   }
 });

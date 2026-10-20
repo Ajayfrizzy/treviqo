@@ -1,5 +1,6 @@
 import "server-only";
 import type { PrismaClient } from "@prisma/client";
+import { UPLOAD_RESERVATION_MS } from "@/modules/documents/upload-state";
 import { getDb } from "@/server/db/client";
 import {
   getObjectStorage,
@@ -35,6 +36,18 @@ export function accountDeletionService(
         data: { deletionStartedAt: user.deletionStartedAt ?? now },
       });
       await tx.authSession.deleteMany({ where: { userId } });
+      // PUT runs without a database lock. Keep its durable reservation/key until
+      // it settles or the bounded upload grace expires; a crash remains recoverable.
+      if (
+        await tx.employmentDocument.count({
+          where: {
+            userId,
+            status: { in: ["uploaded", "processing"] },
+            createdAt: { gt: new Date(Date.now() - UPLOAD_RESERVATION_MS) },
+          },
+        })
+      )
+        return "pending" as const;
       await tx.employmentDocument.updateMany({
         where: { userId },
         data: { status: "deleting" },

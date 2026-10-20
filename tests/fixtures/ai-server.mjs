@@ -9,6 +9,8 @@ const types = [
   "termination_letter",
   "final_settlement",
   "pension_statement",
+  "benefit_document",
+  "exit_letter",
 ];
 const fixtures = types.map((type) =>
   JSON.parse(
@@ -53,6 +55,11 @@ const handler = async (request, response) => {
               evidence: field.evidence,
             })),
         };
+    if (source.includes("FIXTURE_WRONG_TYPE") && classify)
+      result = {
+        type: fixture.type === "payslip" ? "employment_contract" : "payslip",
+        evidence: fixture.classification.evidence,
+      };
     if (source.includes("FIXTURE_LOW") && classify)
       result = { ...fixture.classification, confidence: "low" };
     if (source.includes("FIXTURE_PARTIAL") && !classify) {

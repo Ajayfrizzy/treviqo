@@ -1,6 +1,17 @@
 # Treviqo Testing Strategy
 
+## Current command and environment contract
+
+Run all commands from the repository root. [package.json](../../package.json) is authoritative: `npm run validate` runs lint, TypeScript, unit tests, production build **and worker build**; integration and browser suites are separate. `npm run test:e2e` builds the worker before Playwright. Install Chromium with `npx playwright install chromium`.
+
+Integration/browser suites require explicitly exported `DATABASE_URL` and `REDIS_URL` pointing to disposable local services with all committed migrations applied (`npm run db:deploy`). Never run cleanup-bearing test suites against production or source a live `.env` into them. Vitest does not automatically load the root `.env`; Prisma/Next and explicit Node `--env-file` have different loading behavior. The local S3/AI fixtures in Playwright do not prove live signature validation, bucket policy or inference accuracy.
+
+The latest recorded deletion/probe validation passed 500 unit tests and 55 focused integration tests plus lint, TypeScript and both builds. These are dated results, not a new suite run during documentation editing. Historical counts below belong to their named milestones. Current S3 live findings are [tracked separately](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+
+Documentation-only checks verify relative Markdown paths/anchors, package-script names, environment descriptions, formatting, sensitive identifiers and source consistency. They do not imply a fresh browser/device or production acceptance test.
+
 ## Priority
+
 1. domain rules
 2. authorization
 3. document pipeline
@@ -8,7 +19,9 @@
 5. mobile critical path
 
 ## Unit tests
+
 Required for:
+
 - notice-period comparison
 - checklist rules
 - benefit portability
@@ -17,7 +30,9 @@ Required for:
 - parsers/utilities
 
 ## Integration tests
+
 Cover:
+
 - database
 - auth/ownership
 - document metadata
@@ -26,6 +41,7 @@ Cover:
 - reminder creation
 
 ## End-to-end critical path
+
 1. sign in
 2. create employment
 3. upload fixture document
@@ -36,10 +52,12 @@ Cover:
 8. view Passport
 
 ## AI testing
+
 Automated suite uses fixture responses.
 Keep only a small manual live-AI test set.
 
 ## Security tests
+
 - User A cannot access User B employment
 - User A cannot access User B document
 - signed URLs require authorization
@@ -47,9 +65,11 @@ Keep only a small manual live-AI test set.
 - invalid upload types rejected
 
 ## Mobile tests
+
 Check all core screens at common mobile widths and ensure no horizontal overflow.
 
 ## Failure tests
+
 - AI unavailable
 - upload failure
 - malformed extraction
@@ -58,6 +78,7 @@ Check all core screens at common mobile widths and ensure no horizontal overflow
 - expired signed URL
 
 ## Standard commands
+
 ```bash
 npm run lint
 npm run typecheck
@@ -68,7 +89,9 @@ npm run build
 Codex must report exactly what it ran.
 
 ## Completion report
+
 Every milestone report should include:
+
 - changed files
 - migrations
 - tests added

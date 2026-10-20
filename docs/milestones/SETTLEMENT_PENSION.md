@@ -1,5 +1,7 @@
 # Milestone 5 — Final Settlement & Pension Verification
 
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+
 Implemented locally on 3 October 2026. No commit, push, deployment, real-worker data, or live Rumpty inference was used.
 
 ## What changed
@@ -54,20 +56,20 @@ Reads use a repeatable snapshot. Commands use serializable transactions, an owne
 
 Commands run with disposable PostgreSQL 17/Redis and synthetic storage/inference fixtures:
 
-| Check | Result |
-| --- | --- |
-| `npm run lint` | Passed |
-| `npm run typecheck` | Passed |
-| `npm test` | 176 passed |
-| `npm run test:integration` | 57 passed |
-| `npm run test:e2e` | 41 passed |
-| `npm run build` | Passed; finance API/page included |
-| `npm run db:deploy` | All seven migrations applied to fresh database |
-| `npx prisma migrate diff --from-url <disposable-url> --to-schema-datamodel prisma/schema.prisma --exit-code` | No difference, exit 0 |
-| `docker build --target runtime -t treviqo-m5:local .` | Passed |
-| `docker build --target migrate -t treviqo-m5-migrate:local .` | Passed |
-| `docker run --rm -e DATABASE_URL=<disposable-url> treviqo-m5-migrate:local` | Passed; repeat deploy has no pending migrations |
-| `docker exec treviqo-m5-runtime node /app/tests/production-smoke.mjs` | Passed with local TLS storage/inference fixtures |
+| Check                                                                                                        | Result                                           |
+| ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------ |
+| `npm run lint`                                                                                               | Passed                                           |
+| `npm run typecheck`                                                                                          | Passed                                           |
+| `npm test`                                                                                                   | 176 passed                                       |
+| `npm run test:integration`                                                                                   | 57 passed                                        |
+| `npm run test:e2e`                                                                                           | 41 passed                                        |
+| `npm run build`                                                                                              | Passed; finance API/page included                |
+| `npm run db:deploy`                                                                                          | All seven migrations applied to fresh database   |
+| `npx prisma migrate diff --from-url <disposable-url> --to-schema-datamodel prisma/schema.prisma --exit-code` | No difference, exit 0                            |
+| `docker build --target runtime -t treviqo-m5:local .`                                                        | Passed                                           |
+| `docker build --target migrate -t treviqo-m5-migrate:local .`                                                | Passed                                           |
+| `docker run --rm -e DATABASE_URL=<disposable-url> treviqo-m5-migrate:local`                                  | Passed; repeat deploy has no pending migrations  |
+| `docker exec treviqo-m5-runtime node /app/tests/production-smoke.mjs`                                        | Passed with local TLS storage/inference fixtures |
 
 New tests: `tests/finance-rules.test.ts`, `tests/finance.integration.test.ts`, `tests/e2e/finance.spec.ts`, and JSON/real PDF fixtures for both new extraction types. Existing extraction tests/protocol fixture and production smoke were extended. Coverage includes exact amounts, ambiguity/missing data, period/currency mismatch, employee-vs-employer contributions, late postings, duplicate rows/selections, owner isolation, strict inputs, audit rollback, optimistic conflicts, lifecycle idempotence, changed/rejected/deleted evidence, explicit confirmation, real upload/PDF/inference/review, mobile error/retry and overflow at 320/375/430px. The 320px screenshot was visually inspected; physical-device testing remains manual.
 

@@ -1,3 +1,4 @@
+import { logRuntimeFailure } from "@/server/diagnostics/runtime";
 import { createServer } from "node:http";
 import { setTimeout } from "node:timers/promises";
 
@@ -73,12 +74,15 @@ export async function runWorker({
     }
     signal.addEventListener("abort", close, { once: true });
     while (!signal.aborted) {
+      let phase: "worker_tick" | "worker_health" = "worker_tick";
       try {
         await tick();
         if (once) break;
+        phase = "worker_health";
         lastHealthy =
           !signal.aborted && (await healthy()) ? clock() : undefined;
-      } catch {
+      } catch (error) {
+        logRuntimeFailure(phase, error);
         lastHealthy = undefined;
         failed = true;
         onError();

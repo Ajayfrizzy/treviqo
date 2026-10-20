@@ -6,6 +6,7 @@ import { extractionService } from "@/modules/extractions/service";
 import {
   persistAttempt,
   reapExpiredAttempts,
+  EXTRACTION_LEASE_MS,
 } from "@/modules/extractions/persistence";
 import { FakeStorage } from "./helpers/fake-storage";
 import { InferenceError, type DocumentAI } from "@/server/ai/client";
@@ -81,8 +82,8 @@ it("persists only proposed grounded fields with source/model/version metadata, w
     documentType: "employment_contract",
     model: "fixture-model",
     sourceKind: "pdf_text",
-    promptVersion: "evidence-v5",
-    schemaVersion: "fields-v5",
+    promptVersion: "evidence-v12",
+    schemaVersion: "fields-v12",
   });
   expect(
     extraction!.fields.every(
@@ -228,7 +229,7 @@ it("handles unavailable inference and malformed output without storing raw respo
   const failed = (
     await service().start(userId, documentId, {
       mode: "ai",
-      text: fixture.text,
+      text: "Employer: Harbour Workshop Ltd. Further details unavailable.",
     })
   ).extraction!;
   expect(failed).toMatchObject({
@@ -242,7 +243,7 @@ it("handles unavailable inference and malformed output without storing raw respo
     (
       await service().start(userId, documentId, {
         mode: "ai",
-        text: fixture.text,
+        text: "Employer: Harbour Workshop Ltd. Further details unavailable.",
       })
     ).extraction,
   ).toMatchObject({ status: "ready", documentType: "other" });
@@ -254,7 +255,7 @@ it("low-confidence classification pauses before type-specific inference", async 
   const run = (
     await service().start(userId, documentId, {
       mode: "ai",
-      text: fixture.text,
+      text: "Employer: Harbour Workshop Ltd. Further details unavailable.",
     })
   ).extraction!;
   expect(ai.complete).toHaveBeenCalledTimes(1);
@@ -277,7 +278,7 @@ it("guards concurrent attempts and permits stale attempt recovery", async () => 
   ).rejects.toMatchObject({ status: 409 });
   await db.documentExtraction.updateMany({
     where: { documentId },
-    data: { createdAt: new Date(Date.now() - 121000) },
+    data: { createdAt: new Date(Date.now() - (EXTRACTION_LEASE_MS + 1000)) },
   });
   await service().start(userId, documentId, {
     mode: "manual",
@@ -422,7 +423,7 @@ it("persists sparse 3B responses only as proposals and retains missing review fi
     reviewState: "proposed",
   });
   expect(run.fields.find((f) => f.key === "salary")).toMatchObject({
-    proposedValue: null,
+    proposedValue: "NGN 250,000 monthly",
     value: null,
     reviewState: "proposed",
   });
@@ -453,7 +454,7 @@ it("persists valid partial proposals with an explicit indicator and no trusted v
     extraction!.fields.filter(
       (f) => f.proposedValue && f.key !== "document_type",
     ),
-  ).toHaveLength(1);
+  ).toHaveLength(5);
   expect(
     extraction!.fields.every(
       (f) => f.reviewState === "proposed" && f.value === null,
@@ -469,7 +470,7 @@ it("fails safely with zero grounded fields while keeping manual entry available"
   const failed = await service().start(userId, documentId, {
     mode: "ai",
     type: "employment_contract",
-    text: fixture.text,
+    text: "Employment contract. No explicit labelled fields are available.",
   });
   expect(failed.extraction).toMatchObject({
     status: "failed",
@@ -552,7 +553,7 @@ it("reconciles an expired run after both result and failure persistence are unav
   vi.restoreAllMocks();
   await db.documentExtraction.updateMany({
     where: { documentId },
-    data: { createdAt: new Date(Date.now() - 121000) },
+    data: { createdAt: new Date(Date.now() - (EXTRACTION_LEASE_MS + 1000)) },
   });
   const read = await service().read(userId, documentId);
   expect(read.extraction).toMatchObject({
@@ -591,7 +592,7 @@ it("marks an expired completion failed and never overwrites a newer attempt", as
   ai.complete = async () => {
     await db.documentExtraction.updateMany({
       where: { documentId, status: "processing" },
-      data: { createdAt: new Date(Date.now() - 121000) },
+      data: { createdAt: new Date(Date.now() - (EXTRACTION_LEASE_MS + 1000)) },
     });
     newer = (
       await service().start(userId, documentId, {
@@ -622,7 +623,7 @@ it("expires a late completion even without a newer attempt", async () => {
   ai.complete = async () => {
     await db.documentExtraction.updateMany({
       where: { documentId },
-      data: { createdAt: new Date(Date.now() - 121000) },
+      data: { createdAt: new Date(Date.now() - (EXTRACTION_LEASE_MS + 1000)) },
     });
     return JSON.stringify(fixture.fields);
   };
@@ -709,7 +710,10 @@ it("worker expiry reconciles abandoned attempts once without user visits", async
     schemaVersion: "test",
   };
   const old = await db.documentExtraction.create({
-    data: { ...common, createdAt: new Date(now.getTime() - 121000) },
+    data: {
+      ...common,
+      createdAt: new Date(now.getTime() - (EXTRACTION_LEASE_MS + 1000)),
+    },
   });
   const active = await db.documentExtraction.create({ data: common });
   expect(await reapExpiredAttempts(db, now)).toBe(false);
@@ -736,7 +740,7 @@ it("checks the lease after waiting for the document lock", async () => {
       sourceKind: "pdf_text",
       promptVersion: "test",
       schemaVersion: "test",
-      createdAt: new Date(Date.now() - 119700),
+      createdAt: new Date(Date.now() - (EXTRACTION_LEASE_MS - 300)),
     },
   });
   let locked!: () => void;
@@ -876,13 +880,17 @@ it("uses the same prompt only on explicit retry and preserves the failed attempt
           {
             key: "employer",
             value: "Harbour Workshop Ltd",
-            evidence: "Employer: Harbour Workshop Ltd",
+            evidence: "The employer is Harbour Workshop Ltd.",
           },
         ],
       }),
     );
   ai.complete = complete;
-  const input = { mode: "ai", type: "employment_contract", text: fixture.text };
+  const input = {
+    mode: "ai",
+    type: "employment_contract",
+    text: "The employer is Harbour Workshop Ltd.",
+  };
   const first = (await service().start(userId, documentId, input)).extraction!;
   expect(first).toMatchObject({
     status: "failed",
@@ -901,4 +909,895 @@ it("uses the same prompt only on explicit retry and preserves the failed attempt
   expect(
     (await service().read(userId, documentId, first.id)).extraction,
   ).toMatchObject({ status: "failed", errorCode: "malformed", fields: [] });
+});
+
+it("persists a valid slower inference result beyond the former two-minute lease", async () => {
+  const complete = ai.complete;
+  ai.complete = async (task) => {
+    await db.documentExtraction.updateMany({
+      where: { documentId, status: "processing" },
+      data: { createdAt: new Date(Date.now() - 150000) },
+    });
+    return complete(task);
+  };
+  const result = await service().start(userId, documentId, {
+    mode: "ai",
+    text: fixture.text,
+  });
+  expect(result.extraction?.status).toBe("ready");
+});
+
+it("persists normalized grounded proposals as partial and unconfirmed", async () => {
+  const source =
+    "Employer: Northbridge Systems Nigeria Ltd. Salary: NGN 450,000.00";
+  ai.complete = async () =>
+    JSON.stringify({
+      fields: [
+        {
+          key: "salary",
+          value: "NGN450000",
+          evidence: "Salary: NGN 450,000.00",
+        },
+        {
+          key: "employer",
+          value: "Invented Ltd",
+          evidence: "Employer: Northbridge Systems Nigeria Ltd.",
+        },
+      ],
+    });
+  const result = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "employment_contract",
+    text: source,
+  });
+  expect(result.extraction).toMatchObject({
+    status: "ready",
+    errorCode: "partial",
+  });
+  expect(
+    result.extraction?.fields.find((f) => f.key === "salary"),
+  ).toMatchObject({
+    proposedValue: "NGN450000",
+    value: null,
+    evidence: "Salary: NGN 450,000.00",
+    confidence: "needs_review",
+    reviewState: "proposed",
+  });
+});
+it("logs only fixed parse counters when all model proposals are rejected", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  ai.complete = async () =>
+    JSON.stringify({
+      fields: [
+        {
+          key: "salary",
+          value: "NGN 999",
+          evidence: "private fabricated evidence",
+        },
+        { key: "secret_unknown", value: "private-value" },
+      ],
+    });
+  const result = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "employment_contract",
+    text: "Salary NGN 450,000.00 from the source",
+  });
+  expect(result.extraction?.status).toBe("failed");
+  expect(
+    log.mock.calls.filter(([message]) =>
+      String(message).startsWith("extraction_parse_rejected"),
+    ),
+  ).toEqual([
+    [
+      "extraction_parse_rejected no_grounded_fields unsupported_key=1 evidence_mismatch=1",
+    ],
+  ]);
+  expect(JSON.stringify(log.mock.calls)).not.toMatch(
+    /private|fabricated|secret_unknown|999/,
+  );
+});
+
+it.each([
+  ['{"fields":[]} {"fields":[]}', "multiple_json_candidates"],
+  ['{"fields":[', "truncated_json"],
+  ["not JSON", "invalid_json"],
+])(
+  "logs only the structural rejection category for %s",
+  async (output, reason) => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
+    ai.complete = async () => output;
+    const result = await service().start(userId, documentId, {
+      mode: "ai",
+      type: "employment_contract",
+      text: fixture.text.replaceAll(":", " —"),
+    });
+    expect(result.extraction?.status).toBe("failed");
+    expect(
+      log.mock.calls.filter(([message]) =>
+        String(message).startsWith("extraction_parse_rejected"),
+      ),
+    ).toEqual([[`extraction_parse_rejected no_grounded_fields ${reason}=1`]]);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(output);
+  },
+);
+
+it("persists a single grounded object followed by plain text as partial", async () => {
+  ai.complete = async () =>
+    JSON.stringify({
+      fields: [
+        {
+          key: "employer",
+          value: "Actual Company",
+          evidence: "Employer: Actual Company",
+        },
+      ],
+    }) + " These are the extracted fields.";
+  const result = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "employment_contract",
+    text: "Employer: Actual Company",
+  });
+  expect(result.extraction).toMatchObject({
+    status: "ready",
+    errorCode: "partial",
+  });
+  expect(
+    result.extraction?.fields.find((f) => f.key === "employer"),
+  ).toMatchObject({
+    proposedValue: "Actual Company",
+    value: null,
+    confidence: "needs_review",
+  });
+});
+
+it("persists recovered resignation evidence as unconfirmed partial and logs only counters", async () => {
+  const log = vi.spyOn(console, "info").mockImplementation(() => {});
+  ai.complete = async () =>
+    JSON.stringify({
+      fields: [
+        { key: "letter_date", value: "01 September 2026" },
+        { key: "proposed_last_day", value: "30 September 2026" },
+        { key: "notice_period", value: "30 days" },
+      ],
+    });
+  const result = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "resignation_letter",
+    text: "1 September 2026\nmy intended last working day is 30 September 2026\nin line with my notice requirement",
+  });
+  expect(result.extraction).toMatchObject({
+    status: "ready",
+    errorCode: "partial",
+  });
+  expect(
+    result.extraction?.fields.find((f) => f.key === "letter_date"),
+  ).toMatchObject({
+    proposedValue: "01 September 2026",
+    evidence: "1 September 2026",
+    value: null,
+    confidence: "needs_review",
+    reviewState: "proposed",
+  });
+  expect(log.mock.calls).toEqual([
+    ["classification_user_selected type=resignation_letter"],
+    [
+      "extraction_parse_partial missing_evidence=1 evidence_recovered=2 evidence_not_found=1",
+    ],
+  ]);
+});
+it("persists a contextual pension row while rejecting ambiguous repeated amounts", async () => {
+  const log = vi.spyOn(console, "info").mockImplementation(() => {});
+  const row = "August 2026 | 1 September 2026 | NGN 36,000.00 | NGN 45,000.00";
+  ai.complete = async () =>
+    JSON.stringify({
+      fields: [
+        { key: "contribution_1_period", value: "August 2026" },
+        { key: "contribution_1_date", value: "1 September 2026" },
+        { key: "contribution_1_employee_amount", value: "NGN 36,000" },
+        { key: "contribution_2_employer_amount", value: "NGN 45,000" },
+      ],
+    });
+  const result = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "pension_statement",
+    text:
+      row + "\nSeptember 2026 | 1 October 2026 | NGN 36,000.00 | NGN 45,000.00",
+  });
+  expect(result.extraction).toMatchObject({
+    status: "ready",
+    errorCode: "partial",
+  });
+  expect(
+    result.extraction?.fields.find(
+      (f) => f.key === "contribution_1_employee_amount",
+    ),
+  ).toMatchObject({
+    proposedValue: "NGN 36,000",
+    evidence: row,
+    value: null,
+    confidence: "needs_review",
+  });
+  expect(
+    result.extraction?.fields.find(
+      (f) => f.key === "contribution_2_employer_amount",
+    )?.proposedValue,
+  ).toBeNull();
+  expect(log.mock.calls).toEqual([
+    ["classification_user_selected type=pension_statement"],
+    [
+      "extraction_parse_partial missing_evidence=1 evidence_recovered=3 evidence_ambiguous=1",
+    ],
+  ]);
+});
+it("logs only recovery failure counters when no evidence can be safely recovered", async () => {
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  ai.complete = async () =>
+    JSON.stringify({
+      fields: [
+        { key: "letter_date", value: "1 September 2026" },
+        { key: "notice_period", value: "30 days" },
+      ],
+    });
+  const result = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "resignation_letter",
+    text: "1 September 2026\n1 September 2026",
+  });
+  expect(result.extraction).toMatchObject({
+    status: "failed",
+    errorCode: "malformed",
+  });
+  expect(log.mock.calls).toEqual([
+    [
+      "extraction_parse_rejected no_grounded_fields missing_evidence=2 evidence_ambiguous=1 evidence_not_found=1",
+    ],
+  ]);
+});
+
+for (const expected of [
+  "employment_contract",
+  "payslip",
+  "resignation_letter",
+  "termination_letter",
+  "final_settlement",
+  "pension_statement",
+  "benefit_document",
+  "exit_letter",
+] as const) {
+  it(`isolates ${expected} extraction despite a grounded but wrong AI classification`, async () => {
+    const fixture = JSON.parse(
+      readFileSync(`tests/fixtures/intelligence/${expected}.json`, "utf8"),
+    );
+    const log = vi.spyOn(console, "info").mockImplementation(() => {});
+    ai.complete = vi.fn(async (task) => {
+      if (task.system.includes("Classify only"))
+        return JSON.stringify({
+          type: expected === "payslip" ? "employment_contract" : "payslip",
+          evidence: fixture.classification.evidence,
+        });
+      expect(task.system).toContain(`Extract ${expected} facts`);
+      return JSON.stringify(fixture.fields);
+    });
+    const { extraction } = await service().start(userId, documentId, {
+      mode: "ai",
+      text: fixture.text,
+    });
+    expect(extraction).toMatchObject({
+      status: "ready",
+      documentType: expected,
+      needsTypeConfirmation: false,
+    });
+    const { fieldAllowed } = await import("@/modules/extractions/shared");
+    expect(extraction!.fields.every((f) => fieldAllowed(expected, f.key))).toBe(
+      true,
+    );
+    const saved = await db.extractedField.findMany({
+      where: { extractionId: extraction!.id },
+    });
+    expect(saved.every((f) => fieldAllowed(expected, f.key))).toBe(true);
+    expect(log.mock.calls[0]).toEqual([
+      `classification_anchor_override ai=${expected === "payslip" ? "employment_contract" : "payslip"} anchor=${expected}`,
+    ]);
+    expect(JSON.stringify(log.mock.calls)).not.toContain(
+      fixture.classification.evidence,
+    );
+  });
+}
+it("pauses unsupported classification evidence and resumes in a new user-selected attempt", async () => {
+  const log = vi.spyOn(console, "info").mockImplementation(() => {});
+  ai.complete = vi.fn(async () =>
+    JSON.stringify({
+      type: "employment_contract",
+      evidence: "1 September 2026",
+    }),
+  );
+  const text =
+    "1 September 2026\nmy intended last working day is 30 September 2026";
+  const first = (
+    await service().start(userId, documentId, { mode: "ai", text })
+  ).extraction!;
+  expect(first).toMatchObject({
+    documentType: "other",
+    errorCode: "needs_type_confirmation",
+    needsTypeConfirmation: true,
+  });
+  expect(ai.complete).toHaveBeenCalledTimes(1);
+  expect(first.fields.map((f) => f.key)).toEqual(["document_type"]);
+  ai.complete = vi.fn(async () =>
+    JSON.stringify({
+      fields: [
+        { key: "letter_date", value: "1 September 2026" },
+        { key: "proposed_last_day", value: "30 September 2026" },
+      ],
+    }),
+  );
+  const second = (
+    await service().start(userId, documentId, {
+      mode: "ai",
+      type: "resignation_letter",
+      text,
+    })
+  ).extraction!;
+  expect(second.id).not.toBe(first.id);
+  expect(second).toMatchObject({
+    status: "ready",
+    documentType: "resignation_letter",
+    needsTypeConfirmation: false,
+  });
+  expect(
+    second.fields.find((f) => f.key === "proposed_last_day")?.proposedValue,
+  ).toBe("30 September 2026");
+  expect(
+    (await service().read(userId, documentId, first.id)).extraction,
+  ).toEqual(first);
+  expect(log.mock.calls).toContainEqual(["classification_ambiguous"]);
+  expect(log.mock.calls).toContainEqual([
+    "classification_user_selected type=resignation_letter",
+  ]);
+});
+it("blocks cross-schema persisted fields and in-place category changes without mutating history", async () => {
+  const first = (await service().start(userId, documentId, { mode: "ai" }))
+    .extraction!;
+  const category = first.fields.find((f) => f.key === "document_type")!;
+  await expect(
+    service().review(userId, documentId, {
+      fieldId: category.id,
+      version: 0,
+      action: "correct",
+      value: "pension_statement",
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+  const injected = await db.extractedField.create({
+    data: {
+      extractionId: first.id,
+      key: "gross_pay",
+      proposedValue: "NGN 100",
+      confidence: "needs_review",
+    },
+  });
+  expect(
+    (await service().read(userId, documentId)).extraction?.fields.some(
+      (f) => f.key === "gross_pay",
+    ),
+  ).toBe(false);
+  await expect(
+    service().review(userId, documentId, {
+      fieldId: injected.id,
+      version: 0,
+      action: "confirm",
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+  const second = (
+    await service().start(userId, documentId, {
+      mode: "manual",
+      type: "pension_statement",
+    })
+  ).extraction!;
+  expect(
+    second.fields.some((f) =>
+      ["salary", "start_date", "gross_pay"].includes(f.key),
+    ),
+  ).toBe(false);
+  expect(
+    await db.extractedField.findUnique({ where: { id: category.id } }),
+  ).toMatchObject({ proposedValue: "employment_contract", value: null });
+  expect(
+    await db.extractedField.findUnique({ where: { id: injected.id } }),
+  ).not.toBeNull();
+});
+it("legacy automated attempts require category confirmation without rewriting their proposals", async () => {
+  const first = (await service().start(userId, documentId, { mode: "ai" }))
+    .extraction!;
+  await db.documentExtraction.update({
+    where: { id: first.id },
+    data: { schemaVersion: "fields-v8" },
+  });
+  const result = (await service().read(userId, documentId)).extraction!;
+  expect(result.needsTypeConfirmation).toBe(true);
+  expect(result.fields).toEqual(first.fields);
+  await expect(
+    service().review(userId, documentId, {
+      fieldId: first.fields[0]!.id,
+      version: 0,
+      action: "confirm",
+    }),
+  ).rejects.toMatchObject({ status: 409 });
+});
+it("persistence rejects cross-schema proposals before any writes", async () => {
+  const raw = vi.fn();
+  await expect(
+    persistAttempt(
+      { $queryRaw: raw } as unknown as Parameters<typeof persistAttempt>[0],
+      userId,
+      documentId,
+      {
+        runId: "test",
+        model: "fixture",
+        sourceHash: null,
+        result: {
+          type: "pension_statement",
+          partial: false,
+          proposals: [
+            {
+              key: "gross_pay",
+              value: "100",
+              evidence: "100",
+              confidence: "needs_review",
+            },
+          ],
+        },
+      },
+    ),
+  ).rejects.toThrow("Extraction schema mismatch");
+  expect(raw).not.toHaveBeenCalled();
+});
+
+it("reserves and completes manual extraction without any interactive transaction", async () => {
+  const transaction = vi
+    .spyOn(db, "$transaction")
+    .mockRejectedValue(new Error("interactive transaction forbidden"));
+  const result = await service().start(userId, documentId, {
+    mode: "manual",
+    type: "payslip",
+  });
+  expect(result.extraction?.status).toBe("ready");
+  expect(transaction).not.toHaveBeenCalled();
+});
+it("retries a lost reservation acknowledgement using the same attempt ID and one audit", async () => {
+  const { reserveExtraction } =
+    await import("@/modules/extractions/reservation");
+  const { Prisma } = await import("@prisma/client");
+  const raw = db.$queryRaw.bind(db);
+  const query = vi.spyOn(db, "$queryRaw").mockImplementationOnce((async (
+    ...args: Parameters<typeof db.$queryRaw>
+  ) => {
+    await raw(...args);
+    throw new Prisma.PrismaClientKnownRequestError(
+      "private database endpoint",
+      { code: "P1001", clientVersion: "test" },
+    );
+  }) as typeof db.$queryRaw);
+  const id = crypto.randomUUID();
+  expect(
+    await reserveExtraction(db, {
+      id,
+      userId,
+      documentId,
+      model: "manual",
+      sourceKind: "manual",
+    }),
+  ).toEqual({ id, model: "manual" });
+  expect(query).toHaveBeenCalledTimes(2);
+  expect(await db.documentExtraction.count({ where: { documentId } })).toBe(1);
+  expect(
+    await db.auditEvent.count({
+      where: { documentId, action: "extraction_started" },
+    }),
+  ).toBe(1);
+});
+it("returns safe reservation outage diagnostics after one bounded retry", async () => {
+  const { Prisma } = await import("@prisma/client");
+  const query = vi.spyOn(db, "$queryRaw").mockRejectedValue(
+    new Prisma.PrismaClientKnownRequestError("private-host", {
+      code: "P1001",
+      clientVersion: "test",
+    }),
+  );
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  await expect(
+    service().start(userId, documentId, { mode: "manual", type: "payslip" }),
+  ).rejects.toMatchObject({
+    status: 503,
+    message:
+      "Treviqo temporarily lost connection to the database. Please retry.",
+  });
+  expect(query).toHaveBeenCalledTimes(2);
+  expect(log.mock.calls).toEqual([["extraction_reservation_db_unavailable"]]);
+});
+it("does not retry P2028 and reports only a safe reservation transaction diagnostic", async () => {
+  const { Prisma } = await import("@prisma/client");
+  const query = vi.spyOn(db, "$queryRaw").mockRejectedValue(
+    new Prisma.PrismaClientKnownRequestError("private transaction", {
+      code: "P2028",
+      clientVersion: "test",
+    }),
+  );
+  const log = vi.spyOn(console, "error").mockImplementation(() => {});
+  await expect(
+    service().start(userId, documentId, { mode: "manual", type: "payslip" }),
+  ).rejects.toMatchObject({
+    status: 503,
+    message: "Extraction could not be started. Refresh and retry.",
+  });
+  expect(query).toHaveBeenCalledTimes(1);
+  expect(log.mock.calls).toEqual([
+    ["extraction_reservation_transaction_failed"],
+  ]);
+});
+it("reservation leaves document metadata unchanged for Passport evidence freshness", async () => {
+  const before = await db.employmentDocument.findUniqueOrThrow({
+    where: { id: documentId },
+  });
+  await service().start(userId, documentId, {
+    mode: "manual",
+    type: "payslip",
+  });
+  const after = await db.employmentDocument.findUniqueOrThrow({
+    where: { id: documentId },
+  });
+  expect(after).toEqual(before);
+});
+it("extracts the real synthetic benefit PDF, preserves conditions and requires review", async () => {
+  const sample = JSON.parse(
+    readFileSync("tests/fixtures/intelligence/benefit_document.json", "utf8"),
+  );
+  const uploaded = await documentService(db, () => store).upload(
+    userId,
+    { employmentId: job, documentType: "benefit_document" },
+    readFileSync("tests/fixtures/intelligence/benefit_document.pdf"),
+    "benefit.pdf",
+    "application/pdf",
+    10485760,
+  );
+  ai.complete = async (task) =>
+    JSON.stringify(
+      task.system.includes("Classify only")
+        ? sample.classification
+        : sample.fields,
+    );
+  const result = (await service().start(userId, uploaded.id, { mode: "ai" }))
+    .extraction!;
+  expect(result).toMatchObject({
+    documentType: "benefit_document",
+    status: "ready",
+    errorCode: "partial",
+    needsTypeConfirmation: false,
+  });
+  expect(
+    result.fields.find((f) => f.key === "health_plan_wording"),
+  ).toMatchObject({
+    value: null,
+    reviewState: "proposed",
+    confidence: "needs_review",
+  });
+  expect(
+    result.fields.find((f) => f.key === "health_plan_wording")?.proposedValue,
+  ).toContain("30 calendar days");
+  expect(
+    result.fields.find((f) => f.key === "pension_provider")?.proposedValue,
+  ).toBeNull();
+  expect(await db.benefit.count({ where: { userId } })).toBe(0);
+});
+it.each(["v9", "v10", "v11"])(
+  "retains review access to validated %s attempts after adding source recovery fields",
+  async (version) => {
+    const result = (await service().start(userId, documentId, { mode: "ai" }))
+      .extraction!;
+    await db.documentExtraction.update({
+      where: { id: result.id },
+      data: {
+        schemaVersion: `fields-${version}`,
+        promptVersion: `evidence-${version}`,
+      },
+    });
+    expect(
+      (await service().read(userId, documentId)).extraction
+        ?.needsTypeConfirmation,
+    ).toBe(false);
+    const employer = result.fields.find((f) => f.key === "employer")!;
+    await expect(
+      service().review(userId, documentId, {
+        fieldId: employer.id,
+        version: 0,
+        action: "confirm",
+      }),
+    ).resolves.toBeDefined();
+  },
+);
+
+it("extracts the exit confirmation PDF and preserves owner review without changing employment or exit records", async () => {
+  const sample = JSON.parse(
+    readFileSync("tests/fixtures/intelligence/exit_letter.json", "utf8"),
+  );
+  const uploaded = await documentService(db, () => store).upload(
+    userId,
+    { employmentId: job, documentType: "exit_letter" },
+    readFileSync("tests/fixtures/intelligence/exit_letter.pdf"),
+    "exit.pdf",
+    "application/pdf",
+    10485760,
+  );
+  ai.complete = async (task) =>
+    JSON.stringify(
+      task.system.includes("Classify only")
+        ? sample.classification
+        : sample.fields,
+    );
+  const result = (await service().start(userId, uploaded.id, { mode: "ai" }))
+    .extraction!;
+  expect(result).toMatchObject({
+    documentType: "exit_letter",
+    status: "ready",
+    needsTypeConfirmation: false,
+  });
+  const field = result.fields.find((f) => f.key === "last_working_day")!;
+  expect(field).toMatchObject({
+    proposedValue: "30 September 2026",
+    value: null,
+    reviewState: "proposed",
+  });
+  await expect(
+    service().review(otherId, uploaded.id, {
+      fieldId: field.id,
+      version: 0,
+      action: "confirm",
+    }),
+  ).rejects.toThrow();
+  await service().review(userId, uploaded.id, {
+    fieldId: field.id,
+    version: 0,
+    action: "confirm",
+  });
+  expect(
+    (await service().read(userId, uploaded.id)).extraction!.fields.find(
+      (f) => f.id === field.id,
+    )?.reviewState,
+  ).toBe("confirmed");
+  expect(
+    await db.employment.findUniqueOrThrow({ where: { id: job } }),
+  ).toMatchObject({ endDate: null, status: "active" });
+  expect(await db.exitCase.count({ where: { userId } })).toBe(0);
+  const manual = (
+    await service().start(userId, uploaded.id, {
+      mode: "manual",
+      type: "exit_letter",
+    })
+  ).extraction!;
+  expect(manual).toMatchObject({
+    documentType: "exit_letter",
+    status: "ready",
+    needsTypeConfirmation: false,
+  });
+});
+
+it.each(['{"fields":[', "not JSON", '{"fields":[]}'])(
+  "recovers explicit contract labels independently of broken model output: %s",
+  async (output) => {
+    ai.complete = vi.fn().mockResolvedValue(output);
+    const text =
+      "Employment Agreement\nEmployer: Synthetic Services Ltd\nJob title: Customer Success Specialist\nStart date: 12 September 2022\nGross monthly salary: NGN 385,000.00";
+    const result = await service().start(userId, documentId, {
+      mode: "ai",
+      type: "employment_contract",
+      text,
+    });
+    expect(result.extraction).toMatchObject({
+      status: "ready",
+      errorCode: "partial",
+    });
+    for (const key of ["employer", "role", "start_date", "salary"]) {
+      const field = result.extraction!.fields.find((f) => f.key === key)!;
+      expect(field.proposedValue).not.toBeNull();
+      expect(text).toContain(field.evidence);
+      expect(field).toMatchObject({
+        value: null,
+        reviewState: "proposed",
+        confidence: "needs_review",
+      });
+    }
+    expect(ai.complete).toHaveBeenCalledTimes(1);
+    expect(
+      await db.employment.findUnique({ where: { id: job } }),
+    ).toMatchObject({ employerName: "Original employer" });
+  },
+);
+
+for (const type of [
+  "payslip",
+  "final_settlement",
+  "benefit_document",
+  "resignation_letter",
+  "pension_statement",
+] as const) {
+  it(`persists grounded ${type} layout recovery when model output is unusable`, async () => {
+    const layouts = JSON.parse(
+      readFileSync(
+        "tests/fixtures/intelligence/labelled-source-layouts.json",
+        "utf8",
+      ),
+    );
+    const text = layouts[type] as string;
+    ai.complete = vi.fn().mockResolvedValue("not JSON");
+    const { extraction } = await service().start(userId, documentId, {
+      mode: "ai",
+      type,
+      text,
+    });
+    expect(extraction).toMatchObject({
+      status: "ready",
+      errorCode: "partial",
+      documentType: type,
+    });
+    const fields = extraction!.fields.filter(
+      (f) => f.key !== "document_type" && f.proposedValue !== null,
+    );
+    expect(fields.length).toBeGreaterThan(1);
+    for (const field of fields) {
+      expect(field).toMatchObject({
+        value: null,
+        confidence: "needs_review",
+        reviewState: "proposed",
+      });
+      expect(text.replace(/\s+/g, " ")).toContain(
+        field.evidence!.replace(/\s+/g, " "),
+      );
+    }
+    expect(ai.complete).toHaveBeenCalledTimes(1);
+    expect(
+      await db.employment.findUnique({ where: { id: job } }),
+    ).toMatchObject({ employerName: "Original employer" });
+  });
+}
+it("corrects swapped model payroll fields using explicit source labels", async () => {
+  const layouts = JSON.parse(
+    readFileSync(
+      "tests/fixtures/intelligence/labelled-source-layouts.json",
+      "utf8",
+    ),
+  );
+  ai.complete = vi.fn().mockResolvedValue(
+    JSON.stringify({
+      fields: [
+        {
+          key: "gross_pay",
+          value: "NGN 197,175.00",
+          evidence: "Net salary paid NGN 197,175.00",
+        },
+      ],
+    }),
+  );
+  const { extraction } = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "payslip",
+    text: layouts.payslip,
+  });
+  expect(extraction!.fields.find((f) => f.key === "gross_pay")).toMatchObject({
+    proposedValue: "NGN 245,000.00",
+    evidence: "Gross monthly salary NGN 245,000.00",
+    value: null,
+  });
+});
+it("replaces model pension row ordering as a whole without mixing row associations", async () => {
+  const layouts = JSON.parse(
+    readFileSync(
+      "tests/fixtures/intelligence/labelled-source-layouts.json",
+      "utf8",
+    ),
+  );
+  ai.complete = vi.fn().mockResolvedValue(
+    JSON.stringify({
+      fields: [
+        {
+          key: "contribution_1_period",
+          value: "2022-08",
+          evidence:
+            "2022-08 NGN 19,600.00 NGN 24,500.00 7 September 2022 Posted",
+        },
+      ],
+    }),
+  );
+  const { extraction } = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "pension_statement",
+    text: layouts.pension_statement,
+  });
+  expect(
+    extraction!.fields.find((f) => f.key === "contribution_1_period"),
+  ).toMatchObject({ proposedValue: "2022-06" });
+  expect(
+    extraction!.fields.find((f) => f.key === "contribution_1_date"),
+  ).toMatchObject({ proposedValue: "7 July 2022" });
+  expect(
+    extraction!.fields.find((f) => f.key === "contribution_3_date"),
+  ).toMatchObject({ proposedValue: "7 September 2022" });
+});
+
+it("does not resurrect conflicting duplicate proposals through source recovery", async () => {
+  const text =
+    "Monthly Payslip\nGross monthly salary NGN 245,000.00\nNet salary paid NGN 197,175.00";
+  ai.complete = vi.fn().mockResolvedValue(
+    JSON.stringify({
+      fields: [
+        {
+          key: "gross_pay",
+          value: "NGN 245,000.00",
+          evidence: "Gross monthly salary NGN 245,000.00",
+        },
+        {
+          key: "gross_pay",
+          value: "NGN 197,175.00",
+          evidence: "Net salary paid NGN 197,175.00",
+        },
+      ],
+    }),
+  );
+  const { extraction } = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "payslip",
+    text,
+  });
+  expect(extraction).toMatchObject({
+    status: "failed",
+    errorCode: "malformed",
+  });
+});
+it("retains manual-only pension completeness when recovering malformed model output", async () => {
+  const layouts = JSON.parse(
+    readFileSync(
+      "tests/fixtures/intelligence/labelled-source-layouts.json",
+      "utf8",
+    ),
+  );
+  ai.complete = vi.fn().mockResolvedValue("not JSON");
+  const { extraction } = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "pension_statement",
+    text: layouts.pension_statement,
+  });
+  expect(
+    extraction!.fields.find((f) => f.key === "entries_complete"),
+  ).toMatchObject({
+    value: null,
+    proposedValue: null,
+    reviewState: "proposed",
+  });
+});
+
+it("preserves complete conditional contract benefit wording even when the model selects only a fragment", async () => {
+  const clause =
+    "Employer-sponsored medical and group life benefits, where applicable, are linked to the employment\nrelationship and are subject to plan terms.";
+  ai.complete = vi.fn().mockResolvedValue(
+    JSON.stringify({
+      fields: [
+        {
+          key: "group_life_reference",
+          value: "group life benefits",
+          evidence: clause,
+        },
+      ],
+    }),
+  );
+  const { extraction } = await service().start(userId, documentId, {
+    mode: "ai",
+    type: "employment_contract",
+    text: "Employment Agreement\n" + clause,
+  });
+  for (const key of ["hmo_reference", "group_life_reference"])
+    expect(extraction!.fields.find((f) => f.key === key)).toMatchObject({
+      proposedValue: clause,
+      evidence: clause,
+      value: null,
+      reviewState: "proposed",
+      confidence: "needs_review",
+    });
 });

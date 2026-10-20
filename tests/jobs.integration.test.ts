@@ -1,3 +1,4 @@
+import { EXTRACTION_LEASE_MS } from "@/modules/extractions/persistence";
 import { beforeEach, afterEach, afterAll, expect, it, vi } from "vitest";
 import Redis from "ioredis";
 import { getDb } from "@/server/db/client";
@@ -330,7 +331,7 @@ it("dispatches extraction expiry through the durable worker outbox", async () =>
         sourceKind: "pdf_text",
         promptVersion: "test",
         schemaVersion: "test",
-        createdAt: new Date(Date.now() - 121000),
+        createdAt: new Date(Date.now() - EXTRACTION_LEASE_MS - 1000),
       },
     });
     await db.backgroundJob.createMany({

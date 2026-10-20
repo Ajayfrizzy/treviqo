@@ -1,8 +1,10 @@
 "use client";
+import { ExitTypeNotice } from "@/components/exit-type-notice";
+import { SectionTitle, StatusChip } from "./product-ui";
 import { Button } from "./button";
 import { uiRequest } from "./ui-request";
 import Link from "@/components/action-link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   benefitCategories,
   portabilityLabels,
@@ -22,13 +24,17 @@ const pensionStates: Record<string, string> = {
 };
 export function PassportEntry({ initial }: { initial: PassportDetail }) {
   const [data, setData] = useState(initial);
+  const inFlight = useRef(false);
+  const [feedbackCategory, setFeedbackCategory] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [unavailable, setUnavailable] = useState(false);
   const [editing, setEditing] = useState<BenefitView | null>(null);
-  async function request(command?: unknown) {
-    if (busy) return false;
+  async function request(command?: unknown, category: string | null = null) {
+    if (inFlight.current) return false;
+    inFlight.current = true;
+    setFeedbackCategory(category);
     setBusy(true);
     setError("");
     setSuccess("");
@@ -54,9 +60,26 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
       setError(error instanceof Error ? error.message : "Please retry.");
       return false;
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
+  const feedback = (category: string | null) =>
+    feedbackCategory === category && (
+      <>
+        {error && (
+          <p role="alert" className="form-message">
+            {error} Displayed records are from the last successful load; refresh
+            before relying on them.
+          </p>
+        )}
+        {success && (
+          <p role="status" className="form-message">
+            {success}
+          </p>
+        )}
+      </>
+    );
   if (unavailable)
     return (
       <section className="card">
@@ -92,70 +115,84 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
           Refresh Passport
         </Button>
       </header>
-      {error && (
-        <p role="alert" className="form-message">
-          {error} Displayed records are from the last successful load; refresh
-          before relying on them.
-        </p>
-      )}
-      {success && (
-        <p role="status" className="form-message">
-          {success}
-        </p>
-      )}
-      <section className="card" aria-label="Employment summary">
-        <h2>Employment period</h2>
-        <span className="badge">Worker-entered</span>
-        <p>
-          {formatEmploymentDate(data.startDate)} –{" "}
-          {data.endDate
-            ? formatEmploymentDate(data.endDate)
-            : "End date unknown"}
-        </p>
-        <p>
-          Closed is the status you recorded, not proof that all exit actions are
-          complete.
-        </p>
-        {data.dateWarning && <p className="form-message">{data.dateWarning}</p>}
-        <Link className="touch-link" href={`/employments/${data.id}/edit`}>
-          Correct employment details
-        </Link>
-      </section>
-      <section className="card" aria-label="Exit summary">
-        <h2>Exit status</h2>
-        {data.exit ? (
-          <>
-            <p>
-              {exitTypes[data.exit.type as keyof typeof exitTypes]} ·
-              worker-entered
-            </p>
-            <p>
-              Last working date:{" "}
-              {formatEmploymentDate(data.exit.lastWorkingDate)}
-            </p>
-            <p>
-              {data.exit.unresolved
-                ? `${data.exit.unresolved} of ${data.exit.total} checklist items need attention.`
-                : "No outstanding checklist items in current answers. This is not a legal or readiness verdict."}
-            </p>
-            <Link className="touch-link" href={`/exit/${data.exit.id}`}>
-              Review exit checklist
-            </Link>
-          </>
-        ) : (
-          <>
-            <p>Unknown — no exit case recorded.</p>
-            <Link
-              className="touch-link"
-              href={`/exit/new?employmentId=${data.id}`}
-            >
-              Add exit details
-            </Link>
-          </>
-        )}
-      </section>
-      <section className="card" aria-label="Pension summary">
-        <h2>Pension history</h2>
+      {feedback(null)}
+      <div className="passport-summary-grid">
+        <section
+          className="card section-panel tone-history"
+          aria-label="Employment summary"
+        >
+          <SectionTitle icon="work" tone="history">
+            Employment period
+          </SectionTitle>
+          <StatusChip tone="neutral">Worker-entered</StatusChip>
+          <p>
+            {formatEmploymentDate(data.startDate)} –{" "}
+            {data.endDate
+              ? formatEmploymentDate(data.endDate)
+              : "End date unknown"}
+          </p>
+          <p>
+            Closed is the status you recorded, not proof that all exit actions
+            are complete.
+          </p>
+          {data.dateWarning && (
+            <p className="form-message">{data.dateWarning}</p>
+          )}
+          <Link className="touch-link" href={`/employments/${data.id}/edit`}>
+            Correct employment details
+          </Link>
+        </section>
+        <section
+          className="card section-panel tone-exit"
+          aria-label="Exit summary"
+        >
+          <SectionTitle icon="exit" tone="exit">
+            Exit status
+          </SectionTitle>
+          {data.exit ? (
+            <>
+              <p>
+                {exitTypes[data.exit.type as keyof typeof exitTypes]} ·
+                worker-entered
+              </p>
+              <ExitTypeNotice
+                id={data.exit.id}
+                savedType={data.exit.type as keyof typeof exitTypes}
+                discrepancies={data.exit.exitTypeDiscrepancies}
+              />
+              <p>
+                Last working date:{" "}
+                {formatEmploymentDate(data.exit.lastWorkingDate)}
+              </p>
+              <p>
+                {data.exit.unresolved
+                  ? `${data.exit.unresolved} of ${data.exit.total} checklist items need attention.`
+                  : "No outstanding checklist items in current answers. This is not a legal or readiness verdict."}
+              </p>
+              <Link className="touch-link" href={`/exit/${data.exit.id}`}>
+                Review exit checklist
+              </Link>
+            </>
+          ) : (
+            <>
+              <p>Unknown — no exit case recorded.</p>
+              <Link
+                className="touch-link"
+                href={`/exit/new?employmentId=${data.id}`}
+              >
+                Add exit details
+              </Link>
+            </>
+          )}
+        </section>
+      </div>
+      <section
+        className="card section-panel tone-history"
+        aria-label="Pension summary"
+      >
+        <SectionTitle icon="passport" tone="history">
+          Pension history
+        </SectionTitle>
         <p>
           Participation:{" "}
           {data.pension.participation === "yes"
@@ -177,7 +214,17 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
           </Link>
         ))}
         <h3>Final contribution check</h3>
-        <p>{pensionStates[data.pension.state] ?? "Unknown"}</p>
+        <StatusChip
+          tone={
+            data.pension.state === "confirmed"
+              ? "success"
+              : data.pension.state === "not_started"
+                ? "neutral"
+                : "review"
+          }
+        >
+          {pensionStates[data.pension.state] ?? "Unknown"}
+        </StatusChip>
         {data.pension.targetPeriod && (
           <p>Target contribution month: {data.pension.targetPeriod}</p>
         )}
@@ -192,22 +239,28 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
         )}
       </section>
       <section aria-label="Benefit history">
-        <h2>Benefits from this employment</h2>
+        <SectionTitle icon="shield" tone="history">
+          Benefits from this employment
+        </SectionTitle>
         <p>
           Reviewed wording and worker assessments are labelled separately.
           Portability is never assumed from a benefit category.
         </p>
-        <div className="passport-flow">
+        <div className="benefit-grid">
           {data.benefits.map((benefit) => (
             <article
-              className="card"
+              className={`card benefit-card accent-card tone-${benefit.classification === "unknown" ? "review" : "history"}`}
               aria-label={benefitCategories[benefit.category]}
               key={benefit.category}
             >
               <h3>{benefitCategories[benefit.category]}</h3>
-              <span className="badge">
+              <StatusChip
+                tone={
+                  benefit.classification === "unknown" ? "review" : "history"
+                }
+              >
                 {portabilityLabels[benefit.classification]}
-              </span>
+              </StatusChip>
               {benefit.stale && (
                 <p className="form-message">
                   Previous assessment:{" "}
@@ -216,85 +269,102 @@ export function PassportEntry({ initial }: { initial: PassportDetail }) {
                 </p>
               )}
               <p>{benefit.message}</p>
-              <p className="quiet">{benefit.basis}</p>
-              {benefit.updatedAt && (
-                <p className="quiet">
-                  Last assessed:{" "}
-                  {formatEmploymentDate(benefit.updatedAt.slice(0, 10))}
-                </p>
-              )}
-              {benefit.mentions.map((mention, index) => (
-                <Link
-                  className="touch-link"
-                  key={`${mention.documentId}-${index}`}
-                  href={`/documents/${mention.documentId}/review`}
-                >
-                  {mention.label} · source {index + 1}
-                </Link>
-              ))}
-              {benefit.documentId &&
-                data.sources.some(
-                  (source) => source.id === benefit.documentId,
-                ) && (
+              <div className="benefit-evidence">
+                <p className="quiet benefit-basis">{benefit.basis}</p>
+                {benefit.updatedAt && (
+                  <p className="quiet">
+                    Last assessed:{" "}
+                    {formatEmploymentDate(benefit.updatedAt.slice(0, 10))}
+                  </p>
+                )}
+                {benefit.mentions.map((mention, index) => (
                   <Link
                     className="touch-link"
-                    href={`/documents/${benefit.documentId}`}
+                    key={`${mention.documentId}-${index}`}
+                    href={`/documents/${mention.documentId}/review`}
                   >
-                    Open assessment evidence
+                    {mention.label} · source {index + 1}
                   </Link>
+                ))}
+                {benefit.documentId &&
+                  data.sources.some(
+                    (source) => source.id === benefit.documentId,
+                  ) && (
+                    <Link
+                      className="touch-link"
+                      href={`/documents/${benefit.documentId}`}
+                    >
+                      Open assessment evidence
+                    </Link>
+                  )}
+              </div>
+              <div className="form-actions benefit-actions">
+                {editing?.category === benefit.category ? (
+                  <BenefitForm
+                    key={`${benefit.category}-${benefit.version}`}
+                    benefit={benefit}
+                    data={data}
+                    busy={busy}
+                    save={(input) =>
+                      request({ action: "save", input }, benefit.category)
+                    }
+                    cancel={() => setEditing(null)}
+                  />
+                ) : (
+                  <Button disabled={busy} onClick={() => setEditing(benefit)}>
+                    {benefit.version === null
+                      ? "Assess benefit"
+                      : "Review assessment"}
+                  </Button>
                 )}
-              {editing?.category === benefit.category ? (
-                <BenefitForm
-                  key={`${benefit.category}-${benefit.version}`}
-                  benefit={benefit}
-                  data={data}
-                  busy={busy}
-                  save={(input) => request({ action: "save", input })}
-                  cancel={() => setEditing(null)}
-                />
-              ) : (
-                <Button disabled={busy} onClick={() => setEditing(benefit)}>
-                  {benefit.version === null
-                    ? "Assess benefit"
-                    : "Review assessment"}
-                </Button>
-              )}
-              {benefit.version !== null && (
-                <Button
-                  pendingLabel="Removing…"
-                  className="danger-button"
-                  disabled={busy}
-                  onClick={() => {
-                    if (
-                      window.confirm(
-                        "Remove your assessment? Original employment and evidence remain.",
+                {benefit.version !== null && (
+                  <Button
+                    pendingLabel="Removing…"
+                    className="danger-button"
+                    disabled={busy}
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          "Remove your assessment? Original employment and evidence remain.",
+                        )
                       )
-                    )
-                      return request({
-                        action: "remove",
-                        category: benefit.category,
-                        version: benefit.version,
-                      });
-                  }}
-                >
-                  Remove assessment
-                </Button>
-              )}
+                        return request(
+                          {
+                            action: "remove",
+                            category: benefit.category,
+                            version: benefit.version,
+                          },
+                          benefit.category,
+                        );
+                    }}
+                  >
+                    Remove assessment
+                  </Button>
+                )}
+              </div>
+              {feedback(benefit.category)}
             </article>
           ))}
         </div>
       </section>
       <section aria-label="Key document status">
-        <h2>Key document status</h2>
+        <SectionTitle icon="documents" tone="info">
+          Key document status
+        </SectionTitle>
         <p>
           Available means a private record is saved, not that its contents or
           coverage are verified.
         </p>
-        <div className="passport-flow">
+        <div className="document-status-grid">
           {data.documents.map((group) => (
-            <article className="card" key={group.category}>
+            <article
+              className="card section-panel tone-info"
+              key={group.category}
+            >
               <h3>{group.label}</h3>
-              <p>{group.state}</p>
+              <StatusChip tone={group.records.length ? "info" : "neutral"}>
+                {group.state}
+              </StatusChip>
               {group.records.map((record) => (
                 <div key={record.id}>
                   <Link className="touch-link" href={`/documents/${record.id}`}>

@@ -1,5 +1,7 @@
 import { checkResponsiveActions } from "../helpers/responsive-actions";
 import { expect, test, type Page } from "@playwright/test";
+import Redis from "ioredis";
+import { navigateTo } from "../helpers/navigation";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 const db = new PrismaClient();
@@ -200,4 +202,30 @@ test("reminder ownership and anonymous/Origin/input boundaries", async ({
   } finally {
     await other.close();
   }
+});
+
+test("unhealthy worker diagnostics stay server-side and navigation remains usable", async ({
+  page,
+}) => {
+  const redis = new Redis(process.env.REDIS_URL!);
+  try {
+    await redis.del("treviqo:worker:heartbeat");
+  } finally {
+    redis.disconnect();
+  }
+  const diagnostics: string[] = [];
+  page.on("console", (message) => {
+    if (/worker_health_failed|runtime_failed/.test(message.text()))
+      diagnostics.push(message.text());
+  });
+  await page.setViewportSize({ width: 375, height: 850 });
+  await account(page);
+  await page.goto("/reminders");
+  await expect(page.getByRole("status")).toContainText(
+    "Background updates are delayed",
+  );
+  await checkResponsiveActions(page);
+  await navigateTo(page, "Home");
+  await expect(page).toHaveURL("/home");
+  expect(diagnostics).toEqual([]);
 });

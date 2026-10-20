@@ -1,3 +1,4 @@
+import { primaryDestination } from "../helpers/navigation";
 import { checkResponsiveActions } from "../helpers/responsive-actions";
 import { expect, test, type Page } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
@@ -126,11 +127,15 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
     });
     await salary.getByRole("button", { name: "Reject", exact: true }).click();
     await expect(salary.getByText("rejected", { exact: true })).toBeVisible();
+    await page.getByText("Add another detail", { exact: true }).click();
     const leave = page.getByRole("region", {
       name: "Annual leave",
       exact: true,
     });
     await leave.getByRole("button", { name: "Mark unknown" }).click();
+    await expect(
+      page.getByText("Reviewed details:", { exact: false }),
+    ).toContainText("2 corrected · 1 rejected · 1 unknown");
     await expect(leave.getByText("unknown", { exact: true })).toBeVisible();
     await page.reload();
     await expect(correction).toBeDisabled();
@@ -147,11 +152,10 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
     await role.scrollIntoViewIfNeeded();
     await checkResponsiveActions(page);
     await page.screenshot({ path: `test-results/extraction-${width}.png` });
-    await expect(
-      page
-        .getByRole("navigation")
-        .getByRole("link", { name: "Documents", exact: true }),
-    ).toHaveAttribute("aria-current", "page");
+    await expect(primaryDestination(page, "Documents")).toHaveAttribute(
+      "aria-current",
+      /page|location/,
+    );
   });
 }
 test("handles model failure, low confidence, malformed output and manual fallback", async ({
@@ -170,7 +174,9 @@ test("handles model failure, low confidence, malformed output and manual fallbac
   ]) {
     await page
       .getByLabel("Document text (optional)")
-      .fill(`${contract.text}\n${marker}`);
+      .fill(
+        `EMPLOYMENT CONTRACT\nNo explicit labelled fields are available.\n${marker}`,
+      );
     await page
       .getByRole("button", { name: "Extract details", exact: true })
       .click();
@@ -180,15 +186,19 @@ test("handles model failure, low confidence, malformed output and manual fallbac
   }
   await page
     .getByLabel("Document text (optional)")
-    .fill(`${contract.text}\nFIXTURE_LOW`);
+    .fill("Document details awaiting category selection. FIXTURE_LOW");
   await page
     .getByRole("button", { name: "Extract details", exact: true })
     .click();
   const category = page.getByRole("region", {
-    name: "Suggested document category",
+    name: "Document category",
     exact: true,
   });
-  await expect(category).toContainText("Needs clarification");
+  await expect(category).toContainText("Needs confirmation");
+  await expect(page.getByRole("status")).toContainText(
+    "category needs confirmation",
+  );
+  await expect(page.getByRole("status")).not.toContainText("Details are ready");
   await expect(
     page.getByRole("region", { name: "Employer", exact: true }),
   ).toHaveCount(0);
@@ -196,6 +206,9 @@ test("handles model failure, low confidence, malformed output and manual fallbac
     .getByLabel("Document type", { exact: true })
     .selectOption("payslip");
   await page.getByRole("button", { name: "Enter details manually" }).click();
+  await expect(
+    page.getByText("Review complete.", { exact: false }),
+  ).toHaveCount(0);
   const net = page.getByRole("region", { name: "Net pay", exact: true });
   await expect(
     net.getByRole("button", { name: "Confirm proposal" }),
@@ -334,7 +347,7 @@ test("review actions show local feedback, block repeated clicks, recover, and hi
     });
     expect(starts).toBe(1);
     await expect(page.getByRole("status")).toContainText(
-      "This may take up to 90 seconds",
+      "This may take a few minutes",
     );
   } finally {
     release();
@@ -430,7 +443,7 @@ for (const width of [320, 1440]) {
       headers: { origin },
       data: {
         mode: "ai",
-        text: `${contract.text}\nFIXTURE_CLASSIFICATION_INVALID`,
+        text: "Document details awaiting category selection. FIXTURE_CLASSIFICATION_INVALID",
       },
     });
     await page.reload();
@@ -466,7 +479,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
         data: {
           mode: "ai",
           type: "employment_contract",
-          text: `${contract.text}\nFIXTURE_MALFORMED`,
+          text: "Employment contract. No explicit labelled fields are available.\nFIXTURE_MALFORMED",
         },
       });
       expect((await failed.json()).extraction.status).toBe("failed");
@@ -528,7 +541,7 @@ for (const width of [320, 375, 430, 768, 1024, 1280, 1440]) {
       await expect(
         current.getByRole("heading", { name: "Extracting details…" }),
       ).toBeVisible();
-      await expect(current).toContainText("This may take up to 90 seconds");
+      await expect(current).toContainText("This may take a few minutes");
       await expect(
         page.getByRole("heading", { name: "Extraction failed" }),
       ).toHaveCount(0);
@@ -609,7 +622,7 @@ test("an uncertain retry outcome does not restore the previous failure as the ne
     data: {
       mode: "ai",
       type: "employment_contract",
-      text: `${contract.text}\nFIXTURE_MALFORMED`,
+      text: "Employment contract. No explicit labelled fields are available.\nFIXTURE_MALFORMED",
     },
   });
   await page.goto(`/documents/${id}/review`);
@@ -680,7 +693,7 @@ test("history loading is separate, cached, and cannot overwrite a new failed res
       data: {
         mode: "ai",
         type: "employment_contract",
-        text: `${contract.text}\nFIXTURE_MALFORMED`,
+        text: "Employment contract. No explicit labelled fields are available.\nFIXTURE_MALFORMED",
       },
     });
     failures.push((await response.json()).extraction.id);
@@ -749,7 +762,9 @@ test("history loading is separate, cached, and cannot overwrite a new failed res
     .selectOption("employment_contract");
   await page
     .getByLabel("Document text (optional)")
-    .fill(`${contract.text}\nFIXTURE_MALFORMED`);
+    .fill(
+      "Employment contract. No explicit labelled fields are available.\nFIXTURE_MALFORMED",
+    );
   let finish!: () => void;
   const starting = new Promise<void>((resolve) => {
     finish = resolve;
@@ -937,7 +952,7 @@ test("saving an older manual review updates its cache without replacing the late
   expect(reads).toBe(1);
 });
 
-test("category confirmation and correction follow the same edit rules", async ({
+test("changing category starts a fresh schema and preserves the old attempt", async ({
   page,
 }) => {
   const id = await createDocument(page);
@@ -946,30 +961,250 @@ test("category confirmation and correction follow the same edit rules", async ({
     .getByRole("button", { name: "Extract details", exact: true })
     .click();
   const category = page.getByRole("region", {
-    name: "Suggested document category",
+    name: "Document category",
     exact: true,
   });
-  const confirm = category.getByRole("button", { name: "Confirm proposal" });
-  const save = category.getByRole("button", { name: "Save correction" });
-  const select = category.getByLabel("Correct category");
-  await expect(confirm).toBeEnabled();
-  await expect(save).toBeDisabled();
-  await confirm.click();
-  await expect(confirm).toBeDisabled();
-  await select.selectOption("payslip");
-  await expect(save).toBeEnabled();
-  await expect(confirm).toBeDisabled();
-  await select.selectOption("employment_contract");
-  await expect(save).toBeDisabled();
-  await select.selectOption("payslip");
-  await save.click();
-  await expect(category.getByText("corrected", { exact: true })).toBeVisible();
-  await expect(save).toBeDisabled();
-  await expect(confirm).toBeDisabled();
-  // Explicitly reversing a rejected/unknown decision remains possible.
-  await category.getByRole("button", { name: "Reject", exact: true }).click();
-  await expect(category.getByText("rejected", { exact: true })).toBeVisible();
-  await expect(confirm).toBeEnabled();
-  await confirm.click();
-  await expect(category.getByText("confirmed", { exact: true })).toBeVisible();
+  await category.getByRole("button", { name: "Confirm category" }).click();
+  await expect(category).toContainText("Confirmed:");
+  await category.getByRole("button", { name: "Change category" }).click();
+  await expect(
+    page.getByRole("region", { name: "Employer", exact: true }),
+  ).toHaveCount(0);
+  await expect(page.getByLabel("Document type", { exact: true })).toBeFocused();
+  await page
+    .getByLabel("Document type", { exact: true })
+    .selectOption("pension_statement");
+  const pension = JSON.parse(
+    readFileSync("tests/fixtures/intelligence/pension_statement.json", "utf8"),
+  );
+  await page
+    .getByText("Scanned file or image? Add text from the document", {
+      exact: true,
+    })
+    .click();
+  await page.getByLabel("Document text (optional)").fill(pension.text);
+  await page
+    .getByRole("button", { name: "Extract details", exact: true })
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Pension provider", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Start date", exact: true }),
+  ).toHaveCount(0);
+  const attempts = await db.documentExtraction.findMany({
+    where: { documentId: id },
+    orderBy: { createdAt: "asc" },
+    include: { fields: true },
+  });
+  expect(attempts.map((a) => a.documentType)).toEqual([
+    "employment_contract",
+    "pension_statement",
+  ]);
+  expect(attempts[0]!.fields.some((f) => f.key === "start_date")).toBe(true);
+  expect(attempts[1]!.fields.some((f) => f.key === "start_date")).toBe(false);
 });
+
+for (const type of [
+  "employment_contract",
+  "payslip",
+  "resignation_letter",
+  "termination_letter",
+  "final_settlement",
+  "pension_statement",
+  "benefit_document",
+  "exit_letter",
+] as const) {
+  test(`wrong AI category cannot cross schemas in the ${type} review`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 375, height: 850 });
+    const id = await createDocument(page);
+    const fixture = JSON.parse(
+      readFileSync(`tests/fixtures/intelligence/${type}.json`, "utf8"),
+    );
+    const response = await page.request.post(
+      `/api/documents/${id}/extractions`,
+      {
+        headers: { origin },
+        data: { mode: "ai", text: `${fixture.text}\nFIXTURE_WRONG_TYPE` },
+      },
+    );
+    const run = (await response.json()).extraction;
+    expect(run.documentType).toBe(type);
+    const { fieldLabels } =
+      await import("../../src/modules/extractions/shared");
+    expect(
+      run.fields.every(
+        (f: { key: string }) =>
+          f.key === "document_type" || Object.hasOwn(fieldLabels[type], f.key),
+      ),
+    ).toBe(true);
+    await page.goto(`/documents/${id}/review`);
+    const labels = await page
+      .locator(".extraction-field")
+      .evaluateAll((nodes) => nodes.map((n) => n.getAttribute("aria-label")));
+    expect(
+      labels.every((label) =>
+        Object.values(fieldLabels[type]).some((value) => value === label),
+      ),
+    ).toBe(true);
+    await expect(
+      page.getByRole("region", { name: "Proposed fields", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Add another detail", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Add another detail", { exact: true }).locator(".."),
+    ).not.toHaveAttribute("open", "");
+    if (type === "exit_letter") {
+      await expect(
+        page
+          .getByLabel("Document type", { exact: true })
+          .getByRole("option", { name: "Exit letter", exact: true }),
+      ).toHaveCount(1);
+      const lastDay = page.getByRole("region", {
+        name: "Confirmed last working day",
+        exact: true,
+      });
+      await expect(lastDay).toContainText("30 September 2026");
+      await lastDay.getByRole("button", { name: "Confirm proposal" }).click();
+      await expect(
+        lastDay.getByText("confirmed", { exact: true }),
+      ).toBeVisible();
+      await page.reload();
+      await expect(
+        lastDay.getByText("confirmed", { exact: true }),
+      ).toBeVisible();
+    }
+    if (type === "benefit_document") {
+      await expect(
+        page.getByRole("region", {
+          name: "Health plan — coverage and continuation",
+          exact: true,
+        }),
+      ).toContainText("30 calendar days");
+      await expect(
+        page.getByRole("region", {
+          name: "Health plan — coverage and continuation",
+          exact: true,
+        }),
+      ).toContainText("continuation is not automatic");
+      await expect(
+        page.getByRole("region", { name: "Gross pay", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page
+          .getByLabel("Document type", { exact: true })
+          .getByRole("option", { name: "Benefit document", exact: true }),
+      ).toHaveCount(1);
+    }
+    if (type === "pension_statement") {
+      await expect(
+        page.getByRole("region", {
+          name: "Entry 1: Employee contribution",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        page.getByRole("region", { name: "Gross pay", exact: true }),
+      ).toHaveCount(0);
+    }
+    if (type === "resignation_letter") {
+      await expect(
+        page.getByRole("region", { name: "Proposed last day", exact: true }),
+      ).toContainText("31 October 2026");
+      await expect(
+        page.getByRole("region", { name: "Start date", exact: true }),
+      ).toHaveCount(0);
+    }
+    await checkResponsiveActions(page);
+  });
+}
+
+for (const width of [320, 768, 1440]) {
+  test(`labelled source facts display accurately at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 850 });
+    const id = await createDocument(page);
+    const layouts = JSON.parse(
+      readFileSync(
+        "tests/fixtures/intelligence/labelled-source-layouts.json",
+        "utf8",
+      ),
+    );
+    for (const [type, checks] of [
+      [
+        "payslip",
+        [
+          ["Gross pay", "NGN 245,000.00"],
+          ["Net pay", "NGN 197,175.00"],
+          [
+            "Employer pension contribution (separate from net pay)",
+            "NGN 24,500.00",
+          ],
+        ],
+      ],
+      [
+        "final_settlement",
+        [
+          ["Final gross salary", "NGN 245,000.00"],
+          ["Final net salary", "NGN 197,175.00"],
+          ["Tax deduction", "NGN -25,725.00"],
+        ],
+      ],
+      ["resignation_letter", [["Letter date", "1 August 2022"]]],
+      [
+        "benefit_document",
+        [
+          [
+            "Health plan — coverage and continuation",
+            "ended after separation.",
+          ],
+        ],
+      ],
+      ["pension_statement", [["Pension provider", "Example Pensions Ltd"]]],
+    ] as const) {
+      const response = await page.request.post(
+        `/api/documents/${id}/extractions`,
+        {
+          headers: { origin },
+          data: {
+            mode: "ai",
+            type,
+            text: layouts[type] + "\nFIXTURE_MALFORMED",
+          },
+        },
+      );
+      expect(response.ok()).toBe(true);
+      const run = (await response.json()).extraction;
+      expect(run).toMatchObject({
+        status: "ready",
+        errorCode: "partial",
+        documentType: type,
+      });
+      await page.goto(`/documents/${id}/review`);
+      for (const [label, value] of checks) {
+        await expect(
+          page.getByRole("region", { name: label, exact: true }),
+        ).toContainText(value);
+      }
+      const count = run.fields.filter(
+        (f: { key: string; proposedValue: string | null }) =>
+          f.key !== "document_type" && f.proposedValue !== null,
+      ).length;
+      await expect(
+        page.getByText(`${count} extracted details waiting for review.`, {
+          exact: false,
+        }),
+      ).toBeVisible();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    }
+  });
+}

@@ -1,4 +1,5 @@
 import "server-only";
+import { readRecords } from "@/server/db/read";
 import { createHash } from "node:crypto";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { getDb } from "@/server/db/client";
@@ -147,12 +148,13 @@ export function passportService(db: PrismaClient = getDb()) {
   ): Promise<PassportDetail> {
     const { job, contextToken, docs, fields } = await context(tx, userId, id);
     const exitId = job.exitCases[0]?.id;
-    const exit = exitId
-      ? await exitService(db).readInTransaction(tx, userId, exitId)
-      : null;
-    const finance = exitId
-      ? await financeService(db).readInTransaction(tx, userId, exitId)
-      : null;
+    // Independent authorized reads; never hold a transaction across domain views.
+    const [exit, finance] = exitId
+      ? await Promise.all([
+          exitService(db).detail(userId, exitId),
+          financeService(db).read(userId, exitId),
+        ])
+      : [null, null];
     const ready = docs.filter((doc) => doc.status === "ready");
     const label = (doc: (typeof docs)[number]) =>
       `${doc.documentType.replaceAll("_", " ")} · ${date(doc.createdAt)} · ${docs.indexOf(doc) + 1}`;
@@ -249,6 +251,7 @@ export function passportService(db: PrismaClient = getDb()) {
                 item.state !== "complete" && item.state !== "not_applicable",
             ).length,
             total: exit.checklist.length,
+            exitTypeDiscrepancies: exit.exitTypeDiscrepancies,
           }
         : null,
       documents: documentGroups.map((group) => {
@@ -314,9 +317,8 @@ export function passportService(db: PrismaClient = getDb()) {
       }));
     },
     read(userId: string, id: string) {
-      return db.$transaction((tx) => detail(tx, userId, id), {
-        isolationLevel: "RepeatableRead",
-      });
+      // Display reads need no transaction snapshot; mutations revalidate atomically.
+      return readRecords(() => detail(db, userId, id));
     },
     async command(userId: string, id: string, raw: unknown) {
       authenticated(userId);

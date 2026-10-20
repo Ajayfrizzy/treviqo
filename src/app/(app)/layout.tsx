@@ -1,3 +1,4 @@
+import "../product.css";
 import Link from "@/components/action-link";
 import { redirect } from "next/navigation";
 import { getCurrentUser } from "@/modules/auth/session";

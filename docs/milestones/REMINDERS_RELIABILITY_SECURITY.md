@@ -1,5 +1,7 @@
 # Milestone 7 — Reminders, Reliability & Security
 
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+
 Implemented 4 October 2026. Extends the modular monolith; no new dependencies, infrastructure providers, external messages, or Milestone 8+ features.
 
 ## Architecture and changed areas
@@ -13,12 +15,12 @@ PostgreSQL is authoritative. Redis contains only logical job IDs and a heartbeat
 
 ## Reminder behavior
 
-| Type | Trigger and next action |
-| --- | --- |
-| Exit action | Unresolved current checklist item; review its answers/evidence. First follow-up is the earlier of case creation plus one day or last working date. |
-| Missing document | Missing final salary, reimbursement, asset acknowledgement, exit document or reference evidence; open the source checklist. |
-| Pension follow-up | Saved follow-up date is due, pension applies and current contribution state is not confirmed; open finance review. |
-| Stale action | Exit answers unchanged for seven days with unresolved items; review current checklist. |
+| Type              | Trigger and next action                                                                                                                            |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Exit action       | Unresolved current checklist item; review its answers/evidence. First follow-up is the earlier of case creation plus one day or last working date. |
+| Missing document  | Missing final salary, reimbursement, asset acknowledgement, exit document or reference evidence; open the source checklist.                        |
+| Pension follow-up | Saved follow-up date is due, pension applies and current contribution state is not confirmed; open finance review.                                 |
+| Stale action      | Exit answers unchanged for seven days with unresolved items; review current checklist.                                                             |
 
 Dates are planning conventions, never statutory deadlines. UTC is used for date-only boundaries. No AI makes reminder decisions. The mobile screen supports refresh, source links, seven-day snooze, dismissal, empty/loading/error/success states and a delayed-worker warning; the five primary navigation sections remain intact.
 
@@ -48,18 +50,18 @@ Use explicit Docker targets `runtime`, `worker`, and `migrate`; default remains 
 
 Tests use disposable PostgreSQL/Redis and synthetic S3/AI protocol fixtures; no live Rumpty inference, deployment or production data is involved.
 
-| Command/check | Result |
-| --- | --- |
-| `npm run validate` | Passed lint, strict typecheck, 208 unit tests, production Next.js build and worker compilation. |
-| `npm run test:integration` with disposable URLs | 81 passed, including 11 worker/reminder/rate-limit integration cases. |
-| `npm run test:e2e` with disposable URLs | 49 Chromium tests passed; reminder workflows at 320/375/430px. |
-| `prisma migrate deploy` / migrate Docker target | All nine migrations applied to a fresh disposable database; repeat Docker deploy reported no pending migrations. |
-| `prisma migrate diff --from-url <disposable-url> --to-schema-datamodel prisma/schema.prisma --exit-code` | No difference detected. |
-| `docker build --target runtime/worker/migrate` (each target separately) | All three images built. |
-| `docker exec treviqo-m7-web node tests/production-smoke.mjs` | Passed non-root/auth/cookies/revocation, private TLS storage, fixture AI/PDF, exit, finance, Passport, worker reminders/snooze/audit and expired-session cleanup while preserving active access. |
-| Worker health and runtime outage/restart checks | Health passed; absent heartbeat returned readiness 503/liveness 200; worker restart after deleting queue/heartbeat restored readiness 200. |
-| `npm audit --omit=dev --json` | Zero reported production advisories. |
-| `git diff --check` | Passed. |
+| Command/check                                                                                            | Result                                                                                                                                                                                           |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `npm run validate`                                                                                       | Passed lint, strict typecheck, 208 unit tests, production Next.js build and worker compilation.                                                                                                  |
+| `npm run test:integration` with disposable URLs                                                          | 81 passed, including 11 worker/reminder/rate-limit integration cases.                                                                                                                            |
+| `npm run test:e2e` with disposable URLs                                                                  | 49 Chromium tests passed; reminder workflows at 320/375/430px.                                                                                                                                   |
+| `prisma migrate deploy` / migrate Docker target                                                          | All nine migrations applied to a fresh disposable database; repeat Docker deploy reported no pending migrations.                                                                                 |
+| `prisma migrate diff --from-url <disposable-url> --to-schema-datamodel prisma/schema.prisma --exit-code` | No difference detected.                                                                                                                                                                          |
+| `docker build --target runtime/worker/migrate` (each target separately)                                  | All three images built.                                                                                                                                                                          |
+| `docker exec treviqo-m7-web node tests/production-smoke.mjs`                                             | Passed non-root/auth/cookies/revocation, private TLS storage, fixture AI/PDF, exit, finance, Passport, worker reminders/snooze/audit and expired-session cleanup while preserving active access. |
+| Worker health and runtime outage/restart checks                                                          | Health passed; absent heartbeat returned readiness 503/liveness 200; worker restart after deleting queue/heartbeat restored readiness 200.                                                       |
+| `npm audit --omit=dev --json`                                                                            | Zero reported production advisories.                                                                                                                                                             |
+| `git diff --check`                                                                                       | Passed.                                                                                                                                                                                          |
 
 The first full browser run had 48 passes and one test-selector failure: Next.js's route announcer also has an alert role. The error assertion now selects the alert containing the expected failure text; the complete rerun passed. No tests were skipped. Visually inspected the 320px reminder screenshot; automated viewport checks also cover 375/430px and verify no horizontal overflow. Real-device, live Rumpty and disaster-recovery acceptance remain manual.
 

@@ -15,7 +15,6 @@ export class InferenceError extends Error {
     super(`AI ${code}`);
   }
 }
-export const INFERENCE_TIMEOUT_MS = 25000;
 export interface DocumentAI {
   model: string;
   complete(task: InferenceTask): Promise<string>;
@@ -34,7 +33,7 @@ export function getDocumentAI(): DocumentAI {
         const response = await fetch(endpoint, {
           method: "POST",
           redirect: "error",
-          signal: AbortSignal.timeout(INFERENCE_TIMEOUT_MS),
+          signal: AbortSignal.timeout(env.RUMPTY_AI_TIMEOUT_MS),
           cache: "no-store",
           headers: {
             "content-type": "application/json",

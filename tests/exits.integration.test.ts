@@ -261,3 +261,183 @@ it("rolls back saved answers if auditing fails", async () => {
   ).rejects.toThrow();
   expect((await service().detail(a, record.id)).answers.leave).toBe("unknown");
 });
+
+it("reports an unconfirmed discrepancy without changing answers and isolates other employments", async () => {
+  const run = await db.documentExtraction.create({
+    data: {
+      userId: a,
+      documentId: doc,
+      documentType: "termination_letter",
+      sourceKind: "pdf_text",
+      model: "fixture",
+      promptVersion: "evidence-v12",
+      schemaVersion: "fields-v12",
+      status: "ready",
+      fields: {
+        create: {
+          key: "reason",
+          proposedValue: "Role redundancy following departmental restructuring",
+          evidence:
+            "Reason: Role redundancy following departmental restructuring",
+          confidence: "needs_review",
+          reviewState: "proposed",
+        },
+      },
+    },
+    include: { fields: true },
+  });
+  const record = await create();
+  expect(record.answers.exitType).toBe("resignation");
+  expect(record.exitTypeDiscrepancies).toEqual([
+    { documentId: doc, type: "redundancy", reviewed: false },
+  ]);
+  const sibling = await service().create(a, {
+    employmentId: siblingJob,
+    answers: base,
+  });
+  expect(sibling.exitTypeDiscrepancies).toEqual([]);
+  await expect(service().detail(b, record.id)).rejects.toMatchObject({
+    status: 404,
+  });
+  await db.extractedField.update({
+    where: { id: run.fields[0]!.id },
+    data: { reviewState: "rejected" },
+  });
+  expect((await service().detail(a, record.id)).exitTypeDiscrepancies).toEqual(
+    [],
+  );
+  await db.extractedField.update({
+    where: { id: run.fields[0]!.id },
+    data: { reviewState: "corrected", value: "Resignation" },
+  });
+  expect((await service().detail(a, record.id)).exitTypeDiscrepancies).toEqual(
+    [],
+  );
+  await db.extractedField.update({
+    where: { id: run.fields[0]!.id },
+    data: {
+      reviewState: "confirmed",
+      value: "Role redundancy following departmental restructuring",
+    },
+  });
+  expect(
+    (await service().detail(a, record.id)).exitTypeDiscrepancies?.[0]?.reviewed,
+  ).toBe(true);
+  const updated = await service().update(a, record.id, {
+    version: record.version,
+    answers: { ...base, exitType: "redundancy" },
+  });
+  expect(updated.exitTypeDiscrepancies).toEqual([]);
+});
+it("ignores old attempts, missing evidence and unavailable documents in discrepancy notices", async () => {
+  await db.documentExtraction.create({
+    data: {
+      userId: a,
+      documentId: doc,
+      documentType: "exit_letter",
+      sourceKind: "pdf_text",
+      model: "fixture",
+      promptVersion: "v12",
+      schemaVersion: "v12",
+      status: "ready",
+      createdAt: new Date("2026-01-01"),
+      fields: {
+        create: {
+          key: "exit_type",
+          proposedValue: "Redundancy",
+          evidence: "Exit type: Redundancy",
+          confidence: "needs_review",
+          reviewState: "proposed",
+        },
+      },
+    },
+  });
+  const record = await create();
+  expect(record.exitTypeDiscrepancies).toHaveLength(1);
+  const latest = await db.documentExtraction.create({
+    data: {
+      userId: a,
+      documentId: doc,
+      documentType: "exit_letter",
+      sourceKind: "pdf_text",
+      model: "fixture",
+      promptVersion: "v12",
+      schemaVersion: "v12",
+      status: "ready",
+      fields: {
+        create: {
+          key: "exit_type",
+          proposedValue: "Redundancy",
+          confidence: "needs_review",
+          reviewState: "proposed",
+        },
+      },
+    },
+    include: { fields: true },
+  });
+  expect((await service().detail(a, record.id)).exitTypeDiscrepancies).toEqual(
+    [],
+  );
+  await db.extractedField.update({
+    where: { id: latest.fields[0]!.id },
+    data: { evidence: "Exit type: Redundancy" },
+  });
+  await db.employmentDocument.update({
+    where: { id: doc },
+    data: { status: "deleting" },
+  });
+  expect((await service().detail(a, record.id)).exitTypeDiscrepancies).toEqual(
+    [],
+  );
+});
+
+it("suppresses a discrepancy when the extraction category is rejected or corrected to another category", async () => {
+  const run = await db.documentExtraction.create({
+    data: {
+      userId: a,
+      documentId: doc,
+      documentType: "exit_letter",
+      sourceKind: "pdf_text",
+      model: "fixture",
+      promptVersion: "evidence-v12",
+      schemaVersion: "fields-v12",
+      status: "ready",
+      fields: {
+        create: [
+          {
+            key: "document_type",
+            proposedValue: "exit_letter",
+            evidence: "Exit confirmation letter",
+            confidence: "needs_review",
+            reviewState: "proposed",
+          },
+          {
+            key: "exit_type",
+            proposedValue: "Redundancy",
+            evidence: "Exit type: Redundancy",
+            confidence: "needs_review",
+            reviewState: "proposed",
+          },
+        ],
+      },
+    },
+    include: { fields: true },
+  });
+  const record = await create();
+  expect(record.exitTypeDiscrepancies).toHaveLength(1);
+  const category = run.fields.find((f) => f.key === "document_type")!;
+  await db.extractedField.update({
+    where: { id: category.id },
+    data: { reviewState: "rejected" },
+  });
+  expect((await service().detail(a, record.id)).exitTypeDiscrepancies).toEqual(
+    [],
+  );
+  await db.extractedField.update({
+    where: { id: category.id },
+    data: { reviewState: "corrected", value: "pension_statement" },
+  });
+  expect((await service().detail(a, record.id)).exitTypeDiscrepancies).toEqual(
+    [],
+  );
+});

@@ -1,11 +1,17 @@
 import "server-only";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type {
   PrismaClient,
   Prisma,
   DocumentType,
   EmploymentDocument,
 } from "@prisma/client";
+import {
+  readDatabase,
+  transientDatabaseError,
+  DatabaseUnavailableError,
+} from "@/server/db/retry";
+import { reserveExtraction } from "./reservation";
 import { getDb } from "@/server/db/client";
 import {
   getObjectStorage,
@@ -19,6 +25,7 @@ import {
 import { ContentError, prepareDocument } from "@/server/ai/content";
 import { DocumentError } from "@/modules/documents/validation";
 import {
+  fieldAllowed,
   startSchema,
   reviewSchema,
   fieldLabels,
@@ -29,17 +36,15 @@ import {
 import {
   parseClassification,
   parseFields,
-  PROMPT_VERSION,
+  ExtractionParseError,
   SCHEMA_VERSION,
 } from "./schema";
+import { recoverSourceFields } from "./source-recovery";
+import { chooseClassification, typeAnchors } from "./classification";
 import { classificationPrompt, extractionPrompt } from "./prompts";
 import { allowExtraction } from "./rate-limit";
 import { extractionDatabaseCode } from "./diagnostics";
-import {
-  persistAttempt,
-  EXTRACTION_LEASE_MS as leaseMs,
-  type Proposal,
-} from "./persistence";
+import { persistAttempt, type Proposal } from "./persistence";
 type Tx = Prisma.TransactionClient;
 class ExtractionFailure extends Error {
   constructor(public code: string) {
@@ -74,17 +79,52 @@ const selection = {
   fields: { select: fieldSelect, orderBy: { key: "asc" as const } },
 } satisfies Prisma.DocumentExtractionSelect;
 type Row = Prisma.DocumentExtractionGetPayload<{ select: typeof selection }>;
+type CategoryContext = Pick<
+  Row,
+  "status" | "documentType" | "sourceKind" | "schemaVersion"
+> & {
+  fields: Pick<
+    Row["fields"][number],
+    "key" | "value" | "proposedValue" | "evidence"
+  >[];
+};
+function needsTypeConfirmation(row: CategoryContext) {
+  if (row.status !== "ready") return false;
+  if (
+    !row.documentType ||
+    !supportedTypes.includes(row.documentType as ExtractionType)
+  )
+    return true;
+  const category = row.fields.find((f) => f.key === "document_type");
+  if (category?.value && category.value !== row.documentType) return true;
+  if (category?.proposedValue && category.proposedValue !== row.documentType)
+    return true;
+  const anchors = typeAnchors(category?.evidence ?? "");
+  if (anchors.some((anchor) => anchor.type !== row.documentType)) return true;
+  // Earlier automated attempts did not validate classification purpose. Do not
+  // silently rewrite history or present their schema as validated on reload.
+  // Additive schemas retain previously purpose-validated v9–v11 attempts.
+  return (
+    row.sourceKind !== "manual" &&
+    !["fields-v9", "fields-v10", "fields-v11", SCHEMA_VERSION].includes(
+      row.schemaVersion,
+    )
+  );
+}
 function serialize(row: Row): ExtractionRecord {
   return {
     ...row,
     createdAt: row.createdAt.toISOString(),
-    fields: row.fields.map((field) => ({
-      ...field,
-      revisions: field.revisions.map((revision) => ({
-        ...revision,
-        createdAt: revision.createdAt.toISOString(),
+    needsTypeConfirmation: needsTypeConfirmation(row),
+    fields: row.fields
+      .filter((field) => fieldAllowed(row.documentType, field.key))
+      .map((field) => ({
+        ...field,
+        revisions: field.revisions.map((revision) => ({
+          ...revision,
+          createdAt: revision.createdAt.toISOString(),
+        })),
       })),
-    })),
   };
 }
 export function extractionService(
@@ -117,14 +157,16 @@ export function extractionService(
         throw new DocumentError("Document not found or not ready.", 404);
       return rows[0];
     }
-    const doc = await tx.employmentDocument.findFirst({
-      where: {
-        id: documentId,
-        userId,
-        status: "ready",
-        employment: { userId },
-      },
-    });
+    const doc = await readDatabase(() =>
+      tx.employmentDocument.findFirst({
+        where: {
+          id: documentId,
+          userId,
+          status: "ready",
+          employment: { userId },
+        },
+      }),
+    );
     if (!doc) throw new DocumentError("Document not found or not ready.", 404);
     return doc;
   }
@@ -150,17 +192,21 @@ export function extractionService(
     async read(userId: string, documentId: string, runId?: string) {
       await document(db, userId, documentId);
       await persistAttempt(db, userId, documentId);
-      const attempts = await db.documentExtraction.findMany({
-        where: { userId, documentId },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        take: 20,
-        select: { id: true, status: true, createdAt: true },
-      });
-      const current = await db.documentExtraction.findFirst({
-        where: { userId, documentId, ...(runId ? { id: runId } : {}) },
-        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-        select: selection,
-      });
+      const attempts = await readDatabase(() =>
+        db.documentExtraction.findMany({
+          where: { userId, documentId },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          take: 20,
+          select: { id: true, status: true, createdAt: true },
+        }),
+      );
+      const current = await readDatabase(() =>
+        db.documentExtraction.findFirst({
+          where: { userId, documentId, ...(runId ? { id: runId } : {}) },
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+          select: selection,
+        }),
+      );
       if (runId && !current)
         throw new DocumentError("Extraction not found.", 404);
       return {
@@ -183,40 +229,34 @@ export function extractionService(
             429,
           );
         stage = "reservation";
-        const run = await db.$transaction(async (tx) => {
-          const doc = await document(tx, userId, documentId, true);
-          const active = await tx.documentExtraction.findFirst({
-            where: {
-              documentId,
-              userId,
-              status: "processing",
-              createdAt: { gt: new Date(Date.now() - leaseMs) },
-            },
+        let run: { id: string; model: string };
+        try {
+          run = await reserveExtraction(db, {
+            id: randomUUID(),
+            userId,
+            documentId,
+            sourceKind:
+              input.mode === "manual"
+                ? "manual"
+                : input.text
+                  ? "user_transcript"
+                  : "pdf_text",
+            model: input.mode === "manual" ? "manual" : "unconfigured",
           });
-          if (active)
+        } catch (error) {
+          if (transientDatabaseError(error)) {
+            console.error("extraction_reservation_db_unavailable");
+            throw new DatabaseUnavailableError();
+          }
+          if (!(error instanceof DocumentError)) {
+            console.error("extraction_reservation_transaction_failed");
             throw new DocumentError(
-              "An extraction is already running. Refresh shortly.",
-              409,
+              "Extraction could not be started. Refresh and retry.",
+              503,
             );
-          await persistAttempt(tx, userId, documentId);
-          const created = await tx.documentExtraction.create({
-            data: {
-              userId,
-              documentId,
-              sourceKind:
-                input.mode === "manual"
-                  ? "manual"
-                  : input.text
-                    ? "user_transcript"
-                    : "pdf_text",
-              model: input.mode === "manual" ? "manual" : "unconfigured",
-              promptVersion: PROMPT_VERSION,
-              schemaVersion: SCHEMA_VERSION,
-            },
-          });
-          await audit(tx, doc, "extraction_started");
-          return created;
-        });
+          }
+          throw error;
+        }
         stage = "preparation";
         let model = run.model;
         let sourceHash: string | null = null;
@@ -286,19 +326,29 @@ export function extractionService(
               }
             };
             let classification;
-            if (input.type)
+            if (input.type) {
+              console.info(`classification_user_selected type=${input.type}`);
               classification = {
                 type: input.type,
                 evidence: null,
                 confidence: "needs_review" as const,
               };
-            else {
+            } else {
               const raw = await complete(
                 "classification",
                 classificationPrompt(source),
               );
               try {
-                classification = parseClassification(raw, source);
+                const aiClassification = parseClassification(raw, source);
+                classification = chooseClassification(source, aiClassification);
+                if (
+                  classification.diagnostic === "classification_anchor_override"
+                ) {
+                  console.info(
+                    `classification_anchor_override ai=${aiClassification.type} anchor=${classification.type}`,
+                  );
+                } else if (classification.diagnostic)
+                  console.info(classification.diagnostic);
               } catch {
                 console.error("extraction_output_invalid", "classification");
                 throw new ExtractionFailure("malformed");
@@ -313,7 +363,7 @@ export function extractionService(
                 confidence: classification.confidence,
               },
             ];
-            // Ambiguous classification never chooses a field schema without the worker.
+            // Ambiguous classification pauses until the user selects a schema.
             if (
               type !== "other" &&
               (input.type ||
@@ -323,13 +373,76 @@ export function extractionService(
                 "extraction",
                 extractionPrompt(source, type),
               );
+              const recovered = recoverSourceFields(source, type);
               try {
                 const parsed = parseFields(raw, type, source);
+                if (parsed.counts.conflicting_duplicate) recovered.length = 0;
                 proposals.push(...parsed);
                 partial = parsed.partial;
-              } catch {
-                console.error("extraction_output_invalid", "extraction");
-                throw new ExtractionFailure("malformed");
+                if (
+                  parsed.partial &&
+                  Object.values(parsed.counts).some(Boolean)
+                ) {
+                  const counters = Object.entries(parsed.counts)
+                    .filter(([, count]) => count > 0)
+                    .map(([label, count]) => `${label}=${count}`)
+                    .join(" ");
+                  console.info(`extraction_parse_partial ${counters}`);
+                }
+              } catch (error) {
+                if (error instanceof ExtractionParseError) {
+                  if (error.counts.conflicting_duplicate) recovered.length = 0;
+                  const counters = Object.entries(error.counts)
+                    .filter(([, count]) => count > 0)
+                    .map(([label, count]) => `${label}=${count}`)
+                    .join(" ");
+                  console.error(
+                    `extraction_parse_rejected no_grounded_fields${counters ? ` ${counters}` : ""}`,
+                  );
+                } else console.error("extraction_output_invalid", "extraction");
+                if (!recovered.length) throw new ExtractionFailure("malformed");
+                partial = true;
+              }
+              if (
+                type === "pension_statement" &&
+                recovered.some((field) => field.key.startsWith("contribution_"))
+              ) {
+                proposals = proposals.filter(
+                  (field) => !field.key.startsWith("contribution_"),
+                );
+              }
+              let recoveredCount = 0;
+              for (const field of recovered) {
+                const existing = proposals.find(
+                  (proposal) => proposal.key === field.key,
+                );
+                if (
+                  existing?.value !== null &&
+                  existing !== undefined &&
+                  type === "employment_contract" &&
+                  !["hmo_reference", "group_life_reference"].includes(field.key)
+                )
+                  continue;
+                if (existing) Object.assign(existing, field);
+                else proposals.push(field);
+                recoveredCount++;
+              }
+              // Source recovery must retain the same manual fallback slots as
+              // a parsed response, including pension completeness confirmation.
+              for (const key of Object.keys(fieldLabels[type])) {
+                if (!proposals.some((field) => field.key === key))
+                  proposals.push({
+                    key,
+                    value: null,
+                    evidence: null,
+                    confidence: "needs_review",
+                  });
+              }
+              if (recoveredCount) {
+                partial = true;
+                console.info(
+                  `extraction_source_recovered fields=${recoveredCount}`,
+                );
               }
             }
           }
@@ -400,8 +513,48 @@ export function extractionService(
             id: input.fieldId,
             extraction: { documentId, userId, status: "ready" },
           },
+          // Only category metadata is needed inside this write transaction;
+          // the full review/history is read after the atomic update completes.
+          include: {
+            extraction: {
+              select: {
+                status: true,
+                documentType: true,
+                sourceKind: true,
+                schemaVersion: true,
+                fields: {
+                  where: { key: "document_type" },
+                  select: {
+                    key: true,
+                    value: true,
+                    proposedValue: true,
+                    evidence: true,
+                  },
+                },
+              },
+            },
+          },
         });
         if (!field) throw new DocumentError("Field not found.", 404);
+        if (
+          !fieldAllowed(field.extraction.documentType, field.key) ||
+          needsTypeConfirmation(field.extraction)
+        )
+          throw new DocumentError(
+            "Choose a document category and start a new extraction before reviewing these details.",
+            409,
+          );
+        if (
+          field.key === "document_type" &&
+          (input.action === "reject" ||
+            input.action === "unknown" ||
+            (input.action === "correct" &&
+              input.value !== field.extraction.documentType))
+        )
+          throw new DocumentError(
+            "Use Change category to start a new extraction. Existing attempts stay in history.",
+            409,
+          );
         if (input.action === "confirm" && !field.proposedValue)
           throw new DocumentError(
             "No proposal to confirm. Enter a value or mark unknown.",

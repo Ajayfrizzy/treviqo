@@ -357,7 +357,7 @@ it("rejects cross-user password use and unauthenticated or repeated stale calls"
   expect(await db.user.findUnique({ where: { id: other } })).not.toBeNull();
 });
 it("schedules unfinished reservations without deleting files during the grace period", async () => {
-  await addDoc(owner, job, "uploaded");
+  const doc = await addDoc(owner, job, "uploaded");
   await service().schedule(owner, input);
   expect(store.removals).toBe(0);
   expect(
@@ -365,10 +365,15 @@ it("schedules unfinished reservations without deleting files during the grace pe
       .deletionStartedAt,
   ).toBeNull();
   expect(await service().cleanup(owner)).toEqual({ status: "not_due" });
+  expect(await cleanupDue()).toEqual({ status: "pending" });
+  await db.employmentDocument.update({
+    where: { id: doc.id },
+    data: { createdAt: new Date(Date.now() - 16 * 60 * 1000) },
+  });
   expect(await cleanupDue()).toEqual({ status: "deleted" });
 });
 
-it("serializes against an in-flight storage PUT and never deletes its key before the upload finishes", async () => {
+it("schedules deletion during PUT without a lock, but keeps the durable key until PUT finishes", async () => {
   let finish!: () => void, began!: () => void;
   const writing = new Promise<void>((resolve) => {
     began = resolve;
@@ -382,26 +387,33 @@ it("serializes against an in-flight storage PUT and never deletes its key before
     await release;
     await put(key, bytes);
   });
-  const uploading = documentService(db, () => store).upload(
-    owner,
-    { employmentId: job },
-    pdf,
-    "fixture.pdf",
-    "application/pdf",
-    100000,
-  );
-  await writing;
-  const deleting = cleanupDue().then(
-    (value) => ({ value }),
-    (error) => ({ error }),
-  );
-  finish();
-  await uploading;
-  const outcome = await deleting;
-  if ("error" in outcome) {
-    expect(outcome.error.status).toBe(409);
-    await cleanupDue();
+  const uploading = documentService(db, () => store)
+    .upload(
+      owner,
+      { employmentId: job },
+      pdf,
+      "fixture.pdf",
+      "application/pdf",
+      100000,
+    )
+    .then(
+      (value) => ({ value }),
+      (error) => ({ error }),
+    );
+  try {
+    await writing;
+    expect(await cleanupDue()).toEqual({ status: "pending" });
+    expect(store.removals).toBe(0);
+    expect(
+      await db.employmentDocument.count({
+        where: { userId: owner, status: "uploaded" },
+      }),
+    ).toBe(1);
+  } finally {
+    finish();
   }
+  expect(await uploading).toMatchObject({ error: { status: 409 } });
+  expect(await cleanupDue()).toEqual({ status: "deleted" });
   expect(store.objects.size).toBe(0);
   expect(await db.user.findUnique({ where: { id: owner } })).toBeNull();
 });

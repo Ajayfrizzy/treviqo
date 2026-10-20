@@ -1,3 +1,4 @@
+import { SectionTitle, StatusChip } from "@/components/product-ui";
 import { SignOutButton } from "@/components/auth-actions";
 import { employmentPageUser } from "@/modules/employments/page-user";
 import { SESSION_SECONDS } from "@/modules/auth/session-store";
@@ -16,9 +17,11 @@ export default async function Profile() {
         Your account and the space you keep your working life in.
       </p>
       <div className="profile-grid">
-        <section className="card">
-          <span className="badge">Signed in</span>
-          <h2>Your account</h2>
+        <section className="card section-panel tone-success">
+          <StatusChip tone="success">Signed in</StatusChip>
+          <SectionTitle icon="profile" tone="success">
+            Your account
+          </SectionTitle>
           <dl className="employment-details">
             <dt>Display name</dt>
             <dd>{displayName(account) ?? "Not specified"}</dd>
@@ -42,8 +45,10 @@ export default async function Profile() {
           </dl>
           <p className="field-hint">Your email is your sign-in identifier.</p>
         </section>
-        <section className="card">
-          <h2>Your session</h2>
+        <section className="card section-panel tone-info">
+          <SectionTitle icon="shield" tone="info">
+            Your session
+          </SectionTitle>
           <p>
             You are signed in on this browser. Sessions last up to{" "}
             {SESSION_SECONDS / 3600 === 8 ? "eight" : SESSION_SECONDS / 3600}{" "}

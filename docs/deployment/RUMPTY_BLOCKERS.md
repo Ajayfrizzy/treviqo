@@ -1,5 +1,7 @@
 # Remaining Rumpty deployment blockers — 4 October 2026
 
+> Historical investigation record. Do not treat its original deployment status, model protocol or test counts as current. See the [deployment guide](RUMPTY_DEPLOYMENT.md), [current AI contract](../ai/AI_DOCUMENTS.md#current-implementation) and [current storage-deletion status](S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+
 Follow-up to [live verification](LIVE_RUMPTY_VERIFICATION.md). No public database/Redis endpoints, provider fallback, architecture change or Milestone 8 feature was introduced.
 
 ## Private PostgreSQL/Redis execution strategy
@@ -57,7 +59,7 @@ Operator steps:
 3. Delete the exact residual test object after correcting authorization, then verify a previously signed GET cannot retrieve it. Recheck anonymous denial. Do not create additional probe objects until cleanup permission works.
 
 Outstanding synthetic key (no personal data):
-`deployment-probes/e8c9635a-b2f4-46c8-a135-d87549cbd7db.txt`
+The exact synthetic key is retained only in the private operator record; it is intentionally omitted from public documentation.
 
 ## Signed URL expiry diagnosis and handling
 
@@ -77,12 +79,12 @@ node --env-file=.env --conditions=react-server scripts/rumpty-ai-stages.mjs
 
 Uses only synthetic content, four sequential stages, bounded requests and no retries. Stops after the first failed stage and prints only status/timing/validation outcomes. It never prints credentials, endpoints or response contents and does not save trusted extracted fields.
 
-| Stage | Live result |
-| --- | --- |
+| Stage                                                 | Live result                                     |
+| ----------------------------------------------------- | ----------------------------------------------- |
 | Minimal plain chat, no response_format, max_tokens=16 | Timed out at 25,004ms without an HTTP response. |
-| Minimal JSON structured request | Not attempted: plain stage failed. |
-| Application classification prompt/schema | Not attempted in this run: prerequisite failed. |
-| Application extraction prompt/schema | Not attempted in this run: prerequisite failed. |
+| Minimal JSON structured request                       | Not attempted: plain stage failed.              |
+| Application classification prompt/schema              | Not attempted in this run: prerequisite failed. |
+| Application extraction prompt/schema                  | Not attempted in this run: prerequisite failed. |
 
 Earlier authenticated model discovery succeeded and the configured identifier was listed, but completion remains unverified. The plain request removes JSON/schema size as the immediate explanation; the timeout occurs before receiving a response even for minimal generation. Rumpty must inspect model loading/availability, inference routing, queue/capacity/credits and gateway connectivity. Do not assume that a longer timeout or changed prompt solves it. Production timeouts, grounding and schemas remain unchanged; manual review remains available. Rerun stages only after inference is healthy, then run six-type acceptance.
 

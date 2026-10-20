@@ -1,83 +1,42 @@
-# Treviqo Product Specification
+# Treviqo product overview
 
-## Vision
-Treviqo gives workers continuity across employers.
+Treviqo (treh-VEE-koh) is a worker-owned employment and benefits continuity platform, built for Devcenter Hacktober 2026 × RumptyCloud.
 
-Employment records and benefits often live inside systems controlled by individual employers. When workers leave, information about final pay, pension contributions, benefits, reimbursements, documents, and employment history can become fragmented.
+**Live application:** [treviqo.rumptycloud.app](https://treviqo.rumptycloud.app) · [Demo walkthrough](DEMO.md)
 
-Treviqo creates a worker-owned continuity layer.
+## Problem and audience
 
-## Core promise
-**Leave your job without leaving your money, benefits, or records behind.**
+A worker leaving a job may have contracts, payslips, reimbursement records and pension statements in different places. An employer's system rarely provides a personal history that continues into the next role. Missing records and unanswered questions become harder to follow up after departure.
 
-Long term:
-**Your employment and benefits history belongs to you.**
+Treviqo helps the individual preserve evidence and organize those follow-ups. The initial audience is Nigerian salaried workers resigning, facing termination or redundancy, completing a contract, retiring or moving between employers. Employers do not administer their accounts.
 
-## Initial user
-A Nigerian salaried worker who is:
-- resigning
-- being terminated
-- being made redundant
-- completing a contract
-- retiring
-- moving between employers
+## Implemented journey
 
-## Primary hackathon journey
-1. Create employment
-2. Upload evidence
-3. AI extracts structured proposed data
-4. User confirms/corrects
-5. Start Job Exit Checker
-6. Review personalised checklist
-7. Review final settlement
-8. Verify final pension contribution
-9. Close employment
-10. Preserve Benefit Passport v1
+| Step               | What the user can do                                                                         | Important boundary                                                                                |
+| ------------------ | -------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| Employment history | Create/edit multiple roles and mark them active, exiting or closed                           | Status is user-entered; creating an exit case does not close the job                              |
+| Private evidence   | Upload and retrieve documents within each employment                                         | Evidence from another employment cannot be selected merely because it has the same owner          |
+| Document review    | Inspect AI proposals/source excerpts and confirm, correct, reject or enter fields manually   | Confidence is not confirmation; extraction does not overwrite original records                    |
+| Job Exit Checker   | Save a case and review nine checks, with explanations and next actions                       | Deterministic consistency checks, not legal decisions                                             |
+| Settlement review  | Compare selected reviewed amounts and identified periods                                     | No entitlement calculation, proration, currency conversion or proof of payment                    |
+| Pension follow-up  | Match reviewed employer/month/contribution evidence and explicitly confirm supported results | No live PFA connection or guaranteed contribution reconciliation                                  |
+| Benefit Passport   | View a timeline across closed employments and assess six benefit categories                  | A worker's evidence-backed assessment does not establish active coverage or completed portability |
+| Reminders          | Return to due actions, snooze for seven days or dismiss a current prompt                     | In-app only; timing depends on the worker process                                                 |
 
-## MVP
-Required:
-- authentication
-- employment records
-- secure document uploads
-- document classification
-- structured AI extraction
-- extraction review/confirmation
-- Job Exit Checker
-- final-settlement review
-- pension verification flow
-- benefit classification
-- Benefit Passport v1
-- reminders
-- mobile-first responsive UI
-- live Rumpty deployment
+The Passport already supports multiple completed employers. It derives current summaries from original employment, document, exit and finance records; it is not an immutable certificate or a duplicate database of employment facts. Changed/rejected/deleted evidence can invalidate previous confirmations and assessments.
 
-## Post-hackathon roadmap
-### Stage 2 — Expanded Benefit Passport
-- multiple-employer timeline
-- HMO/group-life history
-- benefit-document freshness
-- richer benefit history
+Benefit categories are pension/RSA, HMO, employer group life, employer-specific benefits, cooperative benefits, and provident/retirement plans. Each begins Unknown/needs confirmation. Portable and employer-linked assessments require the user's evidence and acknowledgment.
 
-### Stage 3 — Job Transition
-- new-job readiness
-- carry-forward pension/RSA details
-- benefit onboarding
-- old/new benefit comparison
+## What judges can observe
 
-### Stage 4 — Family Claim Readiness
-- pension claim readiness
-- insurance readiness
-- employer death benefits
-- cooperative benefits
-- investment/dividend records
-- trusted family contacts
-- beneficiary review reminders
+Follow [the reproducible demo](DEMO.md) to see two completed jobs and a current role, reviewed evidence, an unresolved exit action, settlement comparison, pension confirmation and a cross-employment Passport. The mobile layout uses cards, step forms, clear unknown/error states and source links. Desktop expands the same workflows.
 
-### Stage 5 — Lifetime Continuity
-- lifetime employment history
-- lifetime benefit history
-- retirement readiness
-- controlled family handover
+RumptyCloud provides the hosting/infrastructure integration: Next.js web/API, PostgreSQL, Redis, private S3-compatible documents, background worker and Rumpty AI inference. The [architecture guide](../architecture/ARCHITECTURE.md) explains how these responsibilities fit together. Local fixture tests do not establish live provider accuracy or permissions.
 
-## Non-goals
-Treviqo is not HRIS, payroll, recruitment, a law firm, a PFA, an insurer, a payment platform, or an employer background-check service.
+## Boundaries and future work
+
+Treviqo is not payroll, an HRIS, a job board, a law firm, a pension provider, an insurer, a bank or an employer verification service. AI extracts stated facts; rules compare reviewed evidence. Neither declares wrongdoing, legal validity or binding compensation.
+
+Not implemented: external email/SMS/push reminders, bank/PFA/insurer integrations, benefit transfers, Passport export/sharing, employment verification marketplace, employer dashboards, native mobile apps, family claim readiness or retirement planning. Expanded multi-policy history and new-job onboarding are future possibilities, not hackathon capabilities.
+
+Operational limitations, including the unresolved direct storage-deletion denial and verified recovery requirements, are tracked in the [deployment guide](../deployment/RUMPTY_DEPLOYMENT.md) and [security specification](../security/SECURITY.md). Use fictional data for evaluation.

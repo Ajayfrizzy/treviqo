@@ -1,6 +1,12 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 import type { PrismaClient, Prisma } from "@prisma/client";
+import {
+  readDatabase,
+  transientDatabaseError,
+  DatabaseUnavailableError,
+} from "@/server/db/retry";
+import { UPLOAD_RESERVATION_MS } from "./upload-state";
 import { getDb } from "@/server/db/client";
 import {
   getObjectStorage,
@@ -41,18 +47,27 @@ export function documentService(
   async function employment(userId: string, id: string) {
     owner(userId);
     if (
-      !(await db.employment.findFirst({
-        where: { id, userId },
-        select: { id: true },
-      }))
+      !(await readDatabase(() =>
+        db.employment.findFirst({
+          where: { id, userId },
+          select: { id: true },
+        }),
+      ))
     )
       throw new DocumentError("Employment record not found.", 404);
   }
   async function find(userId: string, id: string) {
     owner(userId);
-    const doc = await db.employmentDocument.findFirst({
-      where: { id, userId, status: { not: "deleted" }, employment: { userId } },
-    });
+    const doc = await readDatabase(() =>
+      db.employmentDocument.findFirst({
+        where: {
+          id,
+          userId,
+          status: { not: "deleted" },
+          employment: { userId },
+        },
+      }),
+    );
     if (!doc) throw new DocumentError("Document not found.", 404);
     return doc;
   }
@@ -62,24 +77,28 @@ export function documentService(
       owner(userId);
       if (employmentId) await employment(userId, employmentId);
       return (
-        await db.employmentDocument.findMany({
-          where: {
-            userId,
-            employmentId,
-            status: { not: "deleted" },
-            employment: { userId },
-          },
-          select: selection,
-          orderBy: [{ createdAt: "desc" }, { id: "asc" }],
-        })
+        await readDatabase(() =>
+          db.employmentDocument.findMany({
+            where: {
+              userId,
+              employmentId,
+              status: { not: "deleted" },
+              employment: { userId },
+            },
+            select: selection,
+            orderBy: [{ createdAt: "desc" }, { id: "asc" }],
+          }),
+        )
       ).map(serialize);
     },
     async detail(userId: string, id: string) {
       await find(userId, id);
-      const row = await db.employmentDocument.findFirst({
-        where: { id, userId, status: { not: "deleted" } },
-        select: selection,
-      });
+      const row = await readDatabase(() =>
+        db.employmentDocument.findFirst({
+          where: { id, userId, status: { not: "deleted" } },
+          select: selection,
+        }),
+      );
       if (!row) throw new DocumentError("Document not found.", 404);
       return serialize(row);
     },
@@ -92,7 +111,7 @@ export function documentService(
       maxBytes: number,
     ) {
       const input = uploadMetadata.parse(metadata);
-      await employment(userId, input.employmentId);
+      owner(userId);
       const { extension, ...file } = validateFile(
         bytes,
         filename,
@@ -101,7 +120,16 @@ export function documentService(
       );
       const id = randomUUID();
       const key = objectKey(userId, input.employmentId, id, extension);
-      const bucket = storage(); // Fail before reservation if storage is not configured.
+      let bucket: PrivateObjectStorage;
+      try {
+        bucket = storage();
+      } catch {
+        console.error("document_upload_storage_failed");
+        throw new DocumentError(
+          "The file could not be saved. Please try again.",
+          503,
+        );
+      }
       async function lockUpload(tx: Prisma.TransactionClient) {
         await tx.$queryRaw`SELECT "id" FROM "User" WHERE "id" = ${userId} FOR UPDATE`;
         const user = await tx.user.findUnique({
@@ -114,64 +142,123 @@ export function documentService(
             409,
           );
       }
-      await db.$transaction(async (tx) => {
-        await lockUpload(tx);
-        await tx.employmentDocument.create({
-          data: { id, userId, ...input, ...file, objectKey: key },
-        });
-      });
+      const reservedAt = Date.now();
       try {
-        // Keep the durable reservation outside this transaction. A process crash
-        // must not lose the object key. The user lock serializes PUT with deletion.
-        await db.$transaction(
-          async (tx) => {
-            await lockUpload(tx);
-            await bucket.put(key, bytes, file.mimeType);
-          },
-          { timeout: 45000 },
-        );
-      } catch {
-        // The provider may have accepted the bytes even when the request timed out.
-        try {
-          await storage().remove(key);
-        } catch {
-          /* The durable row retains the key for cleanup. */
-        }
-        await db.employmentDocument.updateMany({
-          where: { id, userId, status: "uploaded" },
-          data: { status: "failed" },
+        await db.$transaction(async (tx) => {
+          await lockUpload(tx);
+          if (
+            !(await tx.employment.findFirst({
+              where: { id: input.employmentId, userId },
+              select: { id: true },
+            }))
+          )
+            throw new DocumentError("Employment record not found.", 404);
+          await tx.employmentDocument.create({
+            data: { id, userId, ...input, ...file, objectKey: key },
+          });
         });
+      } catch (error) {
+        if (transientDatabaseError(error)) {
+          console.error("document_upload_db_unavailable");
+          throw new DatabaseUnavailableError();
+        }
+        if (error instanceof DocumentError) throw error;
+        console.error("document_upload_reservation_failed");
         throw new DocumentError(
-          "Upload failed. Remove the failed entry and try again.",
+          "The upload could not be started. Please retry.",
           503,
         );
       }
-      // If this transaction fails, keep the reservation/key for deletion/reconciliation.
-      // Never publish ready metadata before both storage and the audit transaction succeed.
-      await db.$transaction(async (tx) => {
-        const changed = await tx.employmentDocument.updateMany({
-          where: { id, userId, status: "uploaded" },
-          data: { status: "ready" },
+      // No transaction or row lock is held during S3 I/O. Cleanup retains fresh
+      // uploaded reservations, including this object's key, until PUT settles.
+      try {
+        // Do not start a delayed PUT near the cleanup grace deadline.
+        if (Date.now() - reservedAt > 60000)
+          throw new Error("Upload reservation expired");
+        await bucket.put(key, bytes, file.mimeType);
+      } catch {
+        console.error("document_upload_storage_failed");
+        try {
+          await storage().remove(key);
+        } catch {
+          /* Durable key remains for cleanup. */
+        }
+        try {
+          await db.employmentDocument.updateMany({
+            where: { id, userId, status: "uploaded" },
+            data: { status: "failed" },
+          });
+        } catch {
+          console.error("document_upload_finalize_failed");
+        }
+        throw new DocumentError(
+          "The file could not be saved. Please try again.",
+          503,
+        );
+      }
+      try {
+        return await db.$transaction(async (tx) => {
+          await lockUpload(tx); // Scheduling can proceed during PUT; never publish after it.
+          const changed = await tx.employmentDocument.updateMany({
+            where: { id, userId, status: "uploaded", employment: { userId } },
+            data: { status: "ready" },
+          });
+          if (!changed.count)
+            throw new DocumentError("Upload could not be completed.", 409);
+          await tx.auditEvent.create({
+            data: {
+              userId,
+              documentId: id,
+              employmentId: input.employmentId,
+              action: "document_uploaded",
+            },
+          });
+          const row = await tx.employmentDocument.findUniqueOrThrow({
+            where: { id },
+            select: selection,
+          });
+          return serialize(row);
         });
-        if (!changed.count)
-          throw new DocumentError("Upload could not be completed.", 409);
-        await tx.auditEvent.create({
-          data: {
-            userId,
-            documentId: id,
-            employmentId: input.employmentId,
-            action: "document_uploaded",
-          },
-        });
-      });
-      const row = await db.employmentDocument.findUniqueOrThrow({
-        where: { id },
-        select: selection,
-      });
-      return serialize(row);
+      } catch (error) {
+        console.error("document_upload_finalize_failed");
+        // On an uncertain commit, do not remove a potentially ready object or
+        // overwrite its status. The durable reservation/key permits cleanup.
+        if (transientDatabaseError(error)) throw new DatabaseUnavailableError();
+        if (error instanceof DocumentError) {
+          try {
+            await storage().remove(key);
+          } catch {
+            /* Retain key for cleanup. */
+          }
+          try {
+            await db.employmentDocument.updateMany({
+              where: { id, userId, status: "uploaded" },
+              data: { status: "failed" },
+            });
+          } catch {
+            /* Reservation remains recoverable. */
+          }
+          throw error;
+        }
+        throw new DocumentError(
+          "The upload could not be completed. Check Documents before retrying.",
+          503,
+        );
+      }
     },
     async access(userId: string, id: string) {
-      await find(userId, id);
+      const initial = await find(userId, id);
+      if (initial.status !== "ready")
+        throw new DocumentError(
+          "This document is not available for viewing.",
+          409,
+        );
+      const url = await storage().signDownload(
+        initial.objectKey,
+        initial.sanitizedFilename,
+        initial.mimeType,
+        60,
+      );
       // Lock against deletion until the access audit commits. Existing URLs expire in 60s.
       return db.$transaction(async (tx) => {
         await tx.$queryRaw`SELECT "id" FROM "EmploymentDocument" WHERE "id" = ${id} AND "userId" = ${userId} FOR UPDATE`;
@@ -183,12 +270,6 @@ export function documentService(
             "This document is not available for viewing.",
             409,
           );
-        const url = await storage().signDownload(
-          doc.objectKey,
-          doc.sanitizedFilename,
-          doc.mimeType,
-          60,
-        );
         await tx.auditEvent.create({
           data: {
             userId,
@@ -204,7 +285,7 @@ export function documentService(
       const doc = await find(userId, id);
       if (
         (doc.status === "uploaded" || doc.status === "processing") &&
-        Date.now() - doc.createdAt.getTime() < 15 * 60 * 1000
+        Date.now() - doc.createdAt.getTime() < UPLOAD_RESERVATION_MS
       )
         throw new DocumentError(
           "Upload may still be finishing. Retry removal in 15 minutes.",
@@ -216,26 +297,41 @@ export function documentService(
         data: { status: "deleting" },
       });
       if (!changed.count) throw new DocumentError("Document not found.", 404);
-      await storage().remove(doc.objectKey);
-      await db.$transaction(async (tx) => {
-        const removed = await tx.employmentDocument.updateMany({
-          where: { id, userId, status: "deleting" },
-          data: { status: "deleted" },
+      try {
+        // A DELETE acknowledgement alone cannot prove removal (retained versions,
+        // delete markers, or incompatible providers). Verify before finalizing.
+        await storage().purge(doc.objectKey);
+      } catch {
+        console.error("document_delete_storage_failed");
+        throw new DocumentError(
+          "Storage cleanup could not be verified. Deletion is pending; please retry.",
+          503,
+        );
+      }
+      await db
+        .$transaction(async (tx) => {
+          const removed = await tx.employmentDocument.updateMany({
+            where: { id, userId, status: "deleting" },
+            data: { status: "deleted", storagePurgedAt: new Date() },
+          });
+          if (removed.count)
+            await tx.documentExtraction.deleteMany({
+              where: { documentId: id, userId },
+            });
+          if (removed.count)
+            await tx.auditEvent.create({
+              data: {
+                userId,
+                documentId: id,
+                employmentId: doc.employmentId,
+                action: "document_deleted",
+              },
+            });
+        })
+        .catch((error: unknown) => {
+          console.error("document_delete_finalize_failed");
+          throw error;
         });
-        if (removed.count)
-          await tx.documentExtraction.deleteMany({
-            where: { documentId: id, userId },
-          });
-        if (removed.count)
-          await tx.auditEvent.create({
-            data: {
-              userId,
-              documentId: id,
-              employmentId: doc.employmentId,
-              action: "document_deleted",
-            },
-          });
-      });
     },
   };
 }

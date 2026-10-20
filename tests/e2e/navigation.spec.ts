@@ -1,3 +1,4 @@
+import { navigateTo } from "../helpers/navigation";
 import { expect, test } from "@playwright/test";
 import { PrismaClient } from "@prisma/client";
 import { randomUUID } from "node:crypto";
@@ -13,7 +14,7 @@ test.afterAll(async () => {
   await db.$disconnect();
 });
 
-for (const width of [375, 1440]) {
+for (const width of [320, 375, 390, 430, 768, 1440]) {
   test(`tab navigation preserves fresh records at ${width}px`, async ({
     page,
   }, testInfo) => {
@@ -42,6 +43,8 @@ for (const width of [375, 1440]) {
       .click();
     await expect(page).toHaveURL("/home");
     if (prefetch) {
+      if (width < 600)
+        await page.getByRole("button", { name: "More", exact: true }).click();
       try {
         await expect
           .poll(prefetch.missing, {
@@ -55,22 +58,107 @@ for (const width of [375, 1440]) {
           contentType: "application/json",
         });
         await prefetch.dispose();
+        if (width < 600) await page.keyboard.press("Escape");
       }
     }
     const nav = page.getByRole("navigation", { name: "Primary" });
+    const more = nav.getByRole("button", { name: "More", exact: true });
+    if (width < 600) {
+      await expect(nav.getByRole("link")).toHaveCount(4);
+      await expect(nav.getByRole("button")).toHaveCount(1);
+      await expect(nav.getByRole("link", { name: "Documents" })).toHaveCount(0);
+      await expect(nav.getByRole("link", { name: "Profile" })).toHaveCount(0);
+      const boxes = await nav
+        .locator("a:visible, button:visible")
+        .evaluateAll((items) =>
+          items.map((item) => {
+            const { x, y, width, height } = item.getBoundingClientRect();
+            return { x, y, width, height };
+          }),
+        );
+      expect(new Set(boxes.map(({ y }) => y)).size).toBe(1);
+      for (const box of boxes) {
+        expect(box.width).toBeGreaterThanOrEqual(44);
+        expect(box.height).toBeGreaterThanOrEqual(44);
+        expect(box.x + box.width).toBeLessThanOrEqual(width);
+      }
+      await more.click();
+      const sheet = page.getByRole("dialog", { name: "More", exact: true });
+      await expect(sheet).toBeVisible();
+      await expect(more).toHaveAttribute("aria-expanded", "true");
+      await expect(sheet.getByRole("link")).toHaveCount(2);
+      await expect(sheet.getByRole("button", { name: "Close" })).toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(sheet.getByRole("link", { name: "Profile" })).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(sheet.getByRole("button", { name: "Close" })).toBeFocused();
+      await page.keyboard.press("Escape");
+      await expect(sheet).not.toBeVisible();
+      await expect(more).toBeFocused();
+      await expect(more).toHaveAttribute("aria-expanded", "false");
+      await more.click();
+      await page.screenshot({
+        path: `test-results/navigation-sheet-${width}.png`,
+      });
+      await page.mouse.click(4, 100);
+      await expect(sheet).not.toBeVisible();
+      await expect(more).toBeFocused();
+      await more.click();
+      await sheet.getByRole("button", { name: "Close" }).click();
+      await expect(sheet).not.toBeVisible();
+      await more.click();
+      await page.setViewportSize({ width: 800, height: 850 });
+      await expect(sheet).not.toBeVisible();
+      await page.setViewportSize({ width, height: 850 });
+    } else {
+      await expect(nav.getByRole("link")).toHaveCount(6);
+      await expect(more).not.toBeVisible();
+    }
+    if (width < 800) {
+      await expect
+        .poll(async () => {
+          await page.evaluate(() =>
+            window.scrollTo({
+              top: document.body.scrollHeight,
+              behavior: "instant",
+            }),
+          );
+          const lastBox = await page
+            .getByRole("main")
+            .getByRole("link")
+            .last()
+            .boundingBox();
+          const navBox = await nav.boundingBox();
+          return lastBox!.y + lastBox!.height - navBox!.y;
+        })
+        .toBeLessThanOrEqual(0);
+      await page.evaluate(() => window.scrollTo(0, 0));
+    }
+    await page.screenshot({ path: `test-results/navigation-bar-${width}.png` });
     const timings: Record<string, number> = {};
     for (const [label, heading] of [
       ["Exit", "Job Exit Checker"],
+      ["Reminders", "Your reminders"],
       ["Passport", "Benefit Passport"],
       ["Documents", "Documents"],
       ["Profile", "Profile"],
       ["Home", "Welcome to Treviqo, Fixture"],
-    ]) {
+    ] as const) {
       const start = performance.now();
-      await nav.getByRole("link", { name: label, exact: true }).click();
+      await navigateTo(page, label);
       await expect(page.getByRole("heading", { level: 1 })).toHaveText(
         heading!,
       );
+      if (width < 600 && ["Documents", "Profile"].includes(label)) {
+        await expect(more).toHaveAttribute("aria-current", "location");
+        await more.click();
+        await expect(
+          page
+            .getByRole("dialog")
+            .getByRole("link", { name: label, exact: true }),
+        ).toHaveAttribute("aria-current", "page");
+        await page.keyboard.press("Escape");
+      }
       timings[label!] = Math.round(performance.now() - start);
       expect(
         await page.evaluate(
@@ -107,11 +195,11 @@ for (const width of [375, 1440]) {
     await expect(
       page.getByRole("region", { name: "Previous employment" }),
     ).toContainText("Navigation Fixture");
-    await nav.getByRole("link", { name: "Documents", exact: true }).click();
+    await navigateTo(page, "Documents");
     await expect(
       page.getByRole("link", { name: "Upload document", exact: true }),
     ).toBeVisible();
-    await nav.getByRole("link", { name: "Profile", exact: true }).click();
+    await navigateTo(page, "Profile");
     await page.getByRole("button", { name: "Sign out", exact: true }).click();
     await expect(page).toHaveURL(/\/sign-in$/);
     await page.goto("/passport");

@@ -1,3 +1,4 @@
+import type { ExitTypeDiscrepancy } from "./discrepancy";
 import { z } from "zod";
 import { calendarDate } from "@/modules/employments/validation";
 export const exitTypes = {
@@ -126,6 +127,7 @@ export interface ExitRecord {
   answers: ExitInput;
   rulesVersion: string;
   checklist: ChecklistItem[];
+  exitTypeDiscrepancies?: ExitTypeDiscrepancy[];
 }
 export const emptyExitInput: ExitInput = {
   exitType: "resignation",
