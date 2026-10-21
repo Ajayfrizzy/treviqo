@@ -40,12 +40,12 @@ PostgreSQL BackgroundJob rows hold durable due times, cursors, attempts and two-
 
 Four recurring jobs are defined in [queue.ts](../../src/server/jobs/queue.ts):
 
-- `reminders`: reconcile unresolved exit actions and pension follow-ups in batches of 20 cases.
+- `reminders`: reconcile unresolved exit actions and pension follow-ups in transactions of at most three reminder actions, with at most five transactions per tick. Completed-case cursors commit with the last reminder batch; partial cases resume from their idempotent persisted reminder state.
 - `session_cleanup`: remove expired sessions in batches of 500; access checks already enforce expiry.
 - `account_cleanup`: process due scheduled account deletion with verified object checkpoints and per-account backoff.
 - `extraction_cleanup`: fail expired extraction attempts in bounded batches of 20.
 
-The loop ticks every 10 seconds; completed sweeps become due after 60 seconds. Redis loss, lease expiry and retries are recoverable. There is no background inference queue: extraction runs in the request flow outside database transactions. The worker does not infer legal/benefit decisions, send external notifications or clean arbitrary pending documents for active accounts.
+Deployment health measures dependency availability and recent local loop progress; strict job health separately reports retry counts and overdue/stale sweeps. The loop waits 10 seconds between ticks; completed sweeps become due after 60 seconds. Redis loss, lease expiry and retries are recoverable. There is no background inference queue: extraction runs in the request flow outside database transactions. The worker does not infer legal/benefit decisions, send external notifications or clean arbitrary pending documents for active accounts.
 
 ### Evidence and provider boundaries
 

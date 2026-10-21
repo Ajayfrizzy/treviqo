@@ -85,7 +85,8 @@ test.beforeAll(async ({ browser }) => {
   }
   // Existing worker fixture path, isolated to the disposable browser-test database.
   await db.backgroundJob.updateMany({ data: { dueAt: new Date(0) } });
-  for (let n = 0; n < 3; n++)
+  const sweepStarted = new Date();
+  for (let n = 0; n < 50; n++) {
     execFileSync(
       process.execPath,
       ["--conditions=react-server", "dist-worker/worker/main.js", "--once"],
@@ -99,6 +100,17 @@ test.beforeAll(async ({ browser }) => {
         stdio: "pipe",
       },
     );
+    const job = await db.backgroundJob.findUnique({
+      where: { id: "reminders" },
+    });
+    if (job?.lastSucceededAt && job.lastSucceededAt >= sweepStarted) break;
+  }
+  const completed = await db.backgroundJob.findUniqueOrThrow({
+    where: { id: "reminders" },
+  });
+  expect(completed.lastSucceededAt?.getTime()).toBeGreaterThanOrEqual(
+    sweepStarted.getTime(),
+  );
 });
 test.afterAll(async () => {
   await page?.close();

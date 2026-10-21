@@ -6,7 +6,7 @@ vi.mock("@/server/db/client", () => ({
 vi.mock("@/server/redis/client", () => ({
   getRedis: () => ({ get: mock.get }),
 }));
-import { workerHealthy } from "@/server/jobs/health";
+import { workerHealthy, workerAvailable } from "@/server/jobs/health";
 import { jobIds } from "@/server/jobs/queue";
 const now = new Date("2026-10-20T04:30:00Z");
 const jobs = () =>
@@ -88,3 +88,35 @@ it.each([
     );
   },
 );
+
+it("keeps deployment available during backoff while strict diagnostics remain unhealthy", async () => {
+  const rows = jobs();
+  Object.assign(rows[0]!, {
+    attempts: 30,
+    dueAt: new Date(now.getTime() + 1800000),
+    lastSucceededAt: new Date(0),
+  });
+  mock.findMany.mockResolvedValue(rows);
+  expect(await workerAvailable(now)).toBe(true);
+  expect(await workerHealthy(now)).toBe(false);
+  expect(process.stderr.write).toHaveBeenCalledWith(
+    "worker_health_failed reason=job_retries\n",
+  );
+});
+it("availability still requires fresh progress, durable jobs and accessible dependencies", async () => {
+  mock.get.mockResolvedValue(null);
+  expect(await workerAvailable(now)).toBe(false);
+  mock.get.mockResolvedValue(String(now.getTime()));
+  mock.findMany.mockResolvedValue([]);
+  expect(await workerAvailable(now)).toBe(false);
+  mock.findMany.mockRejectedValueOnce(
+    Object.assign(new Error("private"), { code: "P1001" }),
+  );
+  await expect(workerAvailable(now)).rejects.toMatchObject({ code: "P1001" });
+  mock.get.mockRejectedValueOnce(
+    Object.assign(new Error("private"), { code: "ECONNREFUSED" }),
+  );
+  await expect(workerAvailable(now)).rejects.toMatchObject({
+    code: "ECONNREFUSED",
+  });
+});

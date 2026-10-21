@@ -3,7 +3,10 @@ import { logRuntimeFailure } from "@/server/diagnostics/runtime";
 import { getDb } from "@/server/db/client";
 import { getRedis } from "@/server/redis/client";
 import { HEARTBEAT, jobIds } from "./queue";
-export async function workerHealthy(now = new Date()) {
+export async function workerHealthy(
+  now = new Date(),
+  availabilityOnly = false,
+) {
   let phase: "worker_redis" | "worker_database" = "worker_redis";
   const unhealthy = (
     reason:
@@ -32,6 +35,7 @@ export async function workerHealthy(now = new Date()) {
       where: { id: { in: [...jobIds] } },
     });
     if (jobs.length !== jobIds.length) return unhealthy("jobs_missing");
+    if (availabilityOnly) return true;
     for (const job of jobs) {
       if (!(job.attempts < 5)) return unhealthy("job_retries");
       if (!(job.dueAt.getTime() > now.getTime() - 300000))
@@ -48,3 +52,7 @@ export async function workerHealthy(now = new Date()) {
     throw error;
   }
 }
+
+// Deployment availability is independent of job backoff/completion. Strict callers
+// (UI, diagnostic CLI) retain workerHealthy's original scheduling thresholds.
+export const workerAvailable = (now = new Date()) => workerHealthy(now, true);

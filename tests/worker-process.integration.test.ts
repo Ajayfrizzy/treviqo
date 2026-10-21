@@ -27,6 +27,7 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
       "worker/main.js",
       "worker/runtime.js",
       "worker/health.js",
+      "worker/availability.js",
       "server/jobs/runner.js",
       "server/jobs/health.js",
       "ops/deployment.js",
@@ -70,11 +71,23 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
       await db.backgroundJob.updateMany({
         data: { attempts: 5, dueAt: new Date(Date.now() + 3600000) },
       });
+      const beforeRetryTick = await redis.get(HEARTBEAT);
       await vi.waitFor(
-        async () => expect((await fetch(url)).status).toBe(503),
+        async () =>
+          expect(await redis.get(HEARTBEAT)).not.toBe(beforeRetryTick),
         { timeout: 15000 },
       );
-      expect(await (await fetch(url)).json()).toEqual({ status: "unhealthy" });
+      expect((await fetch(url)).status).toBe(200);
+      expect(await (await fetch(url)).json()).toEqual({ status: "ok" });
+      expect(await db.backgroundJob.count({ where: { attempts: 5 } })).toBe(4);
+      await exec(
+        process.execPath,
+        ["--conditions=react-server", "dist-worker/worker/availability.js"],
+        {
+          env: { ...process.env, PORT: String(port) },
+          timeout: 5000,
+        },
+      );
       await expect(
         exec("npm", ["run", "worker:health"], { timeout: 10000 }),
       ).rejects.toMatchObject({ code: 1 });
@@ -145,3 +158,52 @@ it("bounds shutdown when a database operation is stuck", async () => {
     await transaction;
   }
 }, 25000);
+
+for (const dependency of ["DATABASE_URL", "REDIS_URL"] as const) {
+  it(`compiled deployment probe fails when ${dependency} is unavailable`, async () => {
+    const listener = createServer();
+    await new Promise<void>((resolve) =>
+      listener.listen(0, "127.0.0.1", resolve),
+    );
+    const port = (listener.address() as { port: number }).port;
+    await new Promise<void>((resolve) => listener.close(() => resolve()));
+    const child = spawn(
+      process.execPath,
+      ["--conditions=react-server", "dist-worker/worker/main.js"],
+      {
+        env: {
+          ...process.env,
+          PORT: String(port),
+          [dependency]:
+            dependency === "DATABASE_URL"
+              ? "postgresql://fixture@127.0.0.1:1/fixture?connect_timeout=1"
+              : "redis://127.0.0.1:1",
+        },
+        stdio: "ignore",
+      },
+    );
+    const exited = once(child, "exit");
+    try {
+      await vi.waitFor(
+        async () =>
+          expect((await fetch(`http://127.0.0.1:${port}/health`)).status).toBe(
+            503,
+          ),
+        { timeout: 5000 },
+      );
+      await expect(
+        exec(
+          process.execPath,
+          ["--conditions=react-server", "dist-worker/worker/availability.js"],
+          {
+            env: { ...process.env, PORT: String(port) },
+            timeout: 5000,
+          },
+        ),
+      ).rejects.toMatchObject({ code: 1 });
+    } finally {
+      child.kill("SIGTERM");
+      await exited;
+    }
+  }, 15000);
+}
