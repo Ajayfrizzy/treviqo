@@ -35,7 +35,7 @@ export function jobRunner(
   redis: Redis = getRedis(),
   clock = () => new Date(),
 ) {
-  async function perform(id: JobId, cursor: string | null) {
+  async function perform(id: JobId, cursor: string | null, token: string) {
     if (id === "extraction_cleanup")
       return { cursor: null, more: await reapExpiredAttempts(db, clock()) };
     if (id === "account_cleanup")
@@ -45,29 +45,60 @@ export function jobRunner(
       };
     if (id === "session_cleanup")
       return { cursor: null, more: await cleanExpiredSessions(db, clock()) };
-    const rows = await db.exitCase.findMany({
-      where: {
-        ...(cursor ? { id: { gt: cursor } } : {}),
-        user: { deletionScheduledFor: null, deletionStartedAt: null },
-      },
-      select: { id: true, userId: true },
-      orderBy: { id: "asc" },
-      take: 20,
-    });
-    for (const row of rows) {
+    const started = Date.now();
+    // Bound both transaction count and loop occupancy, below the 45s heartbeat TTL.
+    for (let batch = 0; batch < 5 && Date.now() - started < 15000; batch++) {
+      const row = await db.exitCase.findFirst({
+        where: {
+          ...(cursor ? { id: { gt: cursor } } : {}),
+          user: { deletionScheduledFor: null, deletionStartedAt: null },
+        },
+        select: { id: true, userId: true },
+        orderBy: { id: "asc" },
+      });
+      if (!row) return { cursor: null, more: false };
       try {
-        await reminderService(db).reconcile(row.userId, row.id, clock());
+        const more = await reminderService(db).reconcileBatch(
+          row.userId,
+          row.id,
+          clock(),
+          async (tx, complete) => {
+            const owned = await tx.$queryRaw<{ id: string }[]>`
+              SELECT "id" FROM "BackgroundJob"
+              WHERE "id" = ${id} AND "state" = 'running'
+                AND "leaseToken" = ${token} AND "leaseUntil" > ${clock()}
+              FOR UPDATE`;
+            if (!owned.length) throw new Error("Worker lease unavailable");
+            if (complete) {
+              const saved = await tx.backgroundJob.updateMany({
+                where: {
+                  id,
+                  state: "running",
+                  leaseToken: token,
+                  leaseUntil: { gt: clock() },
+                },
+                data: { cursor: row.id },
+              });
+              if (!saved.count) throw new Error("Worker lease unavailable");
+            }
+          },
+        );
+        if (!more) cursor = row.id;
       } catch (error) {
-        if (error instanceof Error && "status" in error && error.status === 404)
+        if (
+          error instanceof Error &&
+          "status" in error &&
+          error.status === 404
+        ) {
+          cursor = row.id;
           continue;
+        }
         throw error;
       }
     }
-    return {
-      cursor: rows.length === 20 ? rows.at(-1)!.id : null,
-      more: rows.length === 20,
-    };
+    return { cursor, more: true };
   }
+
   return {
     async tick() {
       const now = clock();
@@ -119,7 +150,7 @@ export function jobRunner(
               where: { id },
             });
             try {
-              const result = await perform(id, job.cursor);
+              const result = await perform(id, job.cursor, token);
               const end = clock();
               await db.backgroundJob.updateMany({
                 where: {
@@ -134,8 +165,10 @@ export function jobRunner(
                   leaseUntil: null,
                   cursor: result.cursor,
                   dueAt: new Date(end.getTime() + (result.more ? 0 : 60000)),
-                  attempts: 0,
-                  errorCode: null,
+                  // Partial reminder progress is not a successful sweep.
+                  ...(!(id === "reminders" && result.more)
+                    ? { attempts: 0, errorCode: null }
+                    : {}),
                   ...(!result.more ? { lastSucceededAt: end } : {}),
                 },
               });
@@ -143,7 +176,12 @@ export function jobRunner(
               logRuntimeFailure("worker_job", error);
               console.error(`worker_job_failed job=${id}`);
               await db.backgroundJob.updateMany({
-                where: { id, leaseToken: token, state: "running" },
+                where: {
+                  id,
+                  leaseToken: token,
+                  state: "running",
+                  leaseUntil: { gt: clock() },
+                },
                 data: {
                   state: "pending",
                   leaseToken: null,

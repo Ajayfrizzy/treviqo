@@ -4,7 +4,11 @@ import Redis from "ioredis";
 import { getDb } from "@/server/db/client";
 import { getRedis } from "@/server/redis/client";
 import { exitService } from "@/modules/exits/service";
-import { reminderService } from "@/modules/reminders/service";
+import {
+  reminderService,
+  REMINDER_ACTION_BATCH,
+  REMINDER_TRANSACTION_MS,
+} from "@/modules/reminders/service";
 import { jobRunner, cleanExpiredSessions } from "@/server/jobs/runner";
 import { workerHealthy } from "@/server/jobs/health";
 import { HEARTBEAT, QUEUE } from "@/server/jobs/queue";
@@ -287,9 +291,13 @@ it("checkpoints bounded scans and eventually reaches later exit cases", async ()
     (await db.backgroundJob.findUniqueOrThrow({ where: { id: "reminders" } }))
       .cursor,
   ).not.toBeNull();
-  await runner.tick();
-  await runner.tick();
-  await runner.tick();
+  for (let tick = 0; tick < 100; tick++) {
+    await jobRunner(db, redis).tick(); // a new runner must resume the persisted cursor
+    const state = await db.backgroundJob.findUniqueOrThrow({
+      where: { id: "reminders" },
+    });
+    if (state.lastSucceededAt) break;
+  }
   expect(
     (await db.backgroundJob.findUniqueOrThrow({ where: { id: "reminders" } }))
       .cursor,
@@ -357,4 +365,207 @@ it("dispatches extraction expiry through the durable worker outbox", async () =>
   } finally {
     await db.employmentDocument.delete({ where: { id: document.id } });
   }
+});
+
+it("commits bounded actions, survives interruption and revalidates changed answers", async () => {
+  expect(await reminderService(db).reconcileBatch(a, id)).toBe(true);
+  expect(await db.reminder.count({ where: { exitCaseId: id } })).toBe(
+    REMINDER_ACTION_BATCH,
+  );
+  const exit = await exitService(db).detail(a, id);
+  await exitService(db).update(a, id, {
+    version: exit.version,
+    answers: { ...exit.answers, noticeApplicable: "no" },
+  });
+  await reminderService(db).reconcile(a, id); // new instance after interruption
+  await reminderService(db).reconcile(a, id);
+  const rows = await db.reminder.findMany({ where: { exitCaseId: id } });
+  expect(rows.find((row) => row.key === "notice")?.state).toBe("resolved");
+  expect(
+    await db.auditEvent.count({
+      where: { exitCaseId: id, action: "reminder_created" },
+    }),
+  ).toBe(rows.length);
+});
+
+it("retains partial progress and attempts until a retried sweep completes", async () => {
+  await db.backgroundJob.create({
+    data: { id: "reminders", attempts: 30, dueAt: new Date(0) },
+  });
+  let writes = 0;
+  const guarded = db.$extends({
+    query: {
+      auditEvent: {
+        async create({ args, query }) {
+          if (++writes > REMINDER_ACTION_BATCH) throw new Error("interrupted");
+          return query(args);
+        },
+      },
+    },
+  });
+  await jobRunner(guarded as unknown as typeof db, redis).tick();
+  const failed = await db.backgroundJob.findUniqueOrThrow({
+    where: { id: "reminders" },
+  });
+  expect(failed).toMatchObject({
+    attempts: 31,
+    cursor: null,
+    lastSucceededAt: null,
+  });
+  expect(failed.dueAt.getTime() - Date.now()).toBeGreaterThan(1790000);
+  expect(await db.reminder.count({ where: { exitCaseId: id } })).toBe(
+    REMINDER_ACTION_BATCH,
+  );
+  // Test clock reaches the eligible retry; production attempts/due times are never reset.
+  const later = new Date(failed.dueAt.getTime() + 1);
+  for (let tick = 0; tick < 5; tick++)
+    await jobRunner(db, redis, () => later).tick();
+  expect(
+    await db.backgroundJob.findUnique({ where: { id: "reminders" } }),
+  ).toMatchObject({ attempts: 0, cursor: null, lastSucceededAt: later });
+  const count = await db.reminder.count({ where: { exitCaseId: id } });
+  expect(
+    await db.auditEvent.count({
+      where: { exitCaseId: id, action: "reminder_created" },
+    }),
+  ).toBe(count);
+});
+
+it("rolls back actions when its lease expires inside a transaction and recovers safely", async () => {
+  let time = new Date();
+  const start = time;
+  let expired = false;
+  const guarded = db.$extends({
+    query: {
+      auditEvent: {
+        async create({ args, query }) {
+          if (!expired) {
+            expired = true;
+            time = new Date(start.getTime() + 121000);
+          }
+          return query(args);
+        },
+      },
+    },
+  });
+  await jobRunner(guarded as unknown as typeof db, redis, () => time).tick();
+  expect(await db.reminder.count({ where: { exitCaseId: id } })).toBe(0);
+  expect(
+    await db.auditEvent.count({
+      where: { exitCaseId: id, action: "reminder_created" },
+    }),
+  ).toBe(0);
+  expect(
+    await db.backgroundJob.findUnique({ where: { id: "reminders" } }),
+  ).toMatchObject({ state: "running", cursor: null });
+  for (let tick = 0; tick < 5; tick++)
+    await jobRunner(db, redis, () => time).tick();
+  expect(
+    await db.backgroundJob.findUnique({ where: { id: "reminders" } }),
+  ).toMatchObject({ state: "pending", attempts: 0, lastSucceededAt: time });
+});
+
+it("finishes a workload longer than five seconds without a five-second transaction", async () => {
+  const delayed = db.$extends({
+    query: {
+      $allOperations: async ({ args, query }) => {
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        return query(args);
+      },
+    },
+  });
+  const durations: number[] = [];
+  const started = performance.now();
+  let more = true;
+  while (more) {
+    const batch = performance.now();
+    more = await reminderService(
+      delayed as unknown as typeof db,
+    ).reconcileBatch(a, id);
+    durations.push(performance.now() - batch);
+  }
+  expect(performance.now() - started).toBeGreaterThan(5000);
+  expect(durations.length).toBeGreaterThan(1);
+  expect(Math.max(...durations)).toBeLessThan(REMINDER_TRANSACTION_MS);
+  console.info(
+    `reminder_batch_measurement batches=${durations.length} max_ms=${Math.ceil(Math.max(...durations))}`,
+  );
+}, 30000);
+
+it("a replaced token fences reminder writes, not just the final cursor update", async () => {
+  let replaced = false;
+  const guarded = db.$extends({
+    query: {
+      exitCase: {
+        async findFirst({ args, query }) {
+          if (!replaced) {
+            replaced = true;
+            await db.backgroundJob.update({
+              where: { id: "reminders" },
+              data: { leaseToken: "new-owner" },
+            });
+          }
+          return query(args);
+        },
+      },
+    },
+  });
+  await jobRunner(guarded as unknown as typeof db, redis).tick();
+  expect(await db.reminder.count({ where: { exitCaseId: id } })).toBe(0);
+  expect(
+    await db.backgroundJob.findUnique({ where: { id: "reminders" } }),
+  ).toMatchObject({
+    state: "running",
+    leaseToken: "new-owner",
+    attempts: 0,
+    cursor: null,
+  });
+});
+
+it("preserves the completed-case cursor when subsequent work fails before tick completion", async () => {
+  const guarded = db.$extends({
+    query: {
+      exitCase: {
+        async findFirst({ args, query }) {
+          if (
+            args.where?.id &&
+            typeof args.where.id === "object" &&
+            args.where.id.gt
+          )
+            throw new Error("interrupted after case checkpoint");
+          return query(args);
+        },
+      },
+    },
+  });
+  await jobRunner(guarded as unknown as typeof db, redis).tick();
+  const failed = await db.backgroundJob.findUniqueOrThrow({
+    where: { id: "reminders" },
+  });
+  expect(failed).toMatchObject({
+    cursor: id,
+    attempts: 1,
+    lastSucceededAt: null,
+  });
+  const audits = await db.auditEvent.count({
+    where: { exitCaseId: id, action: "reminder_created" },
+  });
+  for (let tick = 0; tick < 5; tick++)
+    await jobRunner(
+      db,
+      redis,
+      () => new Date(failed.dueAt.getTime() + 1),
+    ).tick();
+  expect(
+    await db.backgroundJob.findUnique({ where: { id: "reminders" } }),
+  ).toMatchObject({
+    cursor: null,
+    attempts: 0,
+    lastSucceededAt: expect.any(Date),
+  });
+  expect(
+    await db.auditEvent.count({
+      where: { exitCaseId: id, action: "reminder_created" },
+    }),
+  ).toBe(audits);
 });

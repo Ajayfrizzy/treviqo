@@ -118,13 +118,22 @@ export function financeService(db: PrismaClient = getDb()) {
     tx: Tx,
     userId: string,
     id: string,
+    pensionOnly = false,
   ): Promise<FinanceView> {
     const record = await owner(tx, userId, id);
-    const source = await sources(tx, userId, record.employmentId);
-    const saved = await tx.settlementItem.findMany({
+    const pension = await tx.pensionVerification.findFirst({
       where: { exitCaseId: id, userId },
-      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     });
+    const source =
+      pensionOnly && !pension
+        ? { docs: [], fields: [], statementRuns: [] }
+        : await sources(tx, userId, record.employmentId);
+    const saved = pensionOnly
+      ? []
+      : await tx.settlementItem.findMany({
+          where: { exitCaseId: id, userId },
+          orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+        });
     const resolve = (id: string | null, version: number | null) =>
       source.fields.find(
         (field) => field.id === id && field.version === version,
@@ -167,9 +176,7 @@ export function financeService(db: PrismaClient = getDb()) {
         }),
       };
     });
-    const pension = await tx.pensionVerification.findFirst({
-      where: { exitCaseId: id, userId },
-    });
+
     let pensionView: FinanceView["pension"] = null;
     if (pension) {
       const run = source.statementRuns.find(
@@ -257,6 +264,8 @@ export function financeService(db: PrismaClient = getDb()) {
   return {
     // Reuse the same authorized projection inside another domain snapshot.
     readInTransaction: view,
+    readPensionForReminders: async (tx: Tx, userId: string, id: string) =>
+      (await view(tx, userId, id, true)).pension,
     read(userId: string, id: string) {
       // Display reads need no transaction snapshot; mutations revalidate atomically.
       return readRecords(() => view(db, userId, id));

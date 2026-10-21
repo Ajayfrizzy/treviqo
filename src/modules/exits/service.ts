@@ -171,44 +171,47 @@ export function exitService(db: PrismaClient = getDb()) {
     tx: Tx,
     userId: string,
     id: string,
+    includeDiscrepancies = true,
   ): Promise<ExitRecord> {
     const row = await find(tx, userId, id);
     const input = answers(row);
     const context = await evidence(tx, userId, row.employmentId);
     // Read only the latest attempt per available document in this employment.
     // Proposed facts can raise a notice, never mutate worker-entered answers.
-    const documents = await tx.employmentDocument.findMany({
-      where: {
-        userId,
-        employmentId: row.employmentId,
-        status: "ready",
-        employment: { userId },
-      },
-      select: {
-        id: true,
-        extractions: {
-          where: { userId },
-          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-          take: 1,
+    const documents = includeDiscrepancies
+      ? await tx.employmentDocument.findMany({
+          where: {
+            userId,
+            employmentId: row.employmentId,
+            status: "ready",
+            employment: { userId },
+          },
           select: {
-            status: true,
-            documentType: true,
-            fields: {
-              where: {
-                key: { in: ["document_type", "exit_type", "reason"] },
-              },
+            id: true,
+            extractions: {
+              where: { userId },
+              orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+              take: 1,
               select: {
-                key: true,
-                value: true,
-                proposedValue: true,
-                evidence: true,
-                reviewState: true,
+                status: true,
+                documentType: true,
+                fields: {
+                  where: {
+                    key: { in: ["document_type", "exit_type", "reason"] },
+                  },
+                  select: {
+                    key: true,
+                    value: true,
+                    proposedValue: true,
+                    evidence: true,
+                    reviewState: true,
+                  },
+                },
               },
             },
           },
-        },
-      },
-    });
+        })
+      : [];
     const exitTypeDiscrepancies: ExitTypeDiscrepancy[] = [];
     for (const document of documents) {
       const run = document.extractions[0];
@@ -290,6 +293,8 @@ export function exitService(db: PrismaClient = getDb()) {
       }));
     },
     readInTransaction: detail,
+    readForReminders: (tx: Tx, userId: string, id: string) =>
+      detail(tx, userId, id, false),
     async detail(userId: string, id: string): Promise<ExitRecord> {
       // Display reads need no transaction snapshot; mutations revalidate atomically.
       return readRecords(() => detail(db, userId, id));

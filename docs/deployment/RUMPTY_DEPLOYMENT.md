@@ -35,7 +35,7 @@ Do not share a Redis namespace/database between environments. Web and worker con
 
 See [the ordered release procedure](FIRST_RUMPTY_DEPLOYMENT.md). Apply committed migrations through the migration target without reset or destructive schema push. Production secrets are excluded from the image. Keep the worker always on, with restart policy and monitoring; no inference credentials are needed by its four jobs (`reminders`, `session_cleanup`, `account_cleanup`, `extraction_cleanup`).
 
-Web `/api/health` checks liveness. `/api/ready` checks required database/schema, Redis, auth, bucket connectivity and worker health. Worker `GET /health` reports local in-memory progress and becomes unhealthy when stale. None of these proves DELETE permission, public-access policy, AI availability or backup recoverability.
+Web `/api/health` checks liveness. `/api/ready` checks required database/schema, Redis, auth, bucket connectivity and worker availability (not successful scheduled-job completion). Worker `GET /health` reports local in-memory progress and becomes unhealthy when stale. None of these proves DELETE permission, public-access policy, AI availability or backup recoverability.
 
 Operator commands use exported runtime variables; they do not load `.env` automatically:
 
@@ -146,7 +146,7 @@ Historical Milestone 5/6 notes above describe saved dates before scheduling exis
 
 1. Build explicit targets: `docker build --target runtime -t treviqo-web .`, `docker build --target worker -t treviqo-worker .`, and `docker build --target migrate -t treviqo-migrate .`. Run the migration release job against Rumpty PostgreSQL before starting the new versions. The default Docker target remains web.
 2. Run worker as an always-on, non-public Rumpty process using its image CMD. Configure private PostgreSQL and Redis URLs, a production HTTPS APP_URL, TLS trust and bounded database pools. S3 credentials are required by scheduled account deletion; AI credentials are not needed. See the current worker deployment section below. Use least privilege, persistent/noeviction Redis settings, a restart policy and at least a 90-second health start grace. Allow more than 10 seconds for shutdown; interrupted work is recovered through the two-minute job lease.
-3. Run `npm run worker:health` or the image health command. Alert on missing heartbeat, attempts >=5, oldest due job >5 minutes, no completed sweep within two hours, database/Redis failures and failed container health. Inspect only BackgroundJob IDs, cursor, attempts and generic errorCode; never log document payloads or connection strings. Fix poisoned evidence/code/configuration and allow retry; do not delete domain records to unblock a batch.
+3. Run `npm run worker:health` for strict job diagnostics; the image health command separately checks local deployment availability. Alert on missing heartbeat, attempts >=5, oldest due job >5 minutes, no completed sweep within two hours, database/Redis failures and failed container health. Inspect only BackgroundJob IDs, cursor, attempts and generic errorCode; never log document payloads or connection strings. Fix poisoned evidence/code/configuration and allow retry; do not delete domain records to unblock a batch.
 4. Keep production `WORKER_REQUIRED=true` (default); false is only a deliberate degraded/manual operating mode. Configure load balancer readiness at `/api/ready` and process liveness at `/api/health`. A worker outage affects readiness while liveness stays available. Do not restart a healthy web process merely for external dependency failure.
 5. Redis queue loss repairs itself from PostgreSQL, but rate-limit counters do not. Configure ingress rate/concurrency/body limits and Redis persistence. Test restart, network interruption, TLS and realistic job volume on Rumpty before release. No live AI calls are made by readiness or worker ticks.
 
@@ -229,7 +229,7 @@ Dockerfile stage difference. Do not merge the worker stage selection into main.
 The continuous worker listens on `0.0.0.0:$PORT`, or port `3001` if `PORT` is absent.
 Only `GET /health` is supported. It returns minimal, non-cacheable JSON with HTTP
 200 (`{"status":"ok"}`) or 503 (`{"status":"unhealthy"}`). Startup is unhealthy
-until the first successful tick and existing heartbeat/job-health check. Requests
+until the first successful tick and dependency/heartbeat availability check. Scheduled retry backoff does not block this deployment gate. Requests
 read an in-memory snapshot; they never query services or run jobs. A snapshot
 expires after 45 seconds without healthy local progress, even if a different
 worker continues updating the shared heartbeat. Other methods/paths return 404.
@@ -238,7 +238,7 @@ SIGTERM/SIGINT stop HTTP immediately, interrupt the loop's wait, allow an in-fli
 tick to finish, and disconnect Redis/Prisma. A 10-second deadline forces a nonzero
 exit if an unabortable dependency call or cleanup stalls; durable job leases recover
 on restart. `--once` remains HTTP-free. `npm run worker:health` remains the existing
-independent heartbeat/durable-job CLI probe and Docker health check.
+independent strict heartbeat/durable-job CLI probe for operator diagnostics. Docker instead runs `dist-worker/worker/availability.js`, which checks this container's HTTP `/health` with a three-second deadline. A CLI job-health failure must not be used as the deployment gate.
 
 Required worker environment:
 
@@ -277,16 +277,16 @@ Observed operator evidence: web `readiness_failed database,worker` at 04:25:33 a
 - `worker` is required by default in production unless explicitly overridden. It can mean the worker-health check returned false, threw on Redis/database access, or exceeded the readiness deadline. Repeated worker-only failures mean that readiness invocation's other checks passed; they do not prove a healthy database history.
 - The worker retry message means `tick()` or its subsequent health check threw. A tick starts with Redis PING, initializes/reclaims/reads durable jobs in PostgreSQL, repairs the Redis due queue, claims at most one job, processes it and publishes a heartbeat. Failure before heartbeat publication can eventually expire the shared heartbeat.
 - A processing or success-checkpoint failure is caught inside the job runner, logged, and rescheduled with a lease-token/state condition. If retry persistence succeeds, the tick can still publish a heartbeat. If retry persistence fails, the error escapes to the runtime. A fresh heartbeat is therefore not sufficient proof of completed jobs.
-- Shared health requires a finite heartbeat no more than five seconds in the future and no more than 45 seconds old, all four configured job rows, fewer than five attempts each, due dates less than five minutes overdue, and a completed sweep within two hours. A never-completed job has a two-minute startup allowance. Redis expires the heartbeat key after 45 seconds; a missing key fails health at real-world timestamps.
-- Worker HTTP `/health` reads only its own in-memory snapshot. Startup is unhealthy until a tick and shared health check both succeed. A failed tick/check clears the snapshot; a hung tick/check can leave the previous snapshot until it becomes 45 seconds old. Clock rollback also fails local health. HTTP does not execute work or query dependencies and cannot borrow another instance's healthy snapshot.
+- Strict job health (`workerHealthy`, UI warnings and `npm run worker:health`) requires a finite heartbeat no more than five seconds in the future and no more than 45 seconds old, all four configured job rows, fewer than five attempts each, due dates less than five minutes overdue, and a completed sweep within two hours. A never-completed job has a two-minute startup allowance. Redis expires the heartbeat key after 45 seconds; a missing key fails health at real-world timestamps.
+- Worker HTTP `/health` reads only its own in-memory snapshot. Startup is unhealthy until a tick and dependency/heartbeat availability check both succeed; scheduled-job completion is diagnosed separately. A failed tick/check clears the snapshot; a hung tick/check can leave the previous snapshot until it becomes 45 seconds old. Clock rollback also fails local health. HTTP does not execute work or query dependencies and cannot borrow another instance's healthy snapshot.
 
-Ticks wait ten seconds after completing/failing; this is not a ten-second execution deadline. Completed sweeps recur after 60 seconds; additional batches are immediately due for a later tick. Failed jobs back off from ten seconds to thirty minutes. Expired two-minute leases are reclaimed on a subsequent successful tick and increment attempts. Five failures make health false but do not permanently disable retries. Do not clear attempts, leases, job rows or Redis to make health appear green.
+Ticks wait ten seconds after completing/failing; this is not a ten-second execution deadline. Completed sweeps recur after 60 seconds; additional batches are immediately due for a later tick. Failed jobs back off from ten seconds to thirty minutes. Expired two-minute leases are reclaimed on a subsequent successful tick and increment attempts. Five failures make strict job health false but do not permanently disable retries or block deployment availability. Do not clear attempts, leases, job rows or Redis to make health appear green.
 
-PostgreSQL uses one lazily created Prisma client per process, with provider logging disabled. Connection/pool settings come from the runtime `DATABASE_URL`; no application-wide transaction override is configured. Reminder reconciliation uses serializable interactive transactions with Prisma defaults; account cleanup includes separately bounded transactions. Connection failures, pool timeouts, transaction expiry and serialization conflicts can therefore occur at different stages. Redis uses lazy connection, a two-second connection timeout, 2.5-second command timeout, one retry per request and no automatic reconnect strategy; a client in `end` state is recreated on a subsequent `getRedis()` call.
+PostgreSQL uses one lazily created Prisma client per process, with provider logging disabled. Connection/pool settings come from the runtime `DATABASE_URL`; no application-wide transaction override is configured. Reminder reconciliation uses serializable interactive transactions bounded to three reminder actions, with an explicit five-second timeout and two-second acquisition wait; account cleanup includes separately bounded transactions. Connection failures, pool timeouts, transaction expiry and serialization conflicts can therefore occur at different stages. Redis uses lazy connection, a two-second connection timeout, 2.5-second command timeout, one retry per request and no automatic reconnect strategy; a client in `end` state is recreated on a subsequent `getRedis()` call.
 
 ### Safe diagnostics added by this investigation
 
-These diagnostics exist in source and require a future authorized deployment before they can appear in production. Existing summary logs and public health response bodies are preserved. Runtime categories and worker-health reasons are written directly to server stderr: React must not replay these operational diagnostics into the browser console or development error overlay during Server Component rendering.
+These diagnostics exist in source; verify the running revision includes them. The 21 October batching/availability correction below still requires an authorized release. Existing summary logs and public health response bodies are preserved. Runtime categories and worker-health reasons are written directly to server stderr: React must not replay these operational diagnostics into the browser console or development error overlay during Server Component rendering.
 
 - `runtime_failed operation=readiness_database category=...` distinguishes the failed readiness check and an allowlisted category.
 - `runtime_failed operation=worker_database|worker_redis category=...` identifies the failing tick/shared-health dependency boundary.
@@ -328,3 +328,72 @@ ZCARD treviqo:jobs:due
 
 5. Compare all four jobs' attempt counts, due times, lease expiry and last completed sweeps with the thresholds above. Readiness can fail while Redis PING and `SELECT 1` succeed: those checks do not establish application table access, transaction capacity or completed jobs. Inspect migration status and provider connection/pool/lock metrics privately if needed, without collecting query texts or user rows. A SQL console success is only a control unless it uses the same role and network as the affected runtime.
 6. Collect the next safe diagnostic categories after a separately authorized release, or ask the operator/provider for equivalent read-only evidence now. Do not run `worker --once`, `deployment:check --services`, cleanup, queue resets or test suites against production: some of those commands perform writes. Keep S3 authorization findings separate unless a failing account-cleanup operation explicitly identifies storage; per-account cleanup can catch/retry storage failures without failing the entire scheduled sweep.
+
+
+## Reminder backlog recovery and availability — 21 October 2026
+
+The operator reports that RumptyCloud support confirmed reminder transactions exceeding Prisma's five-second default, a growing backlog, approximately 30 failed attempts, and no database locks/deadlocks. The other three jobs had zero failures. A retry may be 30 minutes away while the deployment gate allows approximately ten minutes. These are provider findings relayed by the operator, not independent production measurements here.
+
+The prior source already used one transaction per exit case, not one transaction for the entire backlog. Its unbounded per-case action loop and 20-case checkpoint interval nevertheless amplified slow work and replay after interruption. The correction limits each transaction to three reminder creates/updates/resolutions and their atomic audits. It recomputes owned evidence for each batch, skipping settlement comparisons and exit-discrepancy projections that reminder rules never consume. No external storage or AI calls run inside these transactions.
+
+Partial-case progress resides in Reminder rows and their fingerprints; no schema migration or new cursor encoding is needed. Changed evidence is rechecked on the next batch. The final batch and completed-case BackgroundJob cursor commit atomically under an unexpired job token and row lock. Stale leases roll back both actions and audits. The UUID keyset scan wraps after a full sweep, so newly inserted/changed cases behind the cursor are revisited on the next sweep. A tick processes at most five batches and starts no further batch after 15 seconds; this is a work budget, not cancellation of a stalled database query. Existing local health expiry detects stalls.
+
+The transaction timeout remains five seconds with a two-second acquisition limit; no global Prisma timeout was increased. A disposable-database latency regression injects 180ms per Prisma operation, requires total reconciliation to exceed five seconds, and verifies every batch completes below five seconds. This is a controlled regression, not a production latency guarantee. Exceptionally expensive evidence reads or impaired connectivity may still time out and must remain visible.
+
+Deployment availability (`GET /health`, Docker's local HTTP probe, and the web readiness worker check) requires recent progress, Redis access and all four durable job rows. A successfully persisted job retry is loop progress, not job success. Strict job diagnostics remain in server stderr, reminder UI warnings and `npm run worker:health`: attempts >=5, overdue jobs, stale sweeps and never-completed jobs remain unhealthy there. Partial reminder progress does not clear attempts/errorCode or update lastSucceededAt; only a completed sweep does. Database/Redis failures, expired local snapshots, shutdown and a stalled loop still fail availability. Do not replace strict job alerting with deployment-health monitoring alone.
+
+Validation on 21 October: `npm run validate` passed lint, TypeScript, 530 unit tests, production web build and worker build. The full integration suite passed 198 tests against disposable PostgreSQL/Redis; the full browser suite passed 179 tests using local S3/AI fixtures. The delayed reminder regression completed four batches with a maximum measured batch duration of approximately 2.6 seconds. Changed TypeScript formatting, local documentation file links and `git diff --check` passed. The read-only connectivity snippet below was verified against the disposable database only. No production connectivity, recovery or private-host cutover is claimed by these results.
+
+### Release and acceptance sequence (operator action; not executed)
+
+1. Review the diff and validation report. No database migrations, environment changes or job resets are required for this correction. Preserve current working connection settings during this release.
+2. After explicit release authorization, update the established web and `deploy/worker` branches with matching source. Retain only `FROM worker AS default` as the worker branch's Dockerfile difference. Both branches must include the new local Docker health command; preserve merge history and do not force-push.
+3. Deploy through the existing Rumpty Git workflow. Confirm the revision on each service and that the worker uses HTTP `/health` plus the updated Docker check, rather than the strict `worker:health` CLI. Retain always-on execution and the existing startup grace; ordinary pending backoff no longer needs to fit inside that grace.
+4. Confirm worker HTTP 200 after a successful loop/dependency check, and web readiness when its other dependencies pass. This does not certify completed reminders. Capture two read-only job/heartbeat snapshots using the earlier procedure, at least 60 seconds apart. If runtime console access is unavailable, ask support to run them in the same network/role context.
+5. Preserve attempts and dueAt. Allow the already scheduled retry (possibly up to 30 minutes), then additional bounded ticks for the backlog. Observe case-cursor progress privately, stable/advancing heartbeat, no repeated transaction failures, and eventually a newer lastSucceededAt with attempts zero. Do not publish cursors or user identifiers. If a partial batch leaves the cursor unchanged, a single unchanged snapshot is not proof of failure.
+6. Verify reminder UI behavior using an authorized fictional account. Continue strict job alerts throughout rollout. If regressions occur, revert the code through the normal reviewed Git workflow; schema and cursor formats are backward compatible. The old worker's strict deployment gate may again reject persisted failures, so do not promise a healthy rollback without checking it. Never clear job state to make rollback appear healthy.
+
+### Private PostgreSQL endpoint verification and cutover
+
+Both runtimes use `DATABASE_URL` through the same cached Prisma client. There is no separate worker database variable or automatic private-host fallback. Rumpty service-level environment/secret settings are independent and can differ; a local `.env` does not establish either deployed value. The operator reports a currently working public route and Ola's private-endpoint recommendation. The exact recommended hostname/port/TLS contract has not been supplied in this investigation and must be confirmed privately with support; do not guess it or weaken TLS verification.
+
+Keep the current DATABASE_URL unchanged until verification. Obtain the candidate connection details through provider secret configuration (never CLI arguments or a repository file), preserving database, role, schema, credentials and bounded pool settings unless support explicitly requires a difference. Confirm with support that the two routes reach the same database, not a new database requiring data migration.
+
+Run an authorized temporary **read-only** diagnostic process using the release worker image separately in each deployment's private network context. Inject the candidate only into that temporary process as DATABASE_URL; do not start its default worker command. If Rumpty exposes neither shell nor one-off commands, support must run these checks. From the repository/image working directory:
+
+```sh
+node --conditions=react-server dist-worker/ops/deployment.js --network-local
+node --conditions=react-server dist-worker/ops/deployment.js --worker --inspect-db
+```
+
+The first command checks DNS only. The second authenticates with Prisma and reads schema/migration metadata; it does not execute jobs or migrations. Supply the existing required worker preflight configuration privately. Do not add `--services` (it writes a Redis diagnostic key), `--runtime`, `--storage` or `--ai` to this read-only procedure.
+
+For measured transactional connectivity, run this Node snippet in that same temporary process, first with the current route, then with the candidate. Its environment must already contain the selected URL. It prints only status/timing, never URLs, database/user names or raw errors:
+
+```sh
+node --input-type=module <<'NODE'
+import { PrismaClient } from '@prisma/client';
+const db = new PrismaClient({ log: [] });
+try {
+  for (let sample = 0; sample < 3; sample++) {
+    const start = performance.now();
+    await db.$transaction(async tx => {
+      await tx.$executeRaw`SET TRANSACTION READ ONLY`;
+      await tx.$executeRaw`SET LOCAL statement_timeout = '3s'`;
+      await tx.$queryRaw`SELECT 1`;
+      await tx.$queryRaw`SELECT count(*) FROM "BackgroundJob" WHERE "id" IN ('reminders', 'session_cleanup', 'account_cleanup', 'extraction_cleanup')`;
+    }, { timeout: 5000, maxWait: 2000 });
+    console.log(`database_readonly status=ok elapsed_ms=${Math.ceil(performance.now() - start)}`);
+  }
+} catch {
+  console.error('database_readonly status=failed');
+  process.exitCode = 1;
+} finally {
+  await db.$disconnect();
+}
+NODE
+```
+
+Record DNS/authentication/TLS success, schema/migration match, per-sample latency and provider connection utilization for **both** runtime contexts. Verify TLS/certificate requirements with support; a successful query alone does not prove the intended TLS policy. No employment or document rows need inspection.
+
+Only after those checks and separate change authorization: retain the old URL in approved secret history, update the worker's runtime secret and redeploy it, verify HTTP availability plus strict job progress, then update/redeploy web and verify `/api/health`, `/api/ready` and authorized sign-in. This is an endpoint cutover, not a Prisma schema migration. Keep Redis/S3 credentials and namespace unchanged. On failed verification, restore that service's prior secret version and redeploy through the established workflow; do not remove the working public route before both services have passed acceptance. No production URL or deployment was changed as part of this implementation.

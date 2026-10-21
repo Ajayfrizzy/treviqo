@@ -20,7 +20,7 @@ vi.mock("@/server/storage/client", () => ({
   getObjectStorage: () => ({ checkConnection: checks.storage }),
 }));
 vi.mock("@/modules/auth/options", () => ({ authConfigured: checks.auth }));
-vi.mock("@/server/jobs/health", () => ({ workerHealthy: checks.worker }));
+vi.mock("@/server/jobs/health", () => ({ workerAvailable: checks.worker }));
 import { GET as ready } from "@/app/api/ready/route";
 import { GET as health } from "@/app/api/health/route";
 beforeEach(() => {

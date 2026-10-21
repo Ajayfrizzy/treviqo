@@ -58,7 +58,8 @@ async function generate(page: Page) {
   const exit = (await created.json()).exitCase;
   await db.backgroundJob.updateMany({ data: { dueAt: new Date(0) } });
   const { execFileSync } = await import("node:child_process");
-  for (let n = 0; n < 3; n++)
+  const sweepStarted = new Date();
+  for (let n = 0; n < 50; n++) {
     execFileSync(
       process.execPath,
       ["--conditions=react-server", "dist-worker/worker/main.js", "--once"],
@@ -72,6 +73,17 @@ async function generate(page: Page) {
         stdio: "pipe",
       },
     );
+    const job = await db.backgroundJob.findUnique({
+      where: { id: "reminders" },
+    });
+    if (job?.lastSucceededAt && job.lastSucceededAt >= sweepStarted) break;
+  }
+  const completed = await db.backgroundJob.findUniqueOrThrow({
+    where: { id: "reminders" },
+  });
+  expect(completed.lastSucceededAt?.getTime()).toBeGreaterThanOrEqual(
+    sweepStarted.getTime(),
+  );
   return exit;
 }
 for (const width of [320, 375, 430, 768, 1024, 1280, 1440])

@@ -8,6 +8,10 @@ import { financeService } from "@/modules/finance/service";
 import { DocumentError } from "@/modules/documents/validation";
 import { DAY, reminderCandidates, reminderVisible } from "./rules";
 type Tx = Prisma.TransactionClient;
+// Each transaction revalidates evidence and commits at most three reminder actions.
+export const REMINDER_ACTION_BATCH = 3;
+export const REMINDER_TRANSACTION_MS = 5000;
+export type ReminderCheckpoint = (tx: Tx, complete: boolean) => Promise<void>;
 export const reminderCommand = z
   .object({
     id: z.string().uuid(),
@@ -17,19 +21,26 @@ export const reminderCommand = z
   .strict();
 export function reminderService(db: PrismaClient = getDb()) {
   async function candidates(tx: Tx, userId: string, exitId: string, now: Date) {
-    const exit = await exitService(db).readInTransaction(tx, userId, exitId);
-    const finance = await financeService(db).readInTransaction(
+    const exit = await exitService(db).readForReminders(tx, userId, exitId);
+    const pension = await financeService(db).readPensionForReminders(
       tx,
       userId,
       exitId,
     );
-    return { exit, items: reminderCandidates(exit, finance.pension, now) };
+    return { exit, items: reminderCandidates(exit, pension, now) };
   }
-  return {
+  const service = {
     // Worker-only entry point. Rechecks database ownership and all source evidence in-transaction.
-    async reconcile(userId: string, exitId: string, now = new Date()) {
+    async reconcileBatch(
+      userId: string,
+      exitId: string,
+      now = new Date(),
+      checkpoint?: ReminderCheckpoint,
+    ) {
       return db.$transaction(
         async (tx) => {
+          // Lock/fence the job before domain locks; a stale worker cannot write reminders.
+          await checkpoint?.(tx, false);
           await tx.$queryRaw`SELECT "id" FROM "ExitCase" WHERE "id"=${exitId} AND "userId"=${userId} FOR UPDATE`;
           const { exit, items } = await candidates(tx, userId, exitId, now);
           const saved = await tx.reminder.findMany({
@@ -49,8 +60,19 @@ export function reminderService(db: PrismaClient = getDb()) {
                 action,
               },
             });
+          let actions = 0;
+          let more = false;
           for (const item of items) {
             const previous = saved.find((row) => row.key === item.key);
+            const changed =
+              !previous ||
+              previous.fingerprint !== item.fingerprint ||
+              previous.state === "resolved";
+            if (changed && actions >= REMINDER_ACTION_BATCH) {
+              more = true;
+              continue;
+            }
+            if (changed) actions++;
             if (!previous) {
               const row = await tx.reminder.create({
                 data: {
@@ -86,6 +108,11 @@ export function reminderService(db: PrismaClient = getDb()) {
               row.state !== "resolved" &&
               !items.some((item) => item.key === row.key)
             ) {
+              if (actions >= REMINDER_ACTION_BATCH) {
+                more = true;
+                continue;
+              }
+              actions++;
               await tx.reminder.update({
                 where: { id: row.id },
                 data: {
@@ -96,9 +123,21 @@ export function reminderService(db: PrismaClient = getDb()) {
               });
               await audit(row.id, "reminder_resolved");
             }
+          await checkpoint?.(tx, !more);
+          return more;
         },
-        { isolationLevel: "Serializable" },
+        {
+          isolationLevel: "Serializable",
+          timeout: REMINDER_TRANSACTION_MS,
+          maxWait: 2000,
+        },
       );
+    },
+    // Compatibility entry point for internal callers; each batch commits independently.
+    async reconcile(userId: string, exitId: string, now = new Date()) {
+      while (await service.reconcileBatch(userId, exitId, now)) {
+        /* resumable batches */
+      }
     },
     async list(userId: string, now = new Date()) {
       if (!userId) throw new DocumentError("Sign in to view reminders.", 401);
@@ -207,4 +246,5 @@ export function reminderService(db: PrismaClient = getDb()) {
       );
     },
   };
+  return service;
 }

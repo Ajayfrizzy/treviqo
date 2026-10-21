@@ -81,6 +81,7 @@ it("logs a caught job failure while preserving fenced retry and heartbeat", asyn
       id: "session_cleanup",
       leaseToken: expect.any(String),
       state: "running",
+      leaseUntil: { gt: now },
     },
     data: {
       state: "pending",

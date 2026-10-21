@@ -4,7 +4,7 @@ import {
   type RuntimeOperation,
 } from "@/server/diagnostics/runtime";
 import { getEnv } from "@/server/config/env";
-import { workerHealthy } from "@/server/jobs/health";
+import { workerAvailable } from "@/server/jobs/health";
 import { getDb } from "@/server/db/client";
 import { getRedis } from "@/server/redis/client";
 import { getObjectStorage } from "@/server/storage/client";
@@ -44,7 +44,7 @@ export async function isReady() {
       if (
         (env.WORKER_REQUIRED ??
           (env.NODE_ENV === "production" ? "true" : "false")) === "true" &&
-        !(await workerHealthy())
+        !(await workerAvailable())
       )
         throw Object.assign(new Error(), { name: "WorkerUnavailable" });
     },

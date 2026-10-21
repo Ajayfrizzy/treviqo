@@ -1,5 +1,5 @@
 import { jobRunner } from "@/server/jobs/runner";
-import { workerHealthy } from "@/server/jobs/health";
+import { workerAvailable, workerHealthy } from "@/server/jobs/health";
 import { getDb } from "@/server/db/client";
 import { getRedis } from "@/server/redis/client";
 import { runWorker } from "./runtime";
@@ -22,7 +22,11 @@ process.on("SIGINT", stop);
 try {
   const ok = await runWorker({
     tick: () => jobRunner().tick(),
-    healthy: workerHealthy,
+    healthy: async () => {
+      const available = await workerAvailable();
+      if (available) await workerHealthy(); // retain strict diagnostics, not a deployment gate
+      return available;
+    },
     signal: shutdown.signal,
     once: process.argv.includes("--once"),
   });
