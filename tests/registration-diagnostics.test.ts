@@ -97,7 +97,7 @@ it("preserves global 429 and account 400 limits without reporting infrastructure
   expect(mocks.hash).not.toHaveBeenCalled();
   expect(console.error).not.toHaveBeenCalled();
 });
-it("keeps success and validation quiet while logging only the duplicate Prisma code", async () => {
+it("keeps success and validation quiet while logging only the duplicate category", async () => {
   const success = await POST(request());
   expect(success.status).toBe(201);
   expect(await success.json()).toEqual({ success: true });
@@ -120,13 +120,18 @@ it("keeps success and validation quiet while logging only the duplicate Prisma c
   expect((await POST(invalid)).status).toBe(400);
   expect(console.error).toHaveBeenCalledExactlyOnceWith(
     "registration_database_user_create_failed",
-    "P2002",
+    "database_unique_constraint",
   );
 });
 
-it.each(["P1000", "P1001", "P2021", "P2022"])(
+it.each([
+  ["P1000", "database_authentication"],
+  ["P1001", "database_connectivity"],
+  ["P2021", "database_schema"],
+  ["P2022", "database_schema"],
+])(
   "logs only known Prisma code %s without metadata/messages",
-  async (code) => {
+  async (code, category) => {
     mocks.create.mockRejectedValue(
       new Prisma.PrismaClientKnownRequestError(
         "postgresql://username:password@private-host/database " + input.email,
@@ -142,7 +147,7 @@ it.each(["P1000", "P1001", "P2021", "P2022"])(
     expect(await response.json()).toEqual(generic);
     expect(console.error).toHaveBeenCalledExactlyOnceWith(
       "registration_database_user_create_failed",
-      code,
+      category,
     );
   },
 );
@@ -157,25 +162,34 @@ it("recognizes initialization errorCode without logging the connection details",
   expect((await POST(request())).status).toBe(503);
   expect(console.error).toHaveBeenCalledExactlyOnceWith(
     "registration_database_client_init_failed",
-    "P1001",
+    "database_connectivity",
   );
   expect(mocks.create).not.toHaveBeenCalled();
 });
 it.each([
-  Object.assign(new Error("private"), { code: "P1001" }),
-  new Prisma.PrismaClientKnownRequestError("private", {
-    code: "P1001 private-secret",
-    clientVersion: "test",
-  }),
-  new Prisma.PrismaClientInitializationError("private", "test"),
+  [
+    Object.assign(new Error("private"), { code: "P1001" }),
+    "database_connectivity",
+  ],
+  [
+    new Prisma.PrismaClientKnownRequestError("private", {
+      code: "P1001 private-secret",
+      clientVersion: "test",
+    }),
+    "unknown",
+  ],
+  [
+    new Prisma.PrismaClientInitializationError("private", "test"),
+    "database_initialization",
+  ],
 ])(
-  "does not trust arbitrary code properties or malformed Prisma codes",
-  async (error) => {
+  "uses only allowlisted codes and fixed Prisma fallbacks",
+  async (error, category) => {
     mocks.create.mockRejectedValue(error);
     expect((await POST(request())).status).toBe(503);
     expect(console.error).toHaveBeenCalledExactlyOnceWith(
       "registration_database_user_create_failed",
-      "unknown",
+      category,
     );
   },
 );
@@ -193,26 +207,32 @@ it("reports lazy connection initialization at the user-create stage", async () =
   expect(await response.json()).toEqual(generic);
   expect(console.error).toHaveBeenCalledExactlyOnceWith(
     "registration_database_user_create_failed",
-    "P1001",
+    "database_connectivity",
   );
 });
 it.each([
-  new Prisma.PrismaClientValidationError("private SQL and payload", {
-    clientVersion: "test",
-  }),
-  new Prisma.PrismaClientUnknownRequestError("private provider details", {
-    clientVersion: "test",
-  }),
+  [
+    new Prisma.PrismaClientValidationError("private SQL and payload", {
+      clientVersion: "test",
+    }),
+    "database_validation",
+  ],
+  [
+    new Prisma.PrismaClientUnknownRequestError("private provider details", {
+      clientVersion: "test",
+    }),
+    "database_request_unknown",
+  ],
 ])(
-  "reports uncoded Prisma query failures as unknown without exposing details",
-  async (error) => {
+  "reports fixed Prisma query categories without exposing details",
+  async (error, category) => {
     mocks.create.mockRejectedValue(error);
     const response = await POST(request());
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual(generic);
     expect(console.error).toHaveBeenCalledExactlyOnceWith(
       "registration_database_user_create_failed",
-      "unknown",
+      category,
     );
   },
 );

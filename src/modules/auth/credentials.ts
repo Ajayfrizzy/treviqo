@@ -1,6 +1,7 @@
 import "server-only";
 import { registrationSchema, signInSchema } from "./validation";
 export { credentialsSchema } from "./validation";
+import { runtimeCategory } from "@/server/diagnostics/runtime";
 import { Prisma } from "@prisma/client";
 import { getDb } from "@/server/db/client";
 import {
@@ -58,17 +59,7 @@ export async function registerUser(input: unknown): Promise<{ id: string }> {
       select: { id: true },
     });
   } catch (error) {
-    const code =
-      error instanceof Prisma.PrismaClientKnownRequestError
-        ? error.code
-        : error instanceof Prisma.PrismaClientInitializationError
-          ? error.errorCode
-          : undefined;
-    // Never serialize provider messages, metadata, stacks, or arbitrary error.code values.
-    console.error(
-      databaseStage,
-      typeof code === "string" && /^P\d{4}$/.test(code) ? code : "unknown",
-    );
+    console.error(databaseStage, runtimeCategory(error));
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
