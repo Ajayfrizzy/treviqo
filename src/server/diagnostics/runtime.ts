@@ -8,6 +8,7 @@ const categories = {
   P1010: "database_authorization",
   P1011: "database_tls",
   P1017: "database_connection_closed",
+  P2002: "database_unique_constraint",
   P2021: "database_schema",
   P2022: "database_schema",
   P2024: "database_pool_timeout",
@@ -18,22 +19,50 @@ const categories = {
   ENOTFOUND: "dns",
   EAI_AGAIN: "dns",
   ETIMEDOUT: "timeout",
+} as const;
+const namedCategories = {
   TimeoutError: "timeout",
   ReadinessTimeout: "deadline",
   WorkerUnavailable: "worker_unhealthy",
   ReplyError: "redis_command",
 } as const;
+// Fixed Prisma names support errors crossing bundled module boundaries. Never emit
+// a supplied name; these are inconclusive fallbacks, not inferred transport causes.
+const prismaCategories = {
+  PrismaClientInitializationError: "database_initialization",
+  PrismaClientUnknownRequestError: "database_request_unknown",
+  PrismaClientValidationError: "database_validation",
+  PrismaClientRustPanicError: "database_engine_failure",
+} as const;
+function property(value: object, key: string): unknown {
+  try {
+    return (value as Record<string, unknown>)[key];
+  } catch {
+    return undefined;
+  }
+}
 export function runtimeCategory(error: unknown): string {
   if (!error || typeof error !== "object") return "unknown";
-  // Prisma initialization uses errorCode; known query errors use code.
-  const value = error as {
-    code?: unknown;
-    errorCode?: unknown;
-    name?: unknown;
-  };
-  for (const token of [value.code, value.errorCode, value.name]) {
-    if (typeof token === "string" && Object.hasOwn(categories, token))
-      return categories[token as keyof typeof categories];
+  const seen = new Set<object>();
+  let current: unknown = error;
+  // Inspect the outer error plus at most four causes. Only structured allowlisted
+  // codes are considered in causes; messages, metadata and cause names are ignored.
+  for (let depth = 0; depth < 5; depth++) {
+    if (!current || typeof current !== "object" || seen.has(current)) break;
+    seen.add(current);
+    for (const key of ["code", "errorCode"]) {
+      const token = property(current, key);
+      if (typeof token === "string" && Object.hasOwn(categories, token))
+        return categories[token as keyof typeof categories];
+    }
+    if (depth < 4) current = property(current, "cause");
+  }
+  const name = property(error, "name");
+  if (typeof name === "string") {
+    if (Object.hasOwn(namedCategories, name))
+      return namedCategories[name as keyof typeof namedCategories];
+    if (Object.hasOwn(prismaCategories, name))
+      return prismaCategories[name as keyof typeof prismaCategories];
   }
   return "unknown";
 }
