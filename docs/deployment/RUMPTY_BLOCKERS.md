@@ -1,8 +1,8 @@
-# Remaining Rumpty deployment blockers — 4 October 2026
+# Rumpty network and backup recovery procedures
 
-> Historical investigation record. Do not treat its original deployment status, model protocol or test counts as current. See the [deployment guide](RUMPTY_DEPLOYMENT.md), [current AI contract](../ai/AI_DOCUMENTS.md#current-implementation) and [current storage-deletion status](S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+> Mixed active runbook and historical investigation record. Private-network execution and manual backup/restore procedures remain operational references; incident results and validation below are the 4 October 2026 snapshot. Do not treat its original deployment status, model protocol or test counts as current. See the [deployment guide](RUMPTY_DEPLOYMENT.md), [current AI contract](../ai/AI_DOCUMENTS.md#current-implementation) and [current storage-deletion status](RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation).
 
-Follow-up to [live verification](LIVE_RUMPTY_VERIFICATION.md). No public database/Redis endpoints, provider fallback, architecture change or Milestone 8 feature was introduced.
+Follow-up to [live verification](../archive/investigations/LIVE_RUMPTY_VERIFICATION.md). No public database/Redis endpoints, provider fallback, architecture change or Milestone 8 feature was introduced.
 
 ## Private PostgreSQL/Redis execution strategy
 
@@ -40,13 +40,15 @@ Inside operator/worker workload afterward:
 ```sh
 npm run deployment:check -- --worker --services
 npm run worker
-# In a separate console after both jobs have run:
+# In a separate console after all four configured job sweeps have completed:
 npm run worker:health
 ```
 
-For full bucket/public HTTPS checks, use an operator workload with web configuration and the documented `--services` / `--runtime` commands. No remote workload is claimed provisioned; console execution access is still required. No live migrations have been applied.
+For full bucket/public HTTPS checks, use an operator workload with web configuration and the documented `--services` / `--runtime` commands. The original 4 October investigation provisioned no remote workload and applied no live migrations. These are separately authorized operator procedures, not current deployment status. If Rumpty provides no runtime console or one-off workload, ask support to execute the required checks in the same network/role context.
 
 ## S3 deletion diagnosis
+
+Historical evidence — 4 October 2026; not current production status.
 
 Retried DeleteObject only for the known synthetic key; provider returned **403 AccessDenied** again. HeadObject for that same key returned 200, confirming object access. No object-lock/retention fields were returned in that metadata response; this does **not** prove absence of retention. GetBucketVersioning and GetObjectLockConfiguration both returned 403, so the credential cannot establish their state.
 
@@ -103,7 +105,7 @@ pg_restore --list /backup/treviqo-pre-release.dump > /backup/treviqo-pre-release
 sha256sum /backup/treviqo-pre-release.dump > /backup/treviqo-pre-release.sha256
 ```
 
-Check every command's exit status; abort rollout on failure. Use a distinct timestamped backup directory per run instead of overwriting the previous backup. Archive listing/checksum are integrity aids, not proof of restorability. Never store the dump in the repository, web filesystem or a public bucket. Encrypt at rest (verified Rumpty encrypted volume/private backup storage, or approved client-side encryption with keys stored separately), restrict download access, and copy off the ephemeral workload using the provider's private storage tooling. Do not rely on the currently deletion-blocked application bucket for retention management; provision a private backup destination with tested lifecycle/delete permissions. Record backup timestamp, database/server and migration version, checksum, storage location and operator without secrets.
+Check every command's exit status; abort rollout on failure. Use a distinct timestamped backup directory per run instead of overwriting the previous backup. Archive listing/checksum are integrity aids, not proof of restorability. Never store the dump in the repository, web filesystem or a public bucket. Encrypt at rest (verified Rumpty encrypted volume/private backup storage, or approved client-side encryption with keys stored separately), restrict download access, and copy off the ephemeral workload using the provider's private storage tooling. Do not infer backup retention management from application document-deletion success; use a private backup destination with tested lifecycle/delete permissions. Record backup timestamp, database/server and migration version, checksum, storage location and operator without secrets.
 
 Use pg_dump's consistent snapshot for PostgreSQL. Coordinate document-object snapshots/version inventory and retention as described in the existing runbook; a database dump alone cannot restore document bytes. For the first deployment pause app/worker writes during the coordinated database/object backup to simplify consistency. Keep app roles/grants/extensions provisioning scripts separately reviewed because `--no-owner --no-acl` does not restore grants/owners and a single-database dump excludes cluster roles.
 
@@ -117,10 +119,10 @@ pg_restore --exit-on-error --single-transaction --no-owner --no-acl --dbname="$P
 
 Restore into an empty, operator-provisioned database; do not add `--clean` against a live target. Reapply reviewed runtime grants, run migration status/drift checks, and perform the existing session revocation/job reset/object-reconciliation acceptance procedure with isolated Redis/bucket credentials before serving traffic. Start test web/worker only after these recovery steps. Measure RPO/RTO and record evidence; suggested 24-hour RPO/4-hour RTO remain targets until proven. Schedule and monitor daily dumps plus pre-migration backups, validate restore regularly, retain according to an explicit policy (initial proposal 30 days), test expiration/erasure and restrict every copy. Manual dumps provide no continuous PITR unless separate WAL archiving is configured and tested.
 
-## Remaining acceptance blockers
+## Historical acceptance blockers — 4 October 2026
 
 Rumpty-network workload access and database state/migrations; real HTTPS app origin/WORKER_REQUIRED=true; scoped S3 deletion and residual-object cleanup; provider expiry 500; inference completion; configured private backups and a successful restore drill. No need to expose PostgreSQL/Redis publicly. Local private DNS limits are now reported separately from failures in the hosted environment.
 
-## Validation
+## Historical validation — 4 October 2026
 
 `npm run validate` passed lint, typecheck, **216 unit tests**, production build and worker/operator compilation. `npm run test:integration` passed **81 tests** against disposable local PostgreSQL/Redis. All nine migrations applied only to that disposable database. The read-only operator inspection reported 15 public tables, nine completed migrations and zero unfinished migrations. The real local private-network diagnostic returned exit 2 with both endpoints marked requires_rumpty_network. `npm run test:e2e` passed **50 browser tests**, including link expiry/removal and explicit renewal. Prisma drift reported no difference; `git diff --check` and staged-probe syntax validation passed. No live database mutations or public service exposure occurred.

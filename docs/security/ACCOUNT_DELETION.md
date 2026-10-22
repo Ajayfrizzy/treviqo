@@ -1,8 +1,8 @@
 # Scheduled account deletion
 
-## Current operational limitation
+## Current operational boundary
 
-Scheduling is implemented, but seven days is the earliest cleanup eligibility time, **not a guaranteed erasure deadline**. Direct S3 deletion currently returns 403 AccessDenied in production and a controlled private test bucket. RumptyCloud support has been contacted. Accounts with unpurged documents stay disabled and retry; the worker does not remove database records first to bypass storage failure. See [current findings](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+Scheduling is implemented, but seven days is the earliest cleanup eligibility time, **not a guaranteed erasure deadline**. The operator reported two successful direct S3 document deletions on 22 October 2026; this does not independently verify an entire scheduled account cleanup. Accounts with unpurged documents stay disabled and retry; the worker does not remove database records first to bypass storage failure. See [current operational evidence](../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation).
 
 Verified manual-object-removal recovery is implemented. Only an authorized operator should identify the exact object privately; a subsequent service retry must still verify absence and applicable version cleanup. An ambiguous 403, missing bucket or network error cannot establish absence. Active users retry individual pending documents through the existing owner-authorized flow; scheduled account cleanup remains worker-owned.
 

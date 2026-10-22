@@ -6,7 +6,7 @@ Run all commands from the repository root. [package.json](../../package.json) is
 
 Integration/browser suites require explicitly exported `DATABASE_URL` and `REDIS_URL` pointing to disposable local services with all committed migrations applied (`npm run db:deploy`). Never run cleanup-bearing test suites against production or source a live `.env` into them. Vitest does not automatically load the root `.env`; Prisma/Next and explicit Node `--env-file` have different loading behavior. The local S3/AI fixtures in Playwright do not prove live signature validation, bucket policy or inference accuracy.
 
-The latest recorded deletion/probe validation passed 500 unit tests and 55 focused integration tests plus lint, TypeScript and both builds. These are dated results, not a new suite run during documentation editing. Historical counts below belong to their named milestones. Current S3 live findings are [tracked separately](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+The 18 October deletion/probe validation recorded 500 unit tests and 55 focused integration tests plus lint, TypeScript and both builds; see the [archived investigation](../archive/investigations/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#validation). The [21 October reminder/availability validation](../deployment/RUMPTY_DEPLOYMENT.md#reminder-backlog-recovery-and-availability--21-october-2026) separately recorded 530 unit, 198 integration and 179 browser tests. These are dated results, not new suite runs during documentation editing or a claim about today’s total test count. See [current production evidence](../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation).
 
 Documentation-only checks verify relative Markdown paths/anchors, package-script names, environment descriptions, formatting, sensitive identifiers and source consistency. They do not imply a fresh browser/device or production acceptance test.
 
@@ -147,17 +147,17 @@ The production smoke now also creates an exit case, checks nine rules, updates n
 
 `tests/e2e/finance.spec.ts` uses real registration, private PDF upload, fixture HTTP extraction and review routes for payslip/settlement/pension sources. It checks comparison/editing, explicit pension confirmation, stale evidence, error/retry, authentication/Origin/ownership/body limits and 320/375/430px overflow. Fixture JSON/PDFs and the local AI server now support all six extraction types.
 
-The production smoke extends its TLS storage/inference path to settlement comparison, pension matching/confirmation, and invalidation after deleting source documents. See [Milestone 5 validation record](../milestones/SETTLEMENT_PENSION.md) for commands/results and remaining real-provider checks.
+The production smoke extends its TLS storage/inference path to settlement comparison, pension matching/confirmation, and invalidation after deleting source documents. See [Milestone 5 validation record](../archive/milestones/SETTLEMENT_PENSION.md) for commands/results and remaining real-provider checks.
 
 ## Milestone 6 additions
 
 Passport unit tests cover default Unknown across all categories, evidence/context validity, masking, provider conflicts and date uncertainty. Integration tests cover derived closed entries, ownership/source isolation, composite keys, worker assessment CRUD/audits, concurrent creates, optimistic conflicts, audit rollback, rejected/deleted/changed sources, reopened employment and current finance-derived pension confirmation. Shared-database integration files run sequentially to avoid incidental PostgreSQL Serializable predicate-lock conflicts; explicit concurrency tests remain active.
 
-Passport browser journeys cover real sign-in, private upload/manual field review, timeline/detail, distinct provenance labels, assessment/cancel/error/retry, identifier masking, deletion/reopening and 320/375/430px overflow. Full regression suites retain earlier milestones. Production Docker smoke adds live Passport derivation, current pension confirmation, benefit assessment/audit and stale-evidence invalidation. See [Milestone 6 exact results](../milestones/BENEFIT_PASSPORT.md).
+Passport browser journeys cover real sign-in, private upload/manual field review, timeline/detail, distinct provenance labels, assessment/cancel/error/retry, identifier masking, deletion/reopening and 320/375/430px overflow. Full regression suites retain earlier milestones. Production Docker smoke adds live Passport derivation, current pension confirmation, benefit assessment/audit and stale-evidence invalidation. See [Milestone 6 exact results](../archive/milestones/BENEFIT_PASSPORT.md).
 
 ## Milestone 7 implementation
 
-Milestone 7 adds pure reminder/date/fingerprint and rate-limit tests; real PostgreSQL/Redis jobs tests cover retries, leases, concurrent workers, lost queue recovery, batch cursors, atomic audits, ownership, snooze and 501-session cleanup. Browser tests at 320/375/430 pixels invoke the compiled worker and exercise live reminders, failure/retry and source resolution. `npm run validate` now builds the worker; `npm run test:e2e` compiles it before Playwright. Run suites sequentially against a disposable database, then run the production web/worker smoke using TLS fixtures. See [validation report](../milestones/REMINDERS_RELIABILITY_SECURITY.md#validation).
+Milestone 7 adds pure reminder/date/fingerprint and rate-limit tests; real PostgreSQL/Redis jobs tests cover retries, leases, concurrent workers, lost queue recovery, batch cursors, atomic audits, ownership, snooze and 501-session cleanup. Browser tests at 320/375/430 pixels invoke the compiled worker and exercise live reminders, failure/retry and source resolution. `npm run validate` now builds the worker; `npm run test:e2e` compiles it before Playwright. Run suites sequentially against a disposable database, then run the production web/worker smoke using TLS fixtures. See [validation report](../archive/milestones/REMINDERS_RELIABILITY_SECURITY.md#validation).
 
 ## Production UI polish coverage
 
@@ -240,7 +240,7 @@ extraction checks add partial results and manual fallback at 320/1440px.
 Use disposable PostgreSQL/Redis and fixture AI/storage for all checks. Run
 `npm run validate`, `npm run test:integration`, and `npm run test:e2e`. The worker
 now includes `extraction_cleanup` alongside the existing jobs; keep scheduler tests
-independent of unrelated job ordering. See the [diagnosis report](../deployment/AI_EXTRACTION_DIAGNOSIS.md)
+independent of unrelated job ordering. See the [diagnosis report](../archive/investigations/AI_EXTRACTION_DIAGNOSIS.md)
 for exact results and remaining live acceptance requirements.
 
 ## Responsive action and pending-state checks — 9 October 2026

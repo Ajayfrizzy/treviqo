@@ -1,6 +1,6 @@
 # Milestone 7 — Reminders, Reliability & Security
 
-> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../../README.md) for current guides and the [current operational status](../../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation).
 
 Implemented 4 October 2026. Extends the modular monolith; no new dependencies, infrastructure providers, external messages, or Milestone 8+ features.
 
@@ -44,7 +44,7 @@ No production dependency advisories were reported by `npm audit --omit=dev --jso
 
 Liveness remains independent of dependencies. Readiness checks auth configuration, PostgreSQL including new tables, Redis and bucket connectivity; it also requires worker health by default in production. `WORKER_REQUIRED` is the only new optional environment variable; blank means true in production and false in development/test. Worker health requires a fresh 45-second heartbeat, both durable jobs, fewer than five consecutive failures, backlog below five minutes and a completed sweep within two hours (two-minute initial grace). Checks expose only generic failure status and do not run paid AI inference. Bucket connectivity does not prove bucket privacy.
 
-Use explicit Docker targets `runtime`, `worker`, and `migrate`; default remains the web image. Runtime and worker run as UID 1001. See the [Rumpty operations and restore runbook](../deployment/RUMPTY_DEPLOYMENT.md#milestone-7-worker-and-recovery-runbook).
+Use explicit Docker targets `runtime`, `worker`, and `migrate`; default remains the web image. Runtime and worker run as UID 1001. See the [Rumpty operations and restore runbook](../../deployment/RUMPTY_DEPLOYMENT.md#milestone-7-worker-and-recovery-runbook).
 
 ## Validation
 

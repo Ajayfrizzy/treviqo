@@ -4,7 +4,7 @@
 
 The web application is available at [treviqo.rumptycloud.app](https://treviqo.rumptycloud.app). Milestones 0–7 have implementations, with later additions including personal profiles, eight extraction categories, scheduled deletion, extraction recovery and responsive navigation. UI polish and the [demo guide](../product/DEMO.md) support the final hackathon review. A shared seeded demo account is not supplied.
 
-Direct storage deletion remains blocked by HTTP 403 in production and a dedicated test bucket; RumptyCloud support has been contacted. Recovery requires verified absence. Deployment availability does not establish all acceptance criteria, backup readiness or provider compatibility. See [current operational status](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+On 22 October 2026 the operator reported passing web health/readiness, passing worker health, correction of missing production `DATABASE_URL`, two successful direct document deletions and reminders responding to employment changes. A complete successful reminder sweep has not been independently verified. See [current operational evidence](../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation) and the [archive inventory](../archive/README.md). Dated milestone reports retain their original validation counts and historical limitations.
 
 The milestones below preserve the delivery plan. Linked implementation reports are historical; their counts and then-pending features are not current limitations.
 
@@ -28,7 +28,7 @@ Deliver:
 Success:
 A minimal authenticated Treviqo app is live on Rumpty and connected to production-equivalent infrastructure.
 
-Implementation record: [Milestone 0 foundation](FOUNDATION.md). The repository foundation is implemented; credentials authentication is implemented and locally validated; the current live address and remaining acceptance limitations are listed above.
+Implementation record: [Milestone 0 foundation](../archive/milestones/FOUNDATION.md). The repository foundation is implemented; credentials authentication is implemented and locally validated; the current live address and remaining acceptance limitations are listed above.
 
 ## Milestone 1 — Employment Records & Mobile Shell
 
@@ -45,7 +45,7 @@ Deliver:
 Success:
 Employment records work comfortably from mobile.
 
-Implementation record: [Milestone 1 employment records](EMPLOYMENT_RECORDS.md).
+Implementation record: [Milestone 1 employment records](../archive/milestones/EMPLOYMENT_RECORDS.md).
 
 ## Milestone 2 — Secure Document Vault
 
@@ -64,7 +64,7 @@ Deliver:
 Success:
 Users can safely manage their own evidence.
 
-Implementation record: [Milestone 2 document vault](DOCUMENT_VAULT.md).
+Implementation record: [Milestone 2 document vault](../archive/milestones/DOCUMENT_VAULT.md).
 
 ## Milestone 3 — AI Document Intelligence
 
@@ -88,7 +88,7 @@ Start with:
 Success:
 Useful proposed data can be reviewed and confirmed.
 
-Implementation record: [Milestone 3 document intelligence](AI_DOCUMENT_INTELLIGENCE.md).
+Implementation record: [Milestone 3 document intelligence](../archive/milestones/AI_DOCUMENT_INTELLIGENCE.md).
 
 ## Milestone 4 — Job Exit Checker
 
@@ -116,7 +116,7 @@ Rule categories:
 Success:
 Worker gets a useful evidence-grounded checklist.
 
-Implementation record: [Milestone 4 Job Exit Checker](JOB_EXIT_CHECKER.md).
+Implementation record: [Milestone 4 Job Exit Checker](../archive/milestones/JOB_EXIT_CHECKER.md).
 
 ## Milestone 5 — Final Settlement & Pension Verification
 
@@ -134,7 +134,7 @@ Deliver:
 Success:
 Treviqo can highlight missing/unclear items without making legal claims.
 
-Implementation record: [Milestone 5 settlement and pension](SETTLEMENT_PENSION.md). Follow-up dates now drive the in-app reminder worker delivered in Milestone 7.
+Implementation record: [Milestone 5 settlement and pension](../archive/milestones/SETTLEMENT_PENSION.md). Follow-up dates now drive the in-app reminder worker delivered in Milestone 7.
 
 ## Milestone 6 — Benefit Passport v1
 
@@ -150,7 +150,7 @@ Deliver:
 Success:
 Worker retains a useful personal record after exit.
 
-Implementation record: [Milestone 6 Benefit Passport](BENEFIT_PASSPORT.md). Entries derive from current closed employment. Export is not implemented; reminders are delivered by the separate reminder module.
+Implementation record: [Milestone 6 Benefit Passport](../archive/milestones/BENEFIT_PASSPORT.md). Entries derive from current closed employment. Export is not implemented; reminders are delivered by the separate reminder module.
 
 ## Milestone 7 — Reminders, Reliability & Security
 
@@ -167,7 +167,7 @@ Deliver:
 Success:
 Treviqo behaves like a persistent product, not a one-session demo.
 
-Implementation record: [Milestone 7 reminders, reliability and security](REMINDERS_RELIABILITY_SECURITY.md).
+Implementation record: [Milestone 7 reminders, reliability and security](../archive/milestones/REMINDERS_RELIABILITY_SECURITY.md).
 
 ## Milestone 8 — Hackathon Polish
 
@@ -191,7 +191,7 @@ Deliver:
 Success:
 A judge understands Treviqo within the first minute and can complete the primary workflow without assistance.
 
-Focused implementation record: [Production UI/UX polish](UI_UX_POLISH.md). This covers the existing MVP interface only; it does not claim completion of demo preparation or deployment.
+Focused implementation record: [Production UI/UX polish](../archive/milestones/UI_UX_POLISH.md). This covers the existing MVP interface only; it does not claim completion of demo preparation or deployment.
 
 ## Priority if time is constrained
 

@@ -1,6 +1,6 @@
 # Milestone 0 implementation record
 
-> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../../README.md) for current guides and the [current operational status](../../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation).
 
 Repository foundation implemented on October 3, 2026. **The milestone's live Rumpty success criterion remains pending real infrastructure configuration and deployment.** Nothing was committed or pushed.
 

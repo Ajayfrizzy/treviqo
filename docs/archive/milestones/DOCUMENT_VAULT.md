@@ -1,6 +1,6 @@
 # Milestone 2 — Secure Document Vault
 
-> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../../README.md) for current guides and the [current operational status](../../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation).
 
 Implemented October 3, 2026. Authenticated workers can upload, filter by employment, inspect metadata, request private downloads, and delete their own documents. No AI/OCR, extraction, exit, settlement, pension, benefits, or Passport workflow was implemented. Nothing was committed, pushed, or deployed to Rumpty.
 

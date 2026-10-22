@@ -1,6 +1,6 @@
 # UI interaction refinement — 7 October 2026
 
-> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../../README.md) for current guides and the [current operational status](../../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation).
 
 Follow-up to the production polish, covering all existing app areas. The referenced images were not attached to the request; implementation follows the written descriptions and inspection of current screens. The user clarified that model, prompt and schema details should be removed from the user-facing review screen.
 

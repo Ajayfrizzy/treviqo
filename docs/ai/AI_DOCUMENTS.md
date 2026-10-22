@@ -12,7 +12,7 @@ Proposals contain a supported key, verbatim value and a source excerpt containin
 
 Original proposals and review revisions are preserved. Confirmed/Corrected fields can be selected as reviewed evidence; Proposed, Rejected and Unknown are not trusted facts. Classification confirmation is separate from field confirmation. Extraction never silently updates employment dates, selected exit type, portability or contribution confirmation. Semantic correctness still requires reading the original document.
 
-Review supports current results, partial/manual fields, prior attempts, correction history and retry. Expired runs are recovered by service reads/starts and the existing `extraction_cleanup` worker job. Current version constants live in [schema.ts](../../src/modules/extractions/schema.ts); do not use older version descriptions below to configure a deployment. Provider compatibility investigations remain in [the diagnosis record](../deployment/AI_EXTRACTION_DIAGNOSIS.md).
+Review supports current results, partial/manual fields, prior attempts, correction history and retry. Expired runs are recovered by service reads/starts and the existing `extraction_cleanup` worker job. Current version constants live in [schema.ts](../../src/modules/extractions/schema.ts); do not use older version descriptions below to configure a deployment. Provider compatibility investigations remain in [the diagnosis record](../archive/investigations/AI_EXTRACTION_DIAGNOSIS.md).
 
 ## Historical design and evolution
 
@@ -185,7 +185,7 @@ The model must never sum rows, infer contribution month from posting date, or as
 
 ## October 7 production extraction diagnosis
 
-The October 7 candidate used `evidence-v3` / `fields-v3`: a bounded sparse list of present `{key,value,evidence}` facts, expanded server-side to all review fields. Unknown/duplicate keys and missing evidence fail validation. Every sparse proposal starts `needs_review` / Proposed; no value becomes trusted automatically. Legacy complete cell responses retain strict validation. Classification requests 256 output tokens, extraction 2048, with a configurable bounded deadline (see below) and 64 KiB response cap. Live Rumpty currently does not reliably honor JSON structure/evidence requirements; manual entry remains necessary on failure. See [measured compatibility, failure-path analysis and validation](../deployment/AI_EXTRACTION_DIAGNOSIS.md). Earlier milestone protocol descriptions are historical.
+The October 7 candidate used `evidence-v3` / `fields-v3`: a bounded sparse list of present `{key,value,evidence}` facts, expanded server-side to all review fields. Unknown/duplicate keys and missing evidence fail validation. Every sparse proposal starts `needs_review` / Proposed; no value becomes trusted automatically. Legacy complete cell responses retain strict validation. Classification requests 256 output tokens, extraction 2048, with a configurable bounded deadline (see below) and 64 KiB response cap. Live Rumpty currently does not reliably honor JSON structure/evidence requirements; manual entry remains necessary on failure. See [measured compatibility, failure-path analysis and validation](../archive/investigations/AI_EXTRACTION_DIAGNOSIS.md). Earlier milestone protocol descriptions are historical.
 
 ## 8 October 2026 compatibility and persistence update
 
@@ -205,7 +205,7 @@ column is reused, so there is no schema migration.
 Result/failure writes are atomic PostgreSQL statements outside interactive
 transactions. Ownership, document locking, live leases and audit atomicity remain.
 Expired attempts are reconciled on read/start and by the existing worker's new
-`extraction_cleanup` job. See the [current diagnosis and validation report](../deployment/AI_EXTRACTION_DIAGNOSIS.md)
+`extraction_cleanup` job. See the [historical diagnosis and validation report](../archive/investigations/AI_EXTRACTION_DIAGNOSIS.md)
 for evidence, limitations and production follow-up.
 
 ## Compact extraction and salvage follow-up (v5)
@@ -227,7 +227,7 @@ pension completeness restrictions and manual fallback remain mandatory.
 Partial now includes limited coverage as well as rejected proposals. One usable field
 is saved ready/partial, with all other review fields null. Zero usable fields remains
 failed. Retries are explicit, deterministic, rate limited and preserve history. See
-[the current diagnosis](../deployment/AI_EXTRACTION_DIAGNOSIS.md) and
+[the historical diagnosis](../archive/investigations/AI_EXTRACTION_DIAGNOSIS.md) and
 [attempt-history UX](../ui/UI_UX.md) for current behavior and validation.
 
 ## Review context correction (UI only)

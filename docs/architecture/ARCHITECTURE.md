@@ -51,7 +51,7 @@ Deployment health measures dependency availability and recent local loop progres
 
 Original documents remain in private S3 storage. PostgreSQL stores metadata, reviews and selected excerpts. Local bounded PDF text preparation feeds Rumpty inference; narrow source-label recovery and manual entry retain proposed/unreviewed status. Reviewed facts feed deterministic rules; no model decides legal entitlement or benefit portability. See [AI contract](../ai/AI_DOCUMENTS.md#current-implementation).
 
-Account deletion schedules cleanup seven days ahead and disables normal access immediately. A pending document is finalized only after verifiable object absence. Normal S3 DELETE is currently denied by the provider; [recovery and current limits](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status) apply to both web and worker workflows.
+Account deletion schedules cleanup seven days ahead and disables normal access immediately. A pending document is finalized only after verifiable object absence. The operator reported two successful direct S3 document deletions on 22 October 2026; see [current operational evidence and limits](../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation). Failures still preserve pending metadata and worker checkpoints.
 
 ### Deployment and future clients
 
@@ -91,7 +91,7 @@ Pages: Home groups current/previous employment; `/employments/new`, `/employment
 
 `src/modules/documents` owns validation, whitelisted DTOs, ownership, and upload/access/delete orchestration. Pages and `/api/documents` call the same services. `PrivateObjectStorage` is injected for tests; production uses the existing explicit-endpoint S3 SDK adapter. PostgreSQL holds metadata and audit events; objects never depend on the app filesystem. No worker or AI pipeline is introduced.
 
-Uploads use a bounded binary request, employment/category query parameters, and an encoded `x-file-name` header. Authentication and employment ownership precede reading bytes. The service reserves metadata, uploads privately, then atomically marks Ready and records the upload audit. A durable reservation retains the key after partial failures. Only Ready documents can receive signed access. Deletion first marks Deleting, removes the object, then atomically records Deleted and its audit. Retry handles missing objects. See the [vault report](../milestones/DOCUMENT_VAULT.md) for crash recovery and retention.
+Uploads use a bounded binary request, employment/category query parameters, and an encoded `x-file-name` header. Authentication and employment ownership precede reading bytes. The service reserves metadata, uploads privately, then atomically marks Ready and records the upload audit. A durable reservation retains the key after partial failures. Only Ready documents can receive signed access. Deletion first marks Deleting, removes the object, then atomically records Deleted and its audit. Retry handles missing objects. See the [vault report](../archive/milestones/DOCUMENT_VAULT.md) for crash recovery and retention.
 
 The additive migration creates document/category/status/audit enums and tables, indexed ownership relations, and a composite employment-owner foreign key. Existing auth data is preserved. Explicit document ownership is checked in addition to employment ownership. APIs expose safe metadata only; storage keys/checksums/owner IDs are not document DTO fields. Signed URLs necessarily contain an object path but are short-lived bearer credentials, never persistent public URLs.
 
@@ -115,17 +115,17 @@ Create/update writes and content-free audit events commit together. AuditEvent n
 
 `src/modules/finance` extends the modular monolith with pure versioned comparison/matching rules, strict transport schemas, transactional owner-scoped services, and an employment-closure lifecycle hook. SettlementItem and PensionVerification reference ExitCase through composite ownership foreign keys. Financial values remain in reviewed extraction evidence rather than duplicated finance snapshots. Reads recompute against current reviewed sources; confirmation hashes bind evidence and employment/exit context. Writes use serializable transactions, exit-row locking, optimistic versions, and atomic audits.
 
-`/exit/[id]/finance` and `/api/exits/[id]/finance` reuse document uploads/reviews, auth, private storage, and the AI adapter. No new service/provider/dependency, background scheduler, or Passport is introduced. See [implementation details](../milestones/SETTLEMENT_PENSION.md).
+`/exit/[id]/finance` and `/api/exits/[id]/finance` reuse document uploads/reviews, auth, private storage, and the AI adapter. No new service/provider/dependency, background scheduler, or Passport is introduced. See [implementation details](../archive/milestones/SETTLEMENT_PENSION.md).
 
 ## Milestone 6 Passport
 
 `src/modules/passport` derives Passport entries from owned closed employments without a duplicated PassportEntry table. Entry IDs are employment IDs. The timeline/detail APIs and mobile pages reuse original facts and the existing exit/finance services inside one repeatable-read snapshot; shared transaction entry points retain their own ownership checks.
 
-Benefit persists only new worker portability assessments, source document/field/version references, context hash and optimistic version, unique per employment/category. Composite ownership relations and atomic content-free audits apply. Serializable writes lock employment and reject stale contexts/versions. Closing/reopening needs no Passport generation job: visibility derives from current status, and source/context edits invalidate assessments on read. See [Milestone 6 report](../milestones/BENEFIT_PASSPORT.md).
+Benefit persists only new worker portability assessments, source document/field/version references, context hash and optimistic version, unique per employment/category. Composite ownership relations and atomic content-free audits apply. Serializable writes lock employment and reject stale contexts/versions. Closing/reopening needs no Passport generation job: visibility derives from current status, and source/context edits invalidate assessments on read. See [Milestone 6 report](../archive/milestones/BENEFIT_PASSPORT.md).
 
 ## Milestone 7 implementation
 
-The Milestone 7 worker extends this monolith with PostgreSQL durable job/cursor/lease state and a repairable Redis due queue. It invokes the existing exit/finance services to reconcile owned reminders and cleans expired sessions. No microservice API or external notification provider is added. See [Milestone 7](../milestones/REMINDERS_RELIABILITY_SECURITY.md). Earlier milestone descriptions of absent workers/automation describe their historical scope.
+The Milestone 7 worker extends this monolith with PostgreSQL durable job/cursor/lease state and a repairable Redis due queue. It invokes the existing exit/finance services to reconcile owned reminders and cleans expired sessions. No microservice API or external notification provider is added. See [Milestone 7](../archive/milestones/REMINDERS_RELIABILITY_SECURITY.md). Earlier milestone descriptions of absent workers/automation describe their historical scope.
 
 ## Scheduled account lifecycle
 

@@ -1,6 +1,6 @@
 # Production UI/UX polish — 7 October 2026
 
-> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../../README.md) for current guides and the [current operational status](../../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation).
 
 Focused polish of the existing MVP. No new product features, schema changes, dependencies, provider integrations, domain-rule changes, commits, pushes or deployment. The Rumpty inference 503 is outside this pass. Project instructions, applicable core/mobile/security/testing skills, current implementation and all milestone 0–7 reports were reviewed.
 

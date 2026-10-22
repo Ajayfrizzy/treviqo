@@ -122,6 +122,8 @@ For integration/browser tests, export `DATABASE_URL` and `REDIS_URL` for **dispo
 
 ## Deployment and operations
 
+On 22 October 2026, the operator reported passing web health/readiness and worker health after correcting missing production `DATABASE_URL` configuration. Reminders responded to changed employment information; a complete successful reminder sweep has not been independently verified. These observations are not a new acceptance test performed for this documentation update.
+
 The [Dockerfile](Dockerfile) provides `runtime`, `worker` and `migrate` targets. The default image is the web application. Run a migration release job and deploy matching web/worker revisions with runtime secrets, private PostgreSQL/Redis, private object storage and HTTPS. The worker requires storage access for scheduled account cleanup, but no inference credentials.
 
 Web `/api/health` is process liveness; `/api/ready` checks database, Redis, auth configuration, bucket connectivity and worker health when required. Worker `/health` reports its local progress. These checks do not prove AI accuracy, bucket privacy or DELETE permission.
@@ -135,7 +137,7 @@ Web `/api/health` is process liveness; `/api/ready` checks database, Redis, auth
 - Important actions are audited without document contents. Passwords use salted Argon2id hashes, and database-backed sessions support revocation.
 - No email verification, password recovery, MFA, external notifications, provider integrations, benefit transfers, Passport export or native mobile app is implemented.
 - Pension review supports up to three separate contribution entries, requires a completeness check and explicit user confirmation, and cannot guarantee reconciliation with a PFA.
-- **Storage deletion is currently blocked by a provider/API authorization issue.** Pending metadata remains protected until absence is verified; the implemented manual-removal recovery does not resolve normal API deletion. See [current deletion status and operator recovery](docs/deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+- **Storage cleanup requires verified absence.** The operator reported direct deletion success for two documents on 22 October 2026; earlier 403 failures are historical. A 403 still never proves absence. See [current production evidence and recovery limits](docs/deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation).
 
 [Security boundaries](docs/security/SECURITY.md) · [Account deletion lifecycle](docs/security/ACCOUNT_DELETION.md)
 

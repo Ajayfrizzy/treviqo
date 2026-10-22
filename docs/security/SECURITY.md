@@ -6,7 +6,7 @@ Authentication is application-managed with NextAuth credentials, Argon2id passwo
 
 Every protected API/service checks the user and relevant employment; same-user/different-employment evidence is not interchangeable. Original documents remain private, with bounded MIME/signature/size validation and short-lived authorized downloads. Reviewed fields are not provider-verified facts. Source text, credentials, object keys and signed URLs must not enter public diagnostic reports.
 
-Direct S3 DELETE currently receives 403 AccessDenied in production and the controlled private-test investigation. RumptyCloud support has been contacted; the precise policy/provider cause is unresolved. **Neither DELETE acknowledgment nor ambiguous HEAD 403 proves erasure.** Pending records and cleanup checkpoints are retained until absence is verifiable. See [current storage status](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status) and [scheduled account deletion](ACCOUNT_DELETION.md).
+The operator reported two successful direct S3 document deletions on 22 October 2026; the earlier 403 incident is historical. **Neither DELETE acknowledgment nor ambiguous HEAD 403 proves erasure.** Pending records and cleanup checkpoints remain until absence is verifiable. See [current operational evidence](../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation) and [scheduled account deletion](ACCOUNT_DELETION.md).
 
 The dated sections below preserve earlier implementation reviews. Current account deletion is scheduled, not immediate. Existing downloaded copies, provider backups/versions and inference retention need separate operational policies; local tests are not a penetration test or proof of provider privacy.
 
@@ -164,7 +164,7 @@ Minimal DTOs exclude original filenames, snippets, proposals, financial amounts 
 
 ## Milestone 7 implementation
 
-Milestone 7 adds per-user Redis limits to uploads, signed links, writes and expensive API reads, failing closed on Redis errors. Employment and reminder transitions have atomic content-free audits. Reminder reads/commands revalidate ownership and current evidence. Queue payloads hold fixed job IDs only; worker logs use generic errors. Expired-session cleanup does not replace request-time expiry enforcement. Ingress must still protect server-rendered reads, request concurrency and aggregate abuse. See [review and operational limits](../milestones/REMINDERS_RELIABILITY_SECURITY.md#security-review-and-fixes).
+Milestone 7 adds per-user Redis limits to uploads, signed links, writes and expensive API reads, failing closed on Redis errors. Employment and reminder transitions have atomic content-free audits. Reminder reads/commands revalidate ownership and current evidence. Queue payloads hold fixed job IDs only; worker logs use generic errors. Expired-session cleanup does not replace request-time expiry enforcement. Ingress must still protect server-rendered reads, request concurrency and aggregate abuse. See [review and operational limits](../archive/milestones/REMINDERS_RELIABILITY_SECURITY.md#security-review-and-fixes).
 
 ## October 2026 UI password policy
 

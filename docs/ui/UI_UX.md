@@ -189,7 +189,7 @@ Profile reads only the authenticated account’s email. It explains password pro
 
 Route skeletons retain the shell and identify the section being loaded. Upload distinguishes byte transfer from storage completion, with indeterminate progress during finalization. Interrupted documents explain refresh/remove/retry. Extraction distinguishes processing, loading, manual preparation, and review saving; manual fallback remains available. API actions bound their UI wait (30 seconds normally, 120 seconds for extraction), preserve inputs on failure, and advise checking current records before retrying an uncertain mutation. They do not automatically retry. NextAuth continues to own sign-in and CSRF retrieval. Existing error boundaries provide explicit retry actions.
 
-Home, Exit, Passport and Documents first-use copy explains the purpose, value, and next action. The Passport still depends on explicitly closed employment; no domain behavior has changed. See [polish report](../milestones/UI_UX_POLISH.md) for validation and remaining checks.
+Home, Exit, Passport and Documents first-use copy explains the purpose, value, and next action. The Passport still depends on explicitly closed employment; no domain behavior has changed. See [polish report](../archive/milestones/UI_UX_POLISH.md) for validation and remaining checks.
 
 ## Interaction refinement — 7 October 2026
 
@@ -199,7 +199,7 @@ A shared Button shows a local spinner and blocks repeat clicks while its async h
 
 The document review no longer displays model, prompt or schema metadata. Plain-language provenance, original-document links, evidence excerpts, confidence/review states and correction history remain available. Technical metadata stays in the existing extraction record; domain rules and API contracts are unchanged.
 
-See the [interaction refinement report](../milestones/UI_INTERACTION_REFINEMENT.md) for test results and manual-check limits.
+See the [interaction refinement report](../archive/milestones/UI_INTERACTION_REFINEMENT.md) for test results and manual-check limits.
 
 ## Seven-day account deletion
 
@@ -332,7 +332,7 @@ ExtractionReview, FinanceReview (SettlementForm/PensionForm), PassportEntry
 (BenefitForm), and Reminders. Shared CSS also polishes EmploymentForm, ExitForm,
 DeleteAccount, SignOutButton, DocumentFilter, and action links without changing their
 request logic. Backend behavior, domain rules, AI prompts/inference and product scope
-are unchanged. See [validation report](../milestones/RESPONSIVE_ACTIONS.md).
+are unchanged. See [validation report](../archive/milestones/RESPONSIVE_ACTIONS.md).
 
 ## Interactive landing examples — 10 October 2026
 
@@ -349,7 +349,7 @@ preferences disable these effects while preserving every interaction. Controls
 wrap on narrow screens and retain at least 48px targets. There is no auto-cycling,
 scroll interception or new animation dependency.
 
-See [landing interaction validation](../milestones/LANDING_INTERACTIONS.md).
+See [landing interaction validation](../archive/milestones/LANDING_INTERACTIONS.md).
 
 ## Authenticated semantic UI — 15 October 2026
 

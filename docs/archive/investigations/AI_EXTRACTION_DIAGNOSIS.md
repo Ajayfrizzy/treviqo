@@ -1,6 +1,8 @@
 # Rumpty extraction diagnosis — 8 October 2026
 
-> Historical investigation record. Do not treat its original deployment status, model protocol or test counts as current. See the [deployment guide](RUMPTY_DEPLOYMENT.md), [current AI contract](../ai/AI_DOCUMENTS.md#current-implementation) and [current storage-deletion status](S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+> Archived on 22 October 2026. Findings, failures, test counts and outstanding checks below describe the original dated investigation, not current production status. See [current operational evidence](../../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation). Archiving does not certify every earlier acceptance check or residual probe cleanup.
+
+> Historical investigation record. Do not treat its original deployment status, model protocol or test counts as current. See the [deployment guide](../../deployment/RUMPTY_DEPLOYMENT.md), [current AI contract](../../ai/AI_DOCUMENTS.md#current-implementation) and [current storage-deletion status](../../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation).
 
 Status: compact extraction/salvage and attempt-history changes implemented. Latest user-supplied production diagnostics still show `extraction_output_invalid extraction` with zero grounded usable fields; **P2028 is no longer appearing in that latest live test**. This is evidence of separate progress, not proof that every production database failure is resolved. Local validation below uses only disposable PostgreSQL/Redis and synthetic AI/storage. No commit, push, deployment, production data change or live inference was performed. `.env` is unchanged.
 

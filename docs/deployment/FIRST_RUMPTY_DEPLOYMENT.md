@@ -2,7 +2,7 @@
 
 > Current runtime variable names/defaults and the four worker jobs are documented in [Rumpty deployment](RUMPTY_DEPLOYMENT.md). For direct DELETE troubleshooting use the separately gated private-test probe, not the older combined expiry/storage acceptance probe. Never interpret signed GET 403 as proof of deletion.
 
-Current live application: [treviqo.rumptycloud.app](https://treviqo.rumptycloud.app). This is the reusable release/acceptance procedure, originally prepared October 4. Historical validation below is not current acceptance. Direct storage deletion remains blocked; see [current findings and support status](S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status). Local fixtures do not establish live provider compatibility. All mutation/probe commands require an explicitly selected environment and operator authorization.
+Current live application: [treviqo.rumptycloud.app](https://treviqo.rumptycloud.app). This is the reusable release/acceptance procedure, originally prepared October 4. Historical validation below is not current acceptance. See [current operational evidence](RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation) for the 22 October health, deletion and reminder observations. Local fixtures do not establish live provider compatibility. All mutation/probe commands require an explicitly selected environment and operator authorization.
 
 ## Release artifacts and configuration
 
@@ -65,7 +65,7 @@ Worker-specific preflight accepts a minimal worker env file and `--worker`. CLI 
 ## Safe migration procedure
 
 1. Verify project/database identity privately in the Rumpty console. For existing data, obtain a completed backup/snapshot and test restore access before applying changes. Keep old app/worker stopped during first deployment or follow a reviewed compatibility rollout.
-2. Review the nine committed SQL migrations. Run the migration image with the selected target's environment:
+2. Review the selected release’s committed SQL migrations. Run the migration image with the selected target's environment:
 
 ```sh
 docker run --rm --env-file .env.production.local treviqo-migrate:candidate npx prisma migrate status
@@ -88,7 +88,7 @@ This reads PostgreSQL migration history and checks names/checksums/completion ag
 
 ## Controlled live probes
 
-The following acceptance commands require a separately authorized target environment and synthetic data. They use the application environment, not the isolated `PROBE_*` credentials. Do not run them as part of the dedicated deletion investigation; use the [private-test deletion probe](S3_DELETE_AUTHORIZATION_INVESTIGATION.md) for that workflow. No acceptance command is authorization to modify production.
+The following acceptance commands require a separately authorized target environment and synthetic data. They use the application environment, not the isolated `PROBE_*` credentials. Do not run them as part of the dedicated deletion investigation; use the [private-test deletion probe](S3_DELETE_PROBE.md) for that workflow. No acceptance command is authorization to modify production.
 
 ```sh
 docker run --rm --env-file .env.production.local treviqo-worker:candidate npm run deployment:check -- --storage
@@ -125,7 +125,7 @@ During a planned acceptance window, stop/restart only the target worker: readine
 | Backup/snapshot               | Runbook prepared; no configured schedule, snapshot ID, or successful restore evidence supplied.        |
 | Local validation              | See results below; these validate tooling and application behavior, not real Rumpty.                   |
 
-The table records the original pre-deployment state, not current availability. See the [deployment guide](RUMPTY_DEPLOYMENT.md) and [current S3 status](S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status). For final acceptance, operators should record date, reviewed revision/image digests, migration status, synthetic results, policy checks, monitoring and successful restore evidence privately. Public summaries must exclude credentials, identifiers and signed URLs.
+The table records the original pre-deployment state, not current availability. See the [deployment guide](RUMPTY_DEPLOYMENT.md) and [current S3 status](RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation). For final acceptance, operators should record date, reviewed revision/image digests, migration status, synthetic results, policy checks, monitoring and successful restore evidence privately. Public summaries must exclude credentials, identifiers and signed URLs.
 
 ## Local validation record — 4 October 2026
 

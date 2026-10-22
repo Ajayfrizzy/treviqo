@@ -1,5 +1,7 @@
 # Direct S3 DELETE investigation — 18 October 2026
 
+> Archived on 22 October 2026. Findings, failures, test counts and outstanding checks below describe the original dated investigation, not current production status. See [current operational evidence](../../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation). Archiving does not certify every earlier acceptance check or residual probe cleanup.
+
 ## Current live status
 
 **Normal API deletion remains unresolved.** Direct DeleteObject returned HTTP 403 AccessDenied with RumptyCloud S3 credentials in both the production investigation and one controlled dedicated private-test-bucket run. RumptyCloud support has been contacted, as reported by the project operator. The exact cause—missing allow, explicit policy/condition, retention or provider API behavior—is not established. No credential rotation, broader access or adapter workaround is justified by the 403 alone.
@@ -20,7 +22,7 @@ The authorized private test used only `PROBE_*` credentials and a disposable gen
 
 The disposable test object remained at the end of the run and requires authorized operator follow-up using the private diagnostic record. No later cleanup is claimed. Do not create repeated probes while cleanup is blocked. A test-bucket result does not prove production-bucket or document-prefix permissions, and a missing-key 404 in this test does not establish production HEAD behavior.
 
-**Verified manual-removal recovery is implemented:** pending document metadata can finalize on an authorized retry only after the adapter verifies absence under the correct bucket/versioning mode. HTTP 403 is never proof of deletion. Scheduled account cleanup likewise retains disabled accounts, unpurged keys and retry/checkpoint state until verification succeeds. See [recovery steps](DOCUMENT_DELETION_RECOVERY.md) and [account lifecycle](../security/ACCOUNT_DELETION.md).
+**Verified manual-removal recovery is implemented:** pending document metadata can finalize on an authorized retry only after the adapter verifies absence under the correct bucket/versioning mode. HTTP 403 is never proof of deletion. Scheduled account cleanup likewise retains disabled accounts, unpurged keys and retry/checkpoint state until verification succeeds. See [recovery steps](../../deployment/DOCUMENT_DELETION_RECOVERY.md) and [account lifecycle](../../security/ACCOUNT_DELETION.md).
 
 Recommended next action: RumptyCloud support/operator review of the effective DeleteObject policy and provider-side request handling for the affected principals/targets, plus confirmation of bucket versioning/retention. Keep object ownership and access restrictions intact. An independent signed-client comparison or a new production disposable probe needs separate explicit authorization; neither has been performed as part of the controlled test.
 
@@ -45,8 +47,8 @@ were explicitly excluded. No current production document, bucket key, credential
 connection URL or signed request is reproduced here.
 
 Sources: [original live report](LIVE_RUMPTY_VERIFICATION.md),
-[follow-up DELETE/HEAD evidence](RUMPTY_BLOCKERS.md#s3-deletion-diagnosis), and
-[verified recovery behavior](DOCUMENT_DELETION_RECOVERY.md).
+[follow-up DELETE/HEAD evidence](../../deployment/RUMPTY_BLOCKERS.md#s3-deletion-diagnosis), and
+[verified recovery behavior](../../deployment/DOCUMENT_DELETION_RECOVERY.md).
 
 | Operation                               | Historical live evidence          | HTTP / safe category                           | New evidence / limitation                                                                              |
 | --------------------------------------- | --------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------ |

@@ -39,4 +39,4 @@ Treviqo is not payroll, an HRIS, a job board, a law firm, a pension provider, an
 
 Not implemented: external email/SMS/push reminders, bank/PFA/insurer integrations, benefit transfers, Passport export/sharing, employment verification marketplace, employer dashboards, native mobile apps, family claim readiness or retirement planning. Expanded multi-policy history and new-job onboarding are future possibilities, not hackathon capabilities.
 
-Operational limitations, including the unresolved direct storage-deletion denial and verified recovery requirements, are tracked in the [deployment guide](../deployment/RUMPTY_DEPLOYMENT.md) and [security specification](../security/SECURITY.md). Use fictional data for evaluation.
+Operational evidence and remaining verification, including complete reminder-sweep verification and storage recovery requirements, are tracked in the [deployment guide](../deployment/RUMPTY_DEPLOYMENT.md) and [security specification](../security/SECURITY.md). Use fictional data for evaluation.

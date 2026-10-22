@@ -4,7 +4,16 @@
 
 Live application: [treviqo.rumptycloud.app](https://treviqo.rumptycloud.app). The supplied live address is not a claim that every operational acceptance check, backup restore or provider capability has passed. Web and worker are separate processes using RumptyCloud PostgreSQL, Redis, private S3-compatible storage and Rumpty AI for request-driven extraction.
 
-**Direct S3 DeleteObject is currently denied with HTTP 403 AccessDenied in both production and a controlled private test bucket. RumptyCloud support has been contacted.** Manual removal can be reconciled by the implemented verified-absence recovery, but normal deletion remains unresolved. Scheduled account cleanup can remain pending beyond its seven-day eligibility date. Do not broaden credentials, treat a 403 as absence, or finalize database rows without verification. See [current results and troubleshooting](S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+**Production evidence reported by the operator on 22 October 2026:**
+
+- Web `/api/health` and `/api/ready` are passing; worker `/health` is passing.
+- The missing production `DATABASE_URL` configuration was corrected. This report does not establish a TLS, credential, engine or private-endpoint defect, or certify matching deployed secret values.
+- Direct S3 document deletion succeeded with two documents. The earlier authorization failures are historical evidence, not a current unresolved DELETE blocker. Verified manual-removal recovery remains a separate fallback, not the basis for this reported direct-deletion success.
+- Reminders responded to changed employment information. **A successful complete reminder sweep has not been independently verified.** Availability and responsive UI behavior do not establish backlog completion or reset retry counts.
+
+These are operator-reported observations, not new live probes performed during this documentation pass. Deployed revision IDs, response codes for the successful deletions, historical diagnostic-object cleanup, retained versions, backup restoration and complete reminder-sweep evidence are not established by this report. Keep strict job diagnostics and use the [read-only snapshot procedure](#exact-read-only-production-verification) to verify a newer reminders `lastSucceededAt`, attempt state and advancing heartbeat without changing job records.
+
+Keep private storage, ownership checks and verified absence before database finalization. A 403 is never proof of absence; scheduled account cleanup can still take longer than its seven-day eligibility window. See [deletion recovery](DOCUMENT_DELETION_RECOVERY.md), the [archived S3 evidence](../archive/investigations/S3_DELETE_AUTHORIZATION_INVESTIGATION.md) and the separately authorized [probe procedure](S3_DELETE_PROBE.md).
 
 ## Runtime topology and environment
 
@@ -45,7 +54,7 @@ npm run deployment:check -- --worker
 npm run worker:health
 ```
 
-The preflight command validates configuration; `--services --runtime` additionally contacts configured services and inspects runtime health. Storage/AI mutation probes are explicit operator actions, not routine readiness checks. Use the separate [private-test DELETE probe](S3_DELETE_AUTHORIZATION_INVESTIGATION.md#reviewable-explicit-operator-probe) only with designated test credentials and authorization. Do not rerun failed-cleanup probes casually.
+The preflight command validates configuration; `--services --runtime` additionally contacts configured services and inspects runtime health. Storage/AI mutation probes are explicit operator actions, not routine readiness checks. Use the separate [private-test DELETE probe](S3_DELETE_PROBE.md#reviewable-explicit-operator-probe) only with designated test credentials and authorization. Do not rerun failed-cleanup probes casually.
 
 ## Inference and storage operations
 
@@ -170,7 +179,7 @@ Follow [the ordered deployment and live acceptance procedure](FIRST_RUMPTY_DEPLO
 
 ## First live verification
 
-[Live integration report](LIVE_RUMPTY_VERIFICATION.md): S3 upload/read/signing and AI authentication/model discovery verified; private database/Redis access, S3 deletion/expiry behavior and inference completion remain blockers. That October 4 report predates the current live application; use it as historical evidence only.
+[Live integration report](../archive/investigations/LIVE_RUMPTY_VERIFICATION.md): S3 upload/read/signing and AI authentication/model discovery verified; private database/Redis access, S3 deletion/expiry behavior and inference completion were blockers in that snapshot. That October 4 report predates the current live application; use it as historical evidence only.
 
 ## Deployment blocker follow-up
 
@@ -260,7 +269,7 @@ permissions/versioning still require the existing private-bucket acceptance chec
 ## Direct S3 DELETE authorization investigation
 
 For an operation-by-operation audit and an explicitly invoked disposable-object
-probe, see [S3 DELETE authorization investigation](S3_DELETE_AUTHORIZATION_INVESTIGATION.md).
+probe, see the [active S3 probe procedure](S3_DELETE_PROBE.md) and [historical authorization investigation](../archive/investigations/S3_DELETE_AUTHORIZATION_INVESTIGATION.md).
 The probe uses separate confirmed `PROBE_*` configuration and does not run in the
 worker loop. Test-bucket success does not establish production-bucket permissions;
 a production disposable probe requires separate authorization. Never use a 403 as
@@ -268,7 +277,7 @@ proof of object absence.
 
 ## Diagnosing database and worker readiness — 20 October 2026
 
-Observed operator evidence: web `readiness_failed database,worker` at 04:25:33 and 04:38:26, repeated worker-only readiness failures, and worker `Worker dependencies unavailable; retrying.` at 04:26:13. These are supplied log times; their timezone and instance correlation have not been independently established. They do not establish a common cause with S3 DELETE authorization. No production inspection or restart was performed in this investigation.
+Historical operator evidence from 20 October (not current status): web `readiness_failed database,worker` at 04:25:33 and 04:38:26, repeated worker-only readiness failures, and worker `Worker dependencies unavailable; retrying.` at 04:26:13. These are supplied log times; their timezone and instance correlation have not been independently established. They do not establish a common cause with S3 DELETE authorization. No production inspection or restart was performed in this investigation.
 
 ### What each signal means
 
@@ -286,7 +295,7 @@ PostgreSQL uses one lazily created Prisma client per process, with provider logg
 
 ### Safe diagnostics added by this investigation
 
-These diagnostics exist in source; verify the running revision includes them. The 21 October batching/availability correction below still requires an authorized release. Existing summary logs and public health response bodies are preserved. Runtime categories and worker-health reasons are written directly to server stderr: React must not replay these operational diagnostics into the browser console or development error overlay during Server Component rendering.
+These diagnostics exist in source; verify the running revision includes them. The 21 October batching/availability correction below records the earlier release plan; the 22 October operator status above supersedes its deployment-status assumptions. Verify the deployed revision before relying on these diagnostics. Existing summary logs and public health response bodies are preserved. Runtime categories and worker-health reasons are written directly to server stderr: React must not replay these operational diagnostics into the browser console or development error overlay during Server Component rendering.
 
 - `runtime_failed operation=readiness_database category=...` distinguishes the failed readiness check and an allowlisted category.
 - `runtime_failed operation=worker_database|worker_redis category=...` identifies the failing tick/shared-health dependency boundary.
@@ -294,7 +303,7 @@ These diagnostics exist in source; verify the running revision includes them. Th
 - `runtime_failed operation=worker_tick|worker_health category=...` distinguishes exceptions from the runtime's two phases.
 - `worker_health_failed reason=...` distinguishes invalid/future/expired heartbeats, missing jobs, retry thresholds, overdue jobs, stale sweeps and jobs that never completed.
 
-Categories include database connectivity/authentication/schema/pool-timeout/transaction/conflict, DNS, refused/reset connections and readiness deadlines. Unrecognized errors remain `unknown`; Redis protocol errors use `redis_command`. No error-message parsing, raw error codes, messages, stacks, provider payloads, connection URLs, credentials or user data are logged. Categories narrow the investigation; they cannot prove a provider outage or explain every error. A permanently stuck operation may not emit a failure until it rejects; inspect snapshot/heartbeat age as well.
+Categories include database connectivity/authentication/schema/pool-timeout/transaction/conflict, DNS, refused/reset connections and readiness deadlines. The classifier also distinguishes inconclusive Prisma initialization, unknown-request, validation and engine errors; `database_initialization` alone does not identify credentials, endpoint, TLS or engine as the cause. Specific recognized structured error codes take precedence over generic Prisma class fallbacks. Unrecognized errors remain `unknown`; Redis protocol errors use `redis_command`. No error-message parsing, raw error codes, messages, stacks, provider payloads, connection URLs, credentials or user data are logged. Categories narrow the investigation; they cannot prove a provider outage or explain every error. A permanently stuck operation may not emit a failure until it rejects; inspect snapshot/heartbeat age as well.
 
 ### Exact read-only production verification
 
@@ -329,10 +338,9 @@ ZCARD treviqo:jobs:due
 5. Compare all four jobs' attempt counts, due times, lease expiry and last completed sweeps with the thresholds above. Readiness can fail while Redis PING and `SELECT 1` succeed: those checks do not establish application table access, transaction capacity or completed jobs. Inspect migration status and provider connection/pool/lock metrics privately if needed, without collecting query texts or user rows. A SQL console success is only a control unless it uses the same role and network as the affected runtime.
 6. Collect the next safe diagnostic categories after a separately authorized release, or ask the operator/provider for equivalent read-only evidence now. Do not run `worker --once`, `deployment:check --services`, cleanup, queue resets or test suites against production: some of those commands perform writes. Keep S3 authorization findings separate unless a failing account-cleanup operation explicitly identifies storage; per-account cleanup can catch/retry storage failures without failing the entire scheduled sweep.
 
-
 ## Reminder backlog recovery and availability — 21 October 2026
 
-The operator reports that RumptyCloud support confirmed reminder transactions exceeding Prisma's five-second default, a growing backlog, approximately 30 failed attempts, and no database locks/deadlocks. The other three jobs had zero failures. A retry may be 30 minutes away while the deployment gate allows approximately ten minutes. These are provider findings relayed by the operator, not independent production measurements here.
+Historical incident evidence, retained for recovery: the operator reported that RumptyCloud support confirmed reminder transactions exceeding Prisma's five-second default, a growing backlog, approximately 30 failed attempts, and no database locks/deadlocks. The other three jobs had zero failures. A retry may be 30 minutes away while the deployment gate allows approximately ten minutes. These are provider findings relayed by the operator, not independent production measurements here.
 
 The prior source already used one transaction per exit case, not one transaction for the entire backlog. Its unbounded per-case action loop and 20-case checkpoint interval nevertheless amplified slow work and replay after interruption. The correction limits each transaction to three reminder creates/updates/resolutions and their atomic audits. It recomputes owned evidence for each batch, skipping settlement comparisons and exit-discrepancy projections that reminder rules never consume. No external storage or AI calls run inside these transactions.
 
@@ -344,7 +352,7 @@ Deployment availability (`GET /health`, Docker's local HTTP probe, and the web r
 
 Validation on 21 October: `npm run validate` passed lint, TypeScript, 530 unit tests, production web build and worker build. The full integration suite passed 198 tests against disposable PostgreSQL/Redis; the full browser suite passed 179 tests using local S3/AI fixtures. The delayed reminder regression completed four batches with a maximum measured batch duration of approximately 2.6 seconds. Changed TypeScript formatting, local documentation file links and `git diff --check` passed. The read-only connectivity snippet below was verified against the disposable database only. No production connectivity, recovery or private-host cutover is claimed by these results.
 
-### Release and acceptance sequence (operator action; not executed)
+### Release and acceptance sequence (recorded 21 October; reusable acceptance checks)
 
 1. Review the diff and validation report. No database migrations, environment changes or job resets are required for this correction. Preserve current working connection settings during this release.
 2. After explicit release authorization, update the established web and `deploy/worker` branches with matching source. Retain only `FROM worker AS default` as the worker branch's Dockerfile difference. Both branches must include the new local Docker health command; preserve merge history and do not force-push.

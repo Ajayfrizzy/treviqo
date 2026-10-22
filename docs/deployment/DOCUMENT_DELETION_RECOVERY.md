@@ -1,10 +1,10 @@
-# Document deletion recovery investigation — 18 October 2026
+# Document deletion recovery
 
 ## Current status
 
-Recovery is implemented; direct DELETE remains blocked. A controlled private-test run reproduced the production investigation's 403 AccessDenied, and RumptyCloud support has been contacted. Its missing-key HEAD returned 404, while the object left after denied DELETE still returned 200. This is test-bucket evidence, not proof of production missing-key permissions. See [the consolidated results](S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status). Preserve pending rows until verified absence; do not edit database status to bypass verification.
+Direct document deletion succeeded for two documents according to the operator’s 22 October 2026 report. Earlier DELETE 403 failures are historical; the exact original provider policy cause and cleanup of old diagnostic objects are not established. See [current operational evidence](RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation). Verified manual-removal recovery remains available if a deletion is pending. Preserve pending rows until verified absence; never edit database status to bypass verification.
 
-## Findings and limits
+## Historical findings and limits — 18 October 2026
 
 The reported misfiled-document incident has not been reproduced against
 production. No production object, metadata, credentials or permissions were changed.
@@ -33,7 +33,7 @@ failures using safe operation/category/status/code tokens. No provider messages,
 keys, filenames, credentials or signed URLs are logged. Still-present objects and
 versioning mismatches also have explicit diagnostic categories.
 
-## Production checks still required
+## Recovery checks when deletion remains pending
 
 1. Confirm the configured endpoint, bucket, region, path-style mode and app/worker
    principal in Rumpty without dumping secret values. Check `s3:DeleteObject` for
@@ -74,7 +74,7 @@ verified objects per pass, retries failures with per-account exponential backoff
 leases and Redis queue reconstruction remain unchanged. A pending document must
 not cause its active owner's account to enter scheduled cleanup.
 
-## Validation
+## Historical validation — 18 October 2026
 
 Focused coverage includes real-SDK HEAD/DELETE/HEAD, missing-key 404 versus 403,
 already-absent objects with DELETE denied, denied DELETE, denied verification,

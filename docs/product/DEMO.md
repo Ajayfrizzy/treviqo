@@ -2,7 +2,7 @@
 
 Use [the live application](https://treviqo.rumptycloud.app) or a configured local instance from the [README](../../README.md#local-development). Target a **six-minute presentation** using a prepared fictional account. Allow 15–20 minutes or more for rehearsal/setup; inference latency varies. No shared demo login or automatically seeded account is provided. The steps below describe expected behavior, not a claim that this walkthrough was rerun against the live deployment.
 
-Use fictional data only. This guide creates records through the UI, never through database scripts. It does not delete records, change provider permissions or require a production diagnostic probe. Document/account deletion is deliberately outside the demo while direct S3 deletion remains blocked; see [operational status](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+Use fictional data only. This guide creates records through the UI, never through database scripts. It does not delete records, change provider permissions or require a production diagnostic probe. Document/account deletion remains outside this continuity-focused demo; see [operational status](../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation).
 
 ## Six-minute live walkthrough
 
@@ -20,7 +20,7 @@ Opening: **“Employment changes, but the worker still needs the evidence. Trevi
 | 4:40–5:30 | Open a due reminder, follow its source link and snooze one prompt.                                                                                          | Unresolved work remains actionable after employment ends.                                                                                                                          |
 | 5:30–6:00 | Open the [architecture](../architecture/ARCHITECTURE.md#current-implementation) and [testing guide](../testing/TESTING.md).                                 | **Code Quality & Tech Docs:** module boundaries, ownership checks, deterministic rules and reproducible validation commands. Do not imply tests were run during this presentation. |
 
-Close: **“The outcome is a personal continuity record with evidence and next actions—not an employer verdict or a benefit-transfer service.”** Mention the unresolved ordinary S3 DELETE limitation if discussing cleanup; verified manual-removal recovery does not make ordinary deletion work.
+Close: **“The outcome is a personal continuity record with evidence and next actions—not an employer verdict or a benefit-transfer service.”** If discussing cleanup, distinguish the operator-reported direct deletion success for two documents on 22 October from the separate verified manual-removal recovery path. Do not claim complete account erasure or historical probe cleanup.
 
 ## Fixture choice and the Zara journey
 
@@ -156,10 +156,10 @@ Allow the continuous worker to reconcile, then open Reminders and refresh. The w
 
 Open an unresolved action to return to its source. Snooze one prompt for seven days, refresh and confirm it stays hidden. Dismiss another current prompt. Resolve a source answer (for example, set leave to None only within this fictional scenario) and refresh to see that the action is no longer current. A materially changed episode can resurface later.
 
-If no reminders appear, check worker health and due dates; do not modify production jobs or timestamps to force the demo. Explain that in-app follow-up is implemented but availability depends on the worker. There is no email, SMS or push delivery.
+The operator reported reminders responding to changed employment information on 22 October 2026; a successful complete reminder sweep has not been independently verified. Passing worker health does not prove a finished sweep. If no reminders appear, check worker health, strict job diagnostics and due dates; do not modify production jobs or timestamps to force the demo. Explain that in-app follow-up is implemented but availability depends on the worker. There is no email, SMS or push delivery.
 
 ## Finish and explain the boundaries
 
 Sign out. Summarize the visible outcome: personal employment history, privately stored originals, explicitly reviewed facts, transparent checks, a cross-employer Passport and actionable follow-ups.
 
-Demonstrate a feature only when it actually succeeds. AI/manual fallback, Unknown states and provider outages are part of the product's honest boundaries. Do not schedule account deletion as a demo reset: it disables access immediately and storage cleanup is currently blocked. Retain fictional demo data until an authorized cleanup can verify object absence.
+Demonstrate a feature only when it actually succeeds. AI/manual fallback, Unknown states and provider outages are part of the product's honest boundaries. Do not schedule account deletion as a demo reset: it disables access immediately and cleanup is asynchronous, subject to verified object absence. Retain fictional demo data until an authorized cleanup can verify object absence.

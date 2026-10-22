@@ -1,6 +1,6 @@
 # Milestone 4 — Job Exit Checker
 
-> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../README.md) for current guides and the [live deletion limitation](../deployment/S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+> Historical implementation record. Scope, paths, commands and test counts below describe the work at that date, not the current product or deployed acceptance status. See the [documentation index](../../README.md) for current guides and the [current operational status](../../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation).
 
 Implemented October 3, 2026. Workers can create and update an employment-specific exit case and use a deterministic, evidence-backed checklist. All five exit types are supported: resignation, termination, redundancy, contract completion, and retirement. No commit, push, or deployment was performed. Existing uncommitted Milestone 3 work was preserved.
 
@@ -34,7 +34,7 @@ All five states are represented: Complete, Pending, Missing, Needs clarification
 | Reference/employment evidence | Unknown/not needed/not requested/requested/saved without or with current evidence                                                                            |
 | Employer-linked benefits      | Unknown/none/unresolved/clarified end dates and contacts; no portability or continued-coverage decision                                                      |
 
-See [DOMAIN_RULES.md](../domain/DOMAIN_RULES.md) for the full state matrix. Evidence from AI is limited to an explicitly selected previously confirmed/corrected contract notice value. High-confidence proposals, rejected/unknown fields, unavailable documents, foreign evidence, and a different employment's evidence are ineligible. A changed review version produces Needs clarification rather than silently accepting a new value. AI never selects a checklist state.
+See [DOMAIN_RULES.md](../../domain/DOMAIN_RULES.md) for the full state matrix. Evidence from AI is limited to an explicitly selected previously confirmed/corrected contract notice value. High-confidence proposals, rejected/unknown fields, unavailable documents, foreign evidence, and a different employment's evidence are ineligible. A changed review version produces Needs clarification rather than silently accepting a new value. AI never selects a checklist state.
 
 Notice counting supports exact numeric days (optionally “calendar”), weeks, or months. Days exclude the communication day; weeks mean seven calendar days; calendar-month addition clamps to the target month end. These are explicit comparison conventions, not jurisdiction-specific legal counting rules. Supported durations are up to 730 days or 24 months, including zero days. Working days, spelled-out numbers, alternatives, pay-in-lieu, and conditional clauses require clarification. Tests cover exact boundary/short/long periods, leap days, month ends, year rollover, reversed dates, and range limits.
 

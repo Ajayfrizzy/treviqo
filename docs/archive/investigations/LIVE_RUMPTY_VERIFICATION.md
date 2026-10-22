@@ -1,6 +1,8 @@
 # First live Rumpty integration verification — 4 October 2026
 
-> Historical investigation record. Do not treat its original deployment status, model protocol or test counts as current. See the [deployment guide](RUMPTY_DEPLOYMENT.md), [current AI contract](../ai/AI_DOCUMENTS.md#current-implementation) and [current storage-deletion status](S3_DELETE_AUTHORIZATION_INVESTIGATION.md#current-live-status).
+> Archived on 22 October 2026. Findings, failures, test counts and outstanding checks below describe the original dated investigation, not current production status. See [current operational evidence](../../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation). Archiving does not certify every earlier acceptance check or residual probe cleanup.
+
+> Historical investigation record. Do not treat its original deployment status, model protocol or test counts as current. See the [deployment guide](../../deployment/RUMPTY_DEPLOYMENT.md), [current AI contract](../../ai/AI_DOCUMENTS.md#current-implementation) and [current storage-deletion status](../../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation).
 
 Result: **partial connectivity verified; deployment acceptance blocked**. Configuration was loaded from ignored `.env`. No configuration values, credentials, connection strings, signed URLs or model outputs are included in this report. No commit, push, deployment, schema mutation or architecture change occurred. Only synthetic storage/inference content was used.
 
@@ -48,10 +50,10 @@ Contents are a short deployment-test marker with no personal data. Grant the int
 
 Executed production preflight, redacted configuration/DNS diagnostics, read-only Prisma connectivity, Redis PING/worker-health diagnostics, live synthetic S3 operations, authenticated/unauthenticated AI model discovery, bounded synthetic inference requests and a local production-runtime liveness/readiness smoke. No automated test suite was pointed at live infrastructure. Application code was unchanged; the previous preparation's full suite (214 unit, 81 integration, 49 browser tests) remains historical evidence, not a new live test result.
 
-See [ordered deployment procedure](FIRST_RUMPTY_DEPLOYMENT.md) for release/migration commands. Milestone 8 functionality was not implemented.
+See [ordered deployment procedure](../../deployment/FIRST_RUMPTY_DEPLOYMENT.md) for release/migration commands. Milestone 8 functionality was not implemented.
 
 Temporary probe scripts and the local loopback production server were removed/stopped after verification. `git diff --check` passed. The residual S3 object remains explicitly outstanding until delete access or console cleanup is available.
 
 ## Deployment blocker follow-up
 
-See [private-network execution, S3/AI diagnosis and manual backup fallback](RUMPTY_BLOCKERS.md) for current results and operator steps. Internal PostgreSQL/Redis DNS is expected to require a Rumpty-hosted workload; no public access is needed.
+See [private-network execution, S3/AI diagnosis and manual backup fallback](../../deployment/RUMPTY_BLOCKERS.md) for current results and operator steps. Internal PostgreSQL/Redis DNS is expected to require a Rumpty-hosted workload; no public access is needed.

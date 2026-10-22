@@ -162,7 +162,7 @@ Milestone 4 scope boundary: the earlier settlement, pension, benefits, and Passp
 
 Pension matching requires explicit participation, complete reviewed statement coverage/entries, normalized employer equality and contribution month equality. Posting date is separate and can be later. Optional reviewed payslip employee deductions require a matching reviewed pay month and compare only with the employee component. Multiple/partial rows, zero combined amounts and ambiguous evidence need clarification. Detected contributions require explicit worker confirmation, invalidated by changed evidence/context.
 
-Closing pension-enabled employment now creates one waiting verification when an exit exists; enabling pension on an existing closed employment also initializes it. A changeable follow-up date defaults to end/last-working date plus 30 calendar days, a planning convention only. No background reminder is scheduled. [Full rules and limits](../milestones/SETTLEMENT_PENSION.md).
+Closing pension-enabled employment now creates one waiting verification when an exit exists; enabling pension on an existing closed employment also initializes it. A changeable follow-up date defaults to end/last-working date plus 30 calendar days, a planning convention only. No background reminder is scheduled. [Full rules and limits](../archive/milestones/SETTLEMENT_PENSION.md).
 
 ## Milestone 6 Passport and benefits (`passport-v1`)
 
@@ -174,4 +174,4 @@ Pension provider is a current confirmed/corrected field, restricted to the finan
 
 ## Milestone 7 implementation
 
-Milestone 7 derives in-app exit-action, missing-document, pension follow-up and seven-day stale-action prompts from current deterministic checks. Snooze lasts seven days; dismissal applies to the current evidence fingerprint. Completion resolves an action; changed evidence can resurface it. Follow-up dates are planning conventions, not legal deadlines. See [rules and boundaries](../milestones/REMINDERS_RELIABILITY_SECURITY.md#reminder-behavior).
+Milestone 7 derives in-app exit-action, missing-document, pension follow-up and seven-day stale-action prompts from current deterministic checks. Snooze lasts seven days; dismissal applies to the current evidence fingerprint. Completion resolves an action; changed evidence can resurface it. Follow-up dates are planning conventions, not legal deadlines. See [rules and boundaries](../archive/milestones/REMINDERS_RELIABILITY_SECURITY.md#reminder-behavior).
