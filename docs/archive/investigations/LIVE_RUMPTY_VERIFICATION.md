@@ -56,4 +56,4 @@ Temporary probe scripts and the local loopback production server were removed/st
 
 ## Deployment blocker follow-up
 
-See [private-network execution, S3/AI diagnosis and manual backup fallback](../../deployment/RUMPTY_BLOCKERS.md) for current results and operator steps. Internal PostgreSQL/Redis DNS is expected to require a Rumpty-hosted workload; no public access is needed.
+See [private-network execution, S3/AI diagnosis and manual backup fallback](../../deployment/RUMPTY_BLOCKERS.md) for active operator steps and the [archived follow-up](RUMPTY_BLOCKERS.md) for the original results. Internal PostgreSQL/Redis DNS is expected to require a Rumpty-hosted workload; no public access is needed.

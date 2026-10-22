@@ -1,4 +1,4 @@
-# First Rumpty production-like deployment
+# Rumpty release acceptance
 
 > Current runtime variable names/defaults and the four worker jobs are documented in [Rumpty deployment](RUMPTY_DEPLOYMENT.md). For direct DELETE troubleshooting use the separately gated private-test probe, not the older combined expiry/storage acceptance probe. Never interpret signed GET 403 as proof of deletion.
 
@@ -23,7 +23,7 @@ Use Rumpty's secret/environment controls. For a local operator session, create a
 
 APP_URL must contain no path/query/fragment/user credentials. PostgreSQL and Redis URLs must identify real services; URL-encode credential components. Use Rumpty's documented TLS modes/trust material, `rediss://` where TLS is offered, and private network endpoints. Do not disable certificate verification. If Rumpty supplies a custom CA, mount it read-only and set NODE_EXTRA_CA_CERTS for Node Redis/S3/AI clients; Prisma/PostgreSQL certificate configuration must follow its connector's separate TLS settings. Use actual provider guidance rather than invented certificate paths or region/model names. Recommended PostgreSQL connection parameters include bounded `connection_limit`, `connect_timeout` and `pool_timeout`, sized across web, worker and operator processes.
 
-## Rumpty console steps still required
+## Rumpty console checks for each release
 
 1. Select the target project/environment and region. Confirm whether its PostgreSQL database is empty or existing. Provision/identify PostgreSQL, Redis, bucket, inference model, web compute and **always-on** worker compute. Capture real service endpoints/credentials in secret controls. Private endpoints may require running probes from Rumpty compute rather than a laptop.
 2. Configure PostgreSQL backups/PITR if supported, retention and a pre-release snapshot for any existing database. Verify migration and runtime role privileges. Confirm Redis persistence/noeviction, authentication, ACL support for EVAL/sorted sets/TTL and networking. Do not share a Redis database/namespace with another Treviqo environment.
@@ -145,4 +145,4 @@ Final result: **214 unit, 81 integration and 49 browser tests passed**, together
 
 ## Deployment blocker follow-up
 
-See [private-network execution, S3/AI diagnosis and manual backup fallback](RUMPTY_BLOCKERS.md) for historical results and private-network context; use the [current deployment guidance](RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation) for present status. Internal PostgreSQL/Redis DNS is expected to require a Rumpty-hosted workload; no public access is needed.
+See [private-network execution, S3/AI diagnosis and manual backup fallback](RUMPTY_BLOCKERS.md) for operational procedures and private-network context; historical results are in the [4 October archive](../archive/investigations/RUMPTY_BLOCKERS.md); use the [current deployment guidance](RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation) for present status. Internal PostgreSQL/Redis DNS is expected to require a Rumpty-hosted workload; no public access is needed.

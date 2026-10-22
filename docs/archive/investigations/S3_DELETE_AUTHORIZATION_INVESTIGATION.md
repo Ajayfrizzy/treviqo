@@ -47,7 +47,7 @@ were explicitly excluded. No current production document, bucket key, credential
 connection URL or signed request is reproduced here.
 
 Sources: [original live report](LIVE_RUMPTY_VERIFICATION.md),
-[follow-up DELETE/HEAD evidence](../../deployment/RUMPTY_BLOCKERS.md#s3-deletion-diagnosis), and
+[follow-up DELETE/HEAD evidence](RUMPTY_BLOCKERS.md#s3-deletion-diagnosis), and
 [verified recovery behavior](../../deployment/DOCUMENT_DELETION_RECOVERY.md).
 
 | Operation                               | Historical live evidence          | HTTP / safe category                           | New evidence / limitation                                                                              |

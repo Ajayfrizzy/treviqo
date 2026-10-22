@@ -1,12 +1,12 @@
 # Rumpty network and backup recovery procedures
 
-> Mixed active runbook and historical investigation record. Private-network execution and manual backup/restore procedures remain operational references; incident results and validation below are the 4 October 2026 snapshot. Do not treat its original deployment status, model protocol or test counts as current. See the [deployment guide](RUMPTY_DEPLOYMENT.md), [current AI contract](../ai/AI_DOCUMENTS.md#current-implementation) and [current storage-deletion status](RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation).
+Use these procedures for separately authorized maintenance or recovery. [Current production evidence](RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation) is maintained in the deployment runbook; the [4 October incident findings and validation](../archive/investigations/RUMPTY_BLOCKERS.md) are archived.
 
-Follow-up to [live verification](../archive/investigations/LIVE_RUMPTY_VERIFICATION.md). No public database/Redis endpoints, provider fallback, architecture change or Milestone 8 feature was introduced.
+DNS and schema inspection below are read-only. Migration, service probes, starting workers, backups and restore drills are separate operator actions; this guide does not authorize their execution.
 
 ## Private PostgreSQL/Redis execution strategy
 
-The supplied database/cache names belong to the Rumpty internal network. Failure to resolve them on a developer laptop is an expected network boundary, not evidence that Prisma or Redis is incompatible. Leave these services private.
+For endpoints configured on the Rumpty internal network, names may resolve only within that network. Failure to resolve them on a developer laptop is an expected network boundary, not evidence that Prisma or Redis is incompatible. Leave these services private.
 
 After `npm run worker:build`, local diagnosis is:
 
@@ -46,53 +46,25 @@ npm run worker:health
 
 For full bucket/public HTTPS checks, use an operator workload with web configuration and the documented `--services` / `--runtime` commands. The original 4 October investigation provisioned no remote workload and applied no live migrations. These are separately authorized operator procedures, not current deployment status. If Rumpty provides no runtime console or one-off workload, ask support to execute the required checks in the same network/role context.
 
-## S3 deletion diagnosis
+## Storage troubleshooting
 
-Historical evidence — 4 October 2026; not current production status.
+For a pending deletion, use [verified deletion recovery](DOCUMENT_DELETION_RECOVERY.md); for a separately authorized disposable test, use the [guarded S3 probe](S3_DELETE_PROBE.md). Never treat HTTP 403 or a signed-link failure as proof of absence, broaden access speculatively or bypass retention.
 
-Retried DeleteObject only for the known synthetic key; provider returned **403 AccessDenied** again. HeadObject for that same key returned 200, confirming object access. No object-lock/retention fields were returned in that metadata response; this does **not** prove absence of retention. GetBucketVersioning and GetObjectLockConfiguration both returned 403, so the credential cannot establish their state.
-
-The narrow finding is a provider-side authorization/retention restriction on deletion; it is not a Treviqo route or frontend failure. Exact cause remains unknown: restricted key permissions, explicit bucket/prefix deny, object retention/lock or gateway policy require Rumpty-console/provider inspection. Do not change signing protocol, make the bucket public, grant unrestricted administrator access or bypass governance retention.
-
-Operator steps:
-
-1. In Rumpty, confirm the app key's principal and scope without copying credentials into logs. Check `s3:DeleteObject` on the intended bucket/object prefix and all explicit denies. Keep Put/Get/Delete limited to Treviqo objects; maintain private bucket/public-access restrictions.
-2. Inspect versioning, object retention/legal hold and provider gateway restrictions using an authorized operator identity. Decide a retention policy intentionally; do not bypass a hold to make a smoke test pass. App DeleteObject may create only a delete marker in a versioned bucket; old versions/backups need separately authorized lifecycle handling.
-3. Delete the exact residual test object after correcting authorization, then verify a previously signed GET cannot retrieve it. Recheck anonymous denial. Do not create additional probe objects until cleanup permission works.
-
-Outstanding synthetic key (no personal data):
-The exact synthetic key is retained only in the private operator record; it is intentionally omitted from public documentation.
-
-## Signed URL expiry diagnosis and handling
-
-A fresh two-second signed URL was requested **directly from the configured S3 HTTPS origin**, with redirects disabled, after expiry. It returned **500 application/xml**. Treviqo was not running in or proxying that request path. The inspected response did not identify expiry/signature/access-denied wording. This locates the response at the provider endpoint/gateway; its internal cause cannot be determined here. Previously valid GET, unsigned 403 and tampered 403 establish that signing/access work separately from expiry handling.
-
-Keep the short signature lifetime. Do not treat every 500 as ordinary expiry or as proof of successful privacy acceptance. Escalate the provider/gateway expiry behavior using a synthetic reproduction, without sharing signed URLs/keys. Successful post-expiry denial should use the documented provider contract; current strict deployment expiry acceptance remains failed.
-
-Treviqo now removes a download link shortly before its local lifetime ends, rechecks expiry when the tab regains focus and before click, and offers an explicit fresh-link action. Timing starts before requesting the link to conservatively account for request latency. New issuance still authenticates/authorizes/rate-limits/audits. No automatic repeated signing, public URL or proxy is added. If the separate provider tab reports an error, users return to Treviqo and request a new link. Already-open tabs and copied links remain subject to provider enforcement; local timers are UX only, never authorization.
+Keep signed-link lifetimes short. If expiry produces an unexpected provider error, collect only sanitized status/timing and ask support to inspect it; do not publish signed URLs. Users can return to Treviqo and request a fresh authorized link. Local link-expiry timers are UX, not authorization; copied links remain subject to provider enforcement. The earlier expiry 500 is a dated observation in the archive, not a newly reproduced result.
 
 ## Incremental AI diagnosis
 
-Reproducible operator command after building:
+After separate authorization for synthetic inference, build the worker/operator tools and run:
 
 ```sh
 node --env-file=.env --conditions=react-server scripts/rumpty-ai-stages.mjs
 ```
 
-Uses only synthetic content, four sequential stages, bounded requests and no retries. Stops after the first failed stage and prints only status/timing/validation outcomes. It never prints credentials, endpoints or response contents and does not save trusted extracted fields.
-
-| Stage                                                 | Live result                                     |
-| ----------------------------------------------------- | ----------------------------------------------- |
-| Minimal plain chat, no response_format, max_tokens=16 | Timed out at 25,004ms without an HTTP response. |
-| Minimal JSON structured request                       | Not attempted: plain stage failed.              |
-| Application classification prompt/schema              | Not attempted in this run: prerequisite failed. |
-| Application extraction prompt/schema                  | Not attempted in this run: prerequisite failed. |
-
-Earlier authenticated model discovery succeeded and the configured identifier was listed, but completion remains unverified. The plain request removes JSON/schema size as the immediate explanation; the timeout occurs before receiving a response even for minimal generation. Rumpty must inspect model loading/availability, inference routing, queue/capacity/credits and gateway connectivity. Do not assume that a longer timeout or changed prompt solves it. Production timeouts, grounding and schemas remain unchanged; manual review remains available. Rerun stages only after inference is healthy, then run six-type acceptance.
+The script uses synthetic content, bounded requests and no retries, stopping at the first failed stage. It prints status/timing/validation outcomes rather than credentials, endpoints or model contents. This invokes inference and is not a read-only readiness check. Keep manual review available; do not assume longer timeouts fix a provider failure. Use the [current AI contract](../ai/AI_DOCUMENTS.md#current-implementation) and [release acceptance](FIRST_RUMPTY_DEPLOYMENT.md#controlled-live-probes), not the archived six-type acceptance scope.
 
 ## Manual PostgreSQL backup/restore fallback
 
-If managed snapshots/PITR are unavailable, use a **Rumpty-hosted maintenance workload** on the private database network with matching PostgreSQL client major version (verify server version first). This is an operational backup process, not a Treviqo product feature. No backup has yet been taken or restored.
+If managed snapshots/PITR are unavailable, use a **Rumpty-hosted maintenance workload** on the private database network with matching PostgreSQL client major version (verify server version first). This is an operational backup process, not a Treviqo product feature. This procedure does not establish that a backup or restore drill has succeeded. Record that evidence separately.
 
 Provide libpq variables PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD and provider-appropriate PGSSLMODE/certificate files via workload secrets. Do not pass a credential URL on command lines. Prisma URL parameters are not automatically valid libpq parameters. Use a restricted maintenance role capable of reading all required tables; test its privileges. Never disable TLS validation to resolve certificate errors. Disable shell tracing and restrict console/log access.
 
@@ -118,11 +90,3 @@ pg_restore --exit-on-error --single-transaction --no-owner --no-acl --dbname="$P
 ```
 
 Restore into an empty, operator-provisioned database; do not add `--clean` against a live target. Reapply reviewed runtime grants, run migration status/drift checks, and perform the existing session revocation/job reset/object-reconciliation acceptance procedure with isolated Redis/bucket credentials before serving traffic. Start test web/worker only after these recovery steps. Measure RPO/RTO and record evidence; suggested 24-hour RPO/4-hour RTO remain targets until proven. Schedule and monitor daily dumps plus pre-migration backups, validate restore regularly, retain according to an explicit policy (initial proposal 30 days), test expiration/erasure and restrict every copy. Manual dumps provide no continuous PITR unless separate WAL archiving is configured and tested.
-
-## Historical acceptance blockers — 4 October 2026
-
-Rumpty-network workload access and database state/migrations; real HTTPS app origin/WORKER_REQUIRED=true; scoped S3 deletion and residual-object cleanup; provider expiry 500; inference completion; configured private backups and a successful restore drill. No need to expose PostgreSQL/Redis publicly. Local private DNS limits are now reported separately from failures in the hosted environment.
-
-## Historical validation — 4 October 2026
-
-`npm run validate` passed lint, typecheck, **216 unit tests**, production build and worker/operator compilation. `npm run test:integration` passed **81 tests** against disposable local PostgreSQL/Redis. All nine migrations applied only to that disposable database. The read-only operator inspection reported 15 public tables, nine completed migrations and zero unfinished migrations. The real local private-network diagnostic returned exit 2 with both endpoints marked requires_rumpty_network. `npm run test:e2e` passed **50 browser tests**, including link expiry/removal and explicit renewal. Prisma drift reported no difference; `git diff --check` and staged-probe syntax validation passed. No live database mutations or public service exposure occurred.

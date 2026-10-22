@@ -6,7 +6,7 @@ Use fictional data only. This guide creates records through the UI, never throug
 
 ## Six-minute live walkthrough
 
-Prepare the records, reviewed fields and due reminders using the detailed steps below before presenting. Leave one supported field available to review live. Show the real deployed origin, keep credentials and signed download URLs off screen, and use only fictional evidence. If an interaction fails, show its fallback or explain the limitation; do not narrate an expected result as observed success.
+Complete [preparation and rehearsal](#preparation-and-optional-deeper-verification) before presenting. The presentation ends at the closing line below; the remaining sections are presenter notes. Leave one supported field available to review live. Show the real deployed origin, keep credentials and signed download URLs off screen, and use only fictional evidence. If an interaction fails, show its fallback or explain the limitation; do not narrate an expected result as observed success.
 
 Opening: **“Employment changes, but the worker still needs the evidence. Treviqo connects records, reviewed facts and follow-ups across employers.”**
 
@@ -20,9 +20,13 @@ Opening: **“Employment changes, but the worker still needs the evidence. Trevi
 | 4:40–5:30 | Open a due reminder, follow its source link and snooze one prompt.                                                                                          | Unresolved work remains actionable after employment ends.                                                                                                                          |
 | 5:30–6:00 | Open the [architecture](../architecture/ARCHITECTURE.md#current-implementation) and [testing guide](../testing/TESTING.md).                                 | **Code Quality & Tech Docs:** module boundaries, ownership checks, deterministic rules and reproducible validation commands. Do not imply tests were run during this presentation. |
 
-Close: **“The outcome is a personal continuity record with evidence and next actions—not an employer verdict or a benefit-transfer service.”** If discussing cleanup, distinguish the operator-reported direct deletion success for two documents on 22 October from the separate verified manual-removal recovery path. Do not claim complete account erasure or historical probe cleanup.
+Close: **“The outcome is a personal continuity record with evidence and next actions—not an employer verdict or a benefit-transfer service.”**
 
-## Fixture choice and the Zara journey
+## Preparation and optional deeper verification
+
+The numbered steps are the reproducible setup and longer walkthrough. Complete them before the timed presentation; do not wait for multiple AI calls or worker sweeps on stage. The optional redundancy extension below requires preparing its stated fictional document first.
+
+### Fixture choice and the Zara journey
 
 The requested fictional **Zara Okonkwo → Harborpoint Logistics → Briarwell Consumer Services → Solaris Retail Technologies** journey has no matching fixture pack in this checkout. Its prior operator testing is not independently reproducible from the supplied repository files. Do not relabel the Harbour PDFs as those employers or claim this guide reproduces that prior test.
 
@@ -35,10 +39,6 @@ For now, use Cedar / Harbour / Meadow below. To substitute Zara later, supply a 
 - Benefit or exit evidence for each completed employment whose benefit assessment is demonstrated, plus an unresolved action/date that makes a reminder due.
 
 Include original PDFs and a source-text/expected-review manifest. Check employer association and rehearse the complete journey before claiming it works. These are missing inputs, not new fixture paths or delivered functionality.
-
-## Preparation and optional deeper verification
-
-The numbered steps are the reproducible setup and longer walkthrough. Complete them before the timed presentation; do not wait for multiple AI calls or worker sweeps on stage. The optional redundancy extension below requires preparing its stated fictional document first.
 
 ### Prepare the evidence
 
@@ -55,7 +55,7 @@ The examples include October/November 2026 dates. They describe a fictional scen
 
 Before presenting, check that registration, uploads and manual review work, and that the worker is running. AI failure should lead to a visible manual fallback, not an invented success. On small phones, Documents/Profile are in **More**; Reminders has its own primary destination.
 
-## 1. Create a personal employment history
+### 1. Create a personal employment history
 
 Register a fresh fictional worker with first name, last name, a unique synthetic email and a password satisfying the displayed requirements. Successful registration signs the user in. Optional preferred name/country can be edited in Profile; country is profile information, not a jurisdiction-specific legal engine.
 
@@ -69,7 +69,7 @@ From Home, create these records:
 
 Expected: Home separates current and previous roles. Passport initially includes only Cedar. Names and dates are entered by the worker, not verified with an employer. Harbour exactly matches the fixture's employer spelling, which matters for pension matching.
 
-## 2. Upload and review Harbour evidence
+### 2. Upload and review Harbour evidence
 
 Open Documents → Upload, choose **Harbour Workshop Ltd**, and upload the four PDFs with their corresponding categories. Check the employment association before each upload. Files cannot be reassigned between employments through an edit flow.
 
@@ -86,7 +86,7 @@ Normalizing a stated date/amount uses **Save correction**, preserving the origin
 
 Expected: proposals are visibly separate from confirmed/corrected fields; source and correction history remain available. Employment details do not silently change after review.
 
-## 3. Check the exit and leave an action unresolved
+### 3. Check the exit and leave an action unresolved
 
 Open Exit and start a case for Harbour:
 
@@ -99,7 +99,7 @@ Expected: nine checks mix satisfied and unresolved states. Notice dates should a
 
 Show that evidence selectors contain only this employment's records. Documents saved under another employment are not eligible, even for the same signed-in user. Exit-type discrepancy warnings, where explicit document evidence conflicts, require review; they do not automatically change the selected exit type.
 
-### Optional redundancy discrepancy demonstration
+#### Optional redundancy discrepancy demonstration
 
 The existing [termination fixture](../../tests/fixtures/intelligence/termination_letter.json) says “role discontinued.” That wording and a Termination letter category alone **do not establish redundancy**. Do not expect that PDF to trigger the warning. The [browser scenario](../../tests/e2e/passport.spec.ts) exercises an explicit redundancy source separately; its injected text and mock marker are test machinery, not a judge-ready PDF or evidence of live AI accuracy.
 
@@ -126,7 +126,7 @@ npm run test:e2e -- tests/e2e/passport.spec.ts -g "exit discrepancy stays inform
 
 This uses local fixtures and mutates test data. It is not a production probe and was not run as part of this documentation refinement.
 
-## 4. Review settlement and pension
+### 4. Review settlement and pension
 
 From the checklist open **Review settlement and pension**.
 
@@ -138,7 +138,7 @@ Start pension verification if none exists. Select target period `2026-10`, the r
 
 Expected: the status distinguishes detection from confirmation by the worker. A November posting date does not change the October contribution period. Rejected, changed or incomplete evidence requires clarification rather than an automatic confirmation. This is not a query to a PFA or a guarantee that all contributions were reconciled.
 
-## 5. View continuity across completed employments
+### 5. View continuity across completed employments
 
 Edit Harbour employment to **Closed**, retaining end date `2026-10-31`, then open Passport.
 
@@ -148,7 +148,7 @@ Open the benefit categories. All start Unknown unless the worker has assessed th
 
 Expected: closing the employment does not remove unresolved actions or turn Unknown benefits into confirmed benefits. Passport is a current projection, not an exportable certificate or employer endorsement.
 
-## 6. Return to due reminders
+### 6. Return to due reminders
 
 Create an exit case for **Cedar Studio Demo** with Contract completion and last working date `2025-09-30`. Leave notice applicability Unknown, final-pay evidence missing and leave Pending. This deliberately incomplete historical case makes the first action follow-up due immediately under the app's reminder convention.
 
@@ -156,9 +156,9 @@ Allow the continuous worker to reconcile, then open Reminders and refresh. The w
 
 Open an unresolved action to return to its source. Snooze one prompt for seven days, refresh and confirm it stays hidden. Dismiss another current prompt. Resolve a source answer (for example, set leave to None only within this fictional scenario) and refresh to see that the action is no longer current. A materially changed episode can resurface later.
 
-The operator reported reminders responding to changed employment information on 22 October 2026; a successful complete reminder sweep has not been independently verified. Passing worker health does not prove a finished sweep. If no reminders appear, check worker health, strict job diagnostics and due dates; do not modify production jobs or timestamps to force the demo. Explain that in-app follow-up is implemented but availability depends on the worker. There is no email, SMS or push delivery.
+See [current production evidence](../deployment/RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation) for reminder observations and the unverified complete sweep. Passing worker health does not prove a finished sweep. If no reminders appear, check worker health, strict job diagnostics and due dates; do not modify production jobs or timestamps to force the demo. Explain that in-app follow-up is implemented but availability depends on the worker. There is no email, SMS or push delivery.
 
-## Finish and explain the boundaries
+### Finish and explain the boundaries
 
 Sign out. Summarize the visible outcome: personal employment history, privately stored originals, explicitly reviewed facts, transparent checks, a cross-employer Passport and actionable follow-ups.
 

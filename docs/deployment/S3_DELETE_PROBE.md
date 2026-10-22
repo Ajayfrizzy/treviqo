@@ -1,6 +1,6 @@
 # Guarded S3 deletion probe
 
-Active operator procedure extracted from the [18 October investigation](../archive/investigations/S3_DELETE_AUTHORIZATION_INVESTIGATION.md). See [current production evidence](RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation) before deciding whether a new probe is necessary. Two successful production document deletions were reported on 22 October; no new probe is required merely to update documentation. This procedure makes disposable-object mutations and is never a read-only health check.
+Active operator procedure extracted from the [18 October investigation](../archive/investigations/S3_DELETE_AUTHORIZATION_INVESTIGATION.md). See [current production evidence](RUMPTY_DEPLOYMENT.md#current-deployment-and-known-limitation) before deciding whether a new probe is necessary. This procedure makes disposable-object mutations and is never a read-only health check.
 
 ## Reviewable, explicit operator probe
 

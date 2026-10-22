@@ -12,7 +12,7 @@ The filename is not a storage identifier; never locate or erase an object by fil
 alone. Use the owner's document ID and its exact stored key in an authorized operator
 context, and independently confirm the employment association.
 
-The earlier [Rumpty investigation](RUMPTY_BLOCKERS.md#s3-deletion-diagnosis)
+The earlier [Rumpty investigation](../archive/investigations/RUMPTY_BLOCKERS.md#s3-deletion-diagnosis)
 recorded DeleteObject AccessDenied/403 and HeadObject 200 for a synthetic object.
 That proves deletion was denied for those credentials at that time, not which
 policy caused it or how HEAD behaves for a missing object today. Console deletion
