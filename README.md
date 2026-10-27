@@ -144,4 +144,3 @@ Web `/api/health` is process liveness; `/api/ready` checks database, Redis, auth
 ## Documentation
 
 Start with the [documentation index](docs/README.md). The [product overview](docs/product/PRODUCT.md) and [demo guide](docs/product/DEMO.md) are intended for judges; architecture, domain, AI, security, testing and deployment guides cover implementation and operation. Dated milestone reports preserve historical validation and are not current production acceptance certificates.
-
